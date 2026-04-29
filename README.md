@@ -1,0 +1,1 @@
+make sure all requirements from buildozer site are installed (java 17 and other)

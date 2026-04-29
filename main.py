@@ -1,15 +1,16 @@
-from tests.manualTest import test
 import os
 from kivymd.app import MDApp
 from kivy.lang import Builder
 from kivy.core.window import Window
+from kivy.utils import platform
 # Import ScreenManager
 from kivy.uix.screenmanager import ScreenManager, Screen
 from screens.home import HomeScreen
 from screens.add_project import AddProjectScreen # Import the new screen class
 
 # Window size for testing on pc
-Window.size = (360, 740)        
+if platform in ('win', 'linux', 'macosx'):
+    Window.size = (360, 740)
 
 class TimeTrackerApp(MDApp):
     def build(self):
