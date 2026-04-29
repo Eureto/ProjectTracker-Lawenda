@@ -13,9 +13,10 @@ Window.size = (360, 740)
 
 class TimeTrackerApp(MDApp):
     def build(self):
+        base_path = os.path.dirname(__file__)
         # Load all KV files
-        Builder.load_file("kv/home.kv")
-        Builder.load_file("kv/addProject.kv") # Load the new KV file
+        Builder.load_file(os.path.join(base_path, "kv/home.kv"))
+        Builder.load_file(os.path.join(base_path, "kv/addProject.kv")) # Load the new KV file
 
         self.screen_manager = ScreenManager()
         self.screen_manager.add_widget(HomeScreen(name='home'))
