@@ -1,0 +1,79 @@
+<AddProjectScreen>:
+    md_bg_color: 0.58, 0.28, 0.94, 1
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: [20, 20, 20, 20]
+        spacing: 15
+
+        # Header with Back Button
+        MDBoxLayout:
+            size_hint_y: None
+            height: "60dp"
+            spacing: 10
+            
+            MDIconButton:
+                icon: "arrow-left"
+                icon_size: "32sp"
+                theme_icon_color: "Custom"
+                icon_color: 1, 1, 1, 1
+                on_release: root.manager.current = 'home'
+            
+            MDLabel:
+                text: "Dodaj Nowy Projekt"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                font_style: "H6"
+                bold: True
+                valign: "middle"
+
+        # Form Container
+        MDCard:
+            orientation: "vertical"
+            padding: [25, 30, 25, 30]
+            spacing: 25
+            radius: 35
+            md_bg_color: 1, 1, 1, 1
+            elevation: 4
+            
+            ScrollView:
+                MDBoxLayout:
+                    orientation: 'vertical'
+                    adaptive_height: True
+                    spacing: 30
+
+                    MDTextField:
+                        id: project_name
+                        hint_text: "Nazwa projektu"
+                        helper_text: "np. Nauka Chińskiego"
+                        helper_text_mode: "on_focus"
+                        mode: "fill"
+                        fill_color_normal: 0.95, 0.92, 1, 1
+                        icon_left: "pencil"
+
+                    MDTextField:
+                        id: image_url
+                        hint_text: "URL obrazka"
+                        helper_text: "Link do zdjęcia z Unsplash lub innego źródła"
+                        helper_text_mode: "on_focus"
+                        mode: "fill"
+                        fill_color_normal: 0.95, 0.92, 1, 1
+                        icon_left: "image-plus"
+
+                    MDTextField:
+                        id: motivational_quote
+                        hint_text: "Twój motywujący cytat"
+                        mode: "fill"
+                        fill_color_normal: 0.95, 0.92, 1, 1
+                        icon_left: "format-quote-close"
+                        multiline: True
+
+                    MDFillRoundFlatButton:
+                        text: "ZAPISZ I ROZPOCZNIJ"
+                        size_hint_x: 1
+                        height: "50dp"
+                        font_style: "Button"
+                        md_bg_color: 0.58, 0.28, 0.94, 1
+                        on_release: root.save_project(project_name.text, image_url.text, motivational_quote.text)
+
+        Widget: # Spacer

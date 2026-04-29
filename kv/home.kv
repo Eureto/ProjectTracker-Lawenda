@@ -1,0 +1,150 @@
+<ActivityCard@MDCard>:
+    image: ""
+    text: ""
+    orientation: 'vertical'
+    radius: 30
+    elevation: 2
+    padding: 0
+    spacing: 0
+
+    RelativeLayout:
+        FitImage:
+            source: root.image
+            radius: [30, 30, 30, 30]
+        
+        MDCard:
+            size_hint: (0.8, 0.3)
+            pos_hint: {"center_x": .5, "center_y": .5}
+            radius: 20
+            md_bg_color: 0.7, 0.5, 0.9, 0.8
+            
+            MDLabel:
+                text: root.text
+                halign: "center"
+                theme_text_color: "Primary"
+                font_style: "Caption"
+                bold: True
+
+<HomeScreen>:
+    md_bg_color: 0.58, 0.28, 0.94, 1
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: [20, 20, 20, 0]
+        spacing: 15
+
+        # Górna sekcja: Logo i Plus
+        MDBoxLayout:
+            size_hint_y: None
+            height: "80dp"
+            
+            Image:
+                source: "https://via.placeholder.com/150/8A4AF3/FFFFFF?text=Logo"
+                size_hint_x: 0.3
+            
+            Widget: 
+            
+            MDIconButton:
+                icon: "plus"
+                icon_size: "64sp"
+                theme_icon_color: "Custom"
+                icon_color: 1, 1, 1, 1
+                on_release: root.plus_button_pressed()
+
+        # Cytat
+        MDLabel:
+            text: "Super motywujący cytat!!!"
+            halign: "center"
+            size_hint_y: None
+            height: "40dp"
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+            font_style: "H5"
+
+        MDSeparator:
+            color: 1, 1, 1, 0.5
+
+        # Siatka z aktywnościami
+        MDGridLayout:
+            cols: 2
+            spacing: 15
+            padding: [0, 10, 0, 10]
+            
+            ActivityCard:
+                text: "Nauka Chińskiego"
+                image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&q=80"
+            
+            ActivityCard:
+                text: "Taniec"
+                image: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=400&q=80"
+                
+            ActivityCard:
+                text: "Nauka Chińskiego"
+                image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&q=80"
+            
+            ActivityCard:
+                text: "Taniec"
+                image: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=400&q=80"
+
+        # Sekcja "Ostatnia sesja"
+        MDCard:
+            size_hint_y: None
+            height: "160dp"
+            radius: 35
+            md_bg_color: 0.7, 0.5, 0.9, 1
+            padding: [15, 10, 15, 15]
+            orientation: 'vertical'
+            
+            MDLabel:
+                text: "Ostatnia sesja"
+                font_style: "Caption"
+                theme_text_color: "Primary"
+                size_hint_y: None
+                height: "20dp"
+            
+            MDCard:
+                radius: 20
+                md_bg_color: 0.85, 0.85, 0.85, 1
+                padding: 10
+                orientation: 'vertical'
+                
+                MDBoxLayout:
+                    adaptive_height: True
+                    spacing: 5
+                    MDIcon:
+                        icon: "play-outline"
+                        size_hint: (None, None)
+                        size: "20dp", "20dp"
+                    MDLabel:
+                        text: "Nazwa Projektu   HH:MM"
+                        font_style: "Caption"
+                        valign: "middle"
+                
+                # Własny widget Timeline zastępujący statyczny obrazek
+                TimelineWidget:
+                    size_hint_y: 1
+
+        Widget:
+
+    # Dolny pasek nawigacji
+    MDBoxLayout:
+        size_hint_y: None
+        height: "80dp"
+        md_bg_color: 0.85, 0.85, 0.85, 1
+        padding: [50, 0, 50, 0]
+        
+        MDIconButton:
+            icon: "circle"
+            icon_size: "48sp"
+            theme_icon_color: "Custom"
+            icon_color: 0, 0, 0, 1
+            pos_hint: {"center_y": .5}
+
+        Widget: 
+
+        MDIconButton:
+            icon: "circle"
+            icon_size: "48sp"
+            theme_icon_color: "Custom"
+            icon_color: 0, 0, 0, 1
+            pos_hint: {"center_y": .5}
