@@ -26,6 +26,7 @@ from kivy.uix.image import AsyncImage
 from kivy.cache import Cache
 from kivy.factory import Factory
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.widget import Widget
 
 # Section: Custom button for the RecycleView using standard Image for maximum Android compatibility
 class EmojiButton(RectangularRippleBehavior, ButtonBehavior, AsyncImage):
@@ -185,20 +186,42 @@ class AddProjectScreen(Screen):
         # ScrollView wrapper
         scroll = ScrollView(size_hint_y=1, do_scroll_x=False)
         
-        # GridLayout (simpler than RecycleView)
+        # Wrapper to center the grid
+        grid_wrapper = MDBoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            size_hint_x=1,
+            padding=0,
+            spacing=0
+        )
+        grid_wrapper.bind(minimum_height=grid_wrapper.setter('height'))
+        
+        # Calculate dynamic columns based on screen width
+        emoji_size = dp(60)
+        emoji_spacing = dp(5)
+        available_width = Window.width * 0.9 - dp(20)  # Account for dialog margin and padding
+        cols = max(3, int(available_width / (emoji_size + emoji_spacing)))
+        
+        # GridLayout with dynamic columns
         self._emoji_grid = MDGridLayout(
-            cols=5,
+            cols=cols,
             spacing=dp(5),
             padding=dp(5),
             size_hint_y=None,
-            size_hint_x=1
+            size_hint_x=None,
+            width=cols * (emoji_size + emoji_spacing) + dp(10)
         )
         self._emoji_grid.bind(minimum_height=self._emoji_grid.setter('height'))
         
         # Add emojis to grid
         self._populate_emoji_grid(self._filtered_emojis)
         
-        scroll.add_widget(self._emoji_grid)
+        # Add centered grid to wrapper
+        grid_wrapper.add_widget(Widget(size_hint_x=1))  # Left spacer
+        grid_wrapper.add_widget(self._emoji_grid)
+        grid_wrapper.add_widget(Widget(size_hint_x=1))  # Right spacer
+        
+        scroll.add_widget(grid_wrapper)
         container.add_widget(scroll)
         
         # Dialog with proper size
@@ -211,6 +234,12 @@ class AddProjectScreen(Screen):
             height=dp(650)
         )
         self.emoji_dialog.open()
+        
+        # Request focus on the search input after dialog opens
+        def focus_search(dt):
+            self._search_input.focus = True
+        
+        Clock.schedule_once(focus_search, 0.1)
 
     def _on_search_text(self, instance, value):
         """Called when search text changes - filters emoji list."""
