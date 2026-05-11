@@ -1,179 +1,199 @@
-#:import MDSegmentedControl kivymd.uix.segmentedcontrol.MDSegmentedControl
-#:import MDSegmentedControlItem kivymd.uix.segmentedcontrol.MDSegmentedControlItem
+#:import utils kivy.utils
 #:import PieChart screens.statistics.PieChart
+#:import PeriodSegmentButton screens.statistics.PeriodSegmentButton
 
 <StatisticsScreen>:
-    # Główne fioletowe tło (dobrane na podstawie Twojego obrazka z Figmy)
-    md_bg_color: 0.54, 0.22, 0.89, 1 
+    md_bg_color: utils.get_color_from_hex(app.theme_bg)
 
     MDBoxLayout:
         orientation: 'vertical'
-        padding: dp(15)
-        spacing: dp(20)
+        spacing: dp(10)
 
-        # --- GÓRA: Przełącznik czasu ---
-        MDBoxLayout:
+        Widget:
             size_hint_y: None
-            height: dp(50)
-            pos_hint: {"center_x": .5}
-            padding: dp(10)
+            height: dp(35)
 
-            # Opcja 1: Nowoczesny Segmented Control
-            MDSegmentedControl:
-                pos_hint: {"center_x": .5, "center_y": .5}
-                md_bg_color: 0.8, 0.8, 0.8, 0.5
-                
-                MDSegmentedControlItem:
-                    text: "Miesiąc"
-                MDSegmentedControlItem:
-                    text: "Tydzień"
-                MDSegmentedControlItem:
-                    text: "Dzień"
+        ScrollView:
+            do_scroll_x: False
+            bar_width: dp(4)
+            padding: 0, 0, 0, 0
 
-            # Opcja 2 (Zakomentowana): Przycisk wywołujący Dropdown Menu
-            # MDRaisedButton:
-            #     id: dropdown_button
-            #     text: "Wybierz okres"
-            #     pos_hint: {"center_x": .5, "center_y": .5}
-            #     on_release: app.menu.open()
-
-        # --- NAPIS SUMA ---
-        MDLabel:
-            text: "suma: hh:mm"
-            halign: "right"
-            theme_text_color: "Custom"
-            text_color: 1, 1, 1, 1
-            size_hint_y: None
-            height: dp(20)
-
-        # --- WYKRES KOŁOWY ---
-        MDBoxLayout:
-            size_hint_y: 0.4
-            
-            # Nasz niestandardowy widget zdefiniowany w Pythonie
-            PieChart:
-                id: pie_chart
-                size_hint: None, None
-                size: dp(220), dp(220)
-                pos_hint: {"center_x": .5, "center_y": .5}
-
-        # --- KARTA Z LEGENDĄ (Statystyki) ---
-        MDCard:
-            size_hint_y: 0.35
-            radius: [dp(20)]
-            md_bg_color: 0.65, 0.45, 0.9, 1 # Jasniejszy fioletowy (karta z Figmy)
-            padding: dp(20)
-            spacing: dp(10)
-            orientation: 'vertical'
-            elevation: 0
-
-            # Element 1: Niebieski kwadrat
-            MDBoxLayout:
-                orientation: 'horizontal'
+            GridLayout:
+                cols: 1
+                spacing: dp(16)
+                padding: [dp(12), dp(2), dp(12), dp(12)]
                 size_hint_y: None
-                height: dp(30)
-                spacing: dp(10)
-                
-                MDLabel:
-                    text: "Nazwa"
-                    color: 1, 1, 1, 1
-                    size_hint_x: 0.4
-                
-                Widget: # Kwadrat koloru
-                    size_hint: None, None
-                    size: dp(20), dp(20)
-                    pos_hint: {"center_y": .5}
-                    canvas:
-                        Color:
-                            rgba: 0.13, 0.59, 0.95, 1 # Niebieski
-                        Rectangle:
-                            pos: self.pos
-                            size: self.size
-                
-                MDLabel:
-                    text: "hh:mm  %"
-                    halign: "right"
-                    color: 1, 1, 1, 1
+                height: self.minimum_height
 
-            # Element 2: Czerwony kwadrat + ikona auta
-            MDBoxLayout:
-                orientation: 'horizontal'
-                size_hint_y: None
-                height: dp(30)
-                spacing: dp(10)
-                
-                MDIcon:
-                    icon: "car-sports" # Ikona z bazy Material Design
-                    theme_text_color: "Custom"
-                    text_color: 0.85, 0.19, 0.19, 1
-                    size_hint_x: 0.4
-                    halign: "right"
-                    
-                Widget: # Kwadrat koloru
-                    size_hint: None, None
-                    size: dp(20), dp(20)
-                    pos_hint: {"center_y": .5}
-                    canvas:
-                        Color:
-                            rgba: 0.85, 0.19, 0.19, 1 # Czerwony
-                        Rectangle:
-                            pos: self.pos
-                            size: self.size
-                            
-                MDLabel:
-                    text: "hh:mm  %"
-                    halign: "right"
-                    color: 1, 1, 1, 1
-
-            Widget: # Spacer wypychający elementy do góry
-                size_hint_y: 1
-
-    # --- DOLNY PASEK NAWIGACYJNY (Custom) ---
-    # Używam AnchorLayout, aby przykleić pasek do samego dołu ekranu
-    AnchorLayout:
-        anchor_y: 'bottom'
-        
-        MDCard:
-            size_hint_y: None
-            height: dp(60)
-            radius: [dp(25), dp(25), 0, 0]
-            md_bg_color: 1, 1, 1, 1
-            elevation: 2
-            padding: [dp(20), 0, dp(20), 0]
-
-            MDBoxLayout:
-                orientation: 'horizontal'
-                
-                # Lewa ikona (Statystyki)
-                MDIconButton:
-                    icon: "chart-box-outline"
-                    pos_hint: {"center_y": .5}
-                    icon_size: dp(30)
-                    on_release: app.root.current = "statistics"
-                
-                Widget: # Puste pole
-
-                # Środkowy przycisk ("+")
+                # --- Period: vertical pills; selected = white (PeriodSegmentButton) ---
                 MDCard:
-                    size_hint: None, None
-                    size: dp(80), dp(50)
+                    size_hint_x: 1
+                    size_hint_y: None
+                    height: dp(136)
+                    radius: [dp(12), ]
+                    md_bg_color: 0.8, 0.8, 0.8, 0.5
+                    padding: dp(4)
+                    elevation: 0
+
+                    MDBoxLayout:
+                        orientation: 'vertical'
+                        spacing: dp(4)
+                        size_hint_x: 1
+
+                        PeriodSegmentButton:
+                            text: "Miesiąc"
+                            selected: root.selected_period == "Miesiąc"
+                            on_release: root.set_period("Miesiąc")
+                            halign: "center"
+                            valign: "middle"
+                            font_size: dp(15)
+                        PeriodSegmentButton:
+                            text: "Tydzień"
+                            selected: root.selected_period == "Tydzień"
+                            on_release: root.set_period("Tydzień")
+                            halign: "center"
+                            valign: "middle"
+                            font_size: dp(15)
+                        PeriodSegmentButton:
+                            text: "Dzień"
+                            selected: root.selected_period == "Dzień"
+                            on_release: root.set_period("Dzień")
+                            halign: "center"
+                            valign: "middle"
+                            font_size: dp(15)
+
+                MDLabel:
+                    text: "suma: hh:mm"
+                    halign: "right"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+                    size_hint_y: None
+                    height: dp(22)
+
+                # --- Centered pie + caption ---
+                AnchorLayout:
+                    size_hint_y: None
+                    height: dp(220) + dp(12) + dp(52)
+
+                    MDBoxLayout:
+                        orientation: 'vertical'
+                        spacing: dp(12)
+                        size_hint: None, None
+                        width: dp(260)
+                        height: dp(220) + dp(12) + dp(52)
+
+                        PieChart:
+                            id: pie_chart
+                            size_hint: None, None
+                            size: dp(220), dp(220)
+                            pos_hint: {"center_x": .5}
+
+                        MDLabel:
+                            text: "Łączny czas spędzony na projektach"
+                            halign: "center"
+                            valign: "middle"
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 0.95
+                            size_hint_y: None
+                            height: dp(48)
+                            text_size: dp(250), None
+                            shorten: True
+                            shorten_from: "right"
+
+                # --- Details: header + rows from set_statistics_rows() ---
+                MDCard:
+                    id: stats_card
+                    size_hint_y: None
+                    height: dp(218)
                     radius: [dp(20)]
                     md_bg_color: 0.65, 0.45, 0.9, 1
-                    pos_hint: {"center_y": .5}
+                    padding: dp(14)
+                    spacing: dp(10)
+                    orientation: 'vertical'
                     elevation: 0
-                    
-                    MDIconButton:
-                        icon: "plus"
-                        theme_text_color: "Custom"
-                        text_color: 1, 1, 1, 1
-                        pos_hint: {"center_x": .5, "center_y": .5}
-                        on_release: app.root.current = "add_project"
-                        
-                Widget: # Puste pole
-                
-                # Prawa ikona (Domek)
-                MDIconButton:
-                    icon: "home-outline"
-                    pos_hint: {"center_y": .5}
-                    icon_size: dp(30)
-                    on_release: app.root.current = "home"
+
+                    MDBoxLayout:
+                        orientation: 'horizontal'
+                        size_hint_y: None
+                        height: dp(26)
+                        spacing: dp(6)
+
+                        MDLabel:
+                            text: "Projekt"
+                            font_style: "Caption"
+                            bold: True
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 0.85
+                            size_hint_x: 1
+                            halign: "left"
+                            valign: "middle"
+                        MDLabel:
+                            text: ""
+                            size_hint_x: 1
+                        MDLabel:
+                            text: "Czas"
+                            font_style: "Caption"
+                            bold: True
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 0.85
+                            size_hint_x: 1
+                            halign: "right"
+                            valign: "middle"
+
+                    GridLayout:
+                        id: stats_rows_container
+                        cols: 1
+                        spacing: dp(10)
+                        size_hint_y: None
+                        height: self.minimum_height
+
+        # --- Bottom bar (same structure as home) ---
+        MDFloatLayout:
+            size_hint: 1, None
+            height: dp(90)
+
+            MDCard:
+                size_hint: 0.96, 0.75
+                pos_hint: {'center_x': 0.5, 'y': 0.1}
+                radius: [dp(25), ]
+                elevation: 4
+                md_bg_color: 1, 1, 1, 1
+
+                MDBoxLayout:
+                    AnchorLayout:
+                        anchor_x: 'center'
+                        anchor_y: 'center'
+                        MDIconButton:
+                            icon: "home-outline"
+                            icon_size: dp(45)
+                            on_release: app.root.current = "home"
+
+                    Widget:
+
+                    AnchorLayout:
+                        anchor_x: 'center'
+                        anchor_y: 'center'
+                        MDIconButton:
+                            icon: "chart-arc"
+                            icon_size: dp(45)
+                            on_release: app.root.current = "statistics"
+
+            ClickableAnchorLayout:
+                size_hint: None, None
+                size: dp(140), dp(65)
+                pos_hint: {'center_x': 0.5, 'center_y': 0.65}
+                on_release: app.root.current = "add_project"
+                canvas.before:
+                    Color:
+                        rgba: utils.get_color_from_hex(app.theme_card_bg)
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(20)]
+
+                MDIcon:
+                    icon: "plus"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+                    icon_size: dp(55)
+                    adaptive_size: True
