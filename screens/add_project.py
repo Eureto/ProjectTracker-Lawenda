@@ -22,14 +22,14 @@ from plyer import filechooser
 from kivymd.app import MDApp
 from kivymd.uix.behaviors import RectangularRippleBehavior
 from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.image import AsyncImage
+from kivy.uix.image import AsyncImage, Image
 from kivy.cache import Cache
 from kivy.factory import Factory
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
 # Section: Custom button for the RecycleView using standard Image for maximum Android compatibility
-class EmojiButton(RectangularRippleBehavior, ButtonBehavior, AsyncImage):
+class EmojiButton(RectangularRippleBehavior, ButtonBehavior, Image):
     screen = ObjectProperty(None)
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -38,6 +38,7 @@ class EmojiButton(RectangularRippleBehavior, ButtonBehavior, AsyncImage):
         self.size = (dp(60), dp(60))
         self.allow_stretch = True
         self.keep_ratio = True
+        self.mipmap = False  # Disable mipmap to prevent pixelation
 
     def on_release(self):
         if self.screen:
@@ -147,6 +148,9 @@ class AddProjectScreen(Screen):
         if platform == 'android':
             from android.permissions import request_permissions, Permission
             request_permissions([Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
+        
+        # Initialize search timer
+        self._search_timer = None
 
     def select_emoji(self):
         """Opens a custom emoji picker dialog with search."""
@@ -242,13 +246,23 @@ class AddProjectScreen(Screen):
         Clock.schedule_once(focus_search, 0.1)
 
     def _on_search_text(self, instance, value):
-        """Called when search text changes - filters emoji list."""
-        filtered = EmojiMetadata.filter_emojis(self._emoji_index, value)
-        
-        # Repopulate grid with filtered results
+        """Called when search text changes - debounce with flag."""
+        # Simply store the current text and let the scheduled callback check it
+        if not hasattr(self, '_search_scheduled'):
+            self._search_scheduled = False
+    
+        if not self._search_scheduled:
+            self._search_scheduled = True
+            Clock.schedule_once(self._delayed_filter, 0.5)
+
+    def _delayed_filter(self, dt=None):
+        """Perform the actual filtering on the main thread."""
+        self._search_scheduled = False
+        search_term = self._search_input.text
+        filtered = EmojiMetadata.filter_emojis(self._emoji_index, search_term)
         self._populate_emoji_grid(filtered)
         print(f"[EmojiPicker] Filtered to {len(filtered)} emojis")
-
+    
     def _on_emoji_selected(self, emoji_val):
         self.selected_icon = emoji_val
         if hasattr(self, 'emoji_dialog'):
@@ -350,8 +364,12 @@ class AddProjectScreen(Screen):
 
     def _populate_emoji_grid(self, emoji_list):
         """Populate grid with emoji buttons."""
-        self._emoji_grid.clear_widgets()
+        # Check if count is same - skip if nothing changed
+        if len(self._emoji_grid.children) == len(emoji_list):
+            return
     
+        self._emoji_grid.clear_widgets()
+
         for emoji in emoji_list:
             btn = EmojiButton(
                 source=emoji['source'],
