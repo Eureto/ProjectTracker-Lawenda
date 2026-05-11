@@ -21,7 +21,7 @@
     radius: [dp(24), ]
     md_bg_color: root.card_color if not app.edit_mode else utils.get_color_from_hex("#FFCDD2")
     elevation: 2
-    padding: dp(12)
+    padding: dp(10)
 
     canvas.before:
         PushMatrix
@@ -32,39 +32,56 @@
         PopMatrix
 
     MDRelativeLayout:
-        # Sub-section: Project Image Container
-        MDCard:
-            size_hint: 1, 0.68
-            pos_hint: {'center_x': 0.5, 'top': 1}
-            radius: [dp(18), ]
-            elevation: 0
-            # Added a light placeholder color so the area is visible before the photo loads
-            md_bg_color: 1, 1, 1, 0.1
-            FitImage:
-                source: root.image_source
-                radius: self.parent.radius
 
-        # Project Title
-        MDLabel:
-            text: root.title
-            font_style: root.title_font_style
-            bold: True
-            halign: "center"
-            theme_text_color: "Custom"
-            text_color: utils.get_color_from_hex(app.theme_text_dark)
-            size_hint: 1, 0.28
+        # ── Full-card image (inset by padding, inner radius slightly smaller) ──
+        FitImage:
+            source: root.image_source
+            size_hint: 1, 1
+            pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+            radius: [dp(16), ]
+
+        # ── Title panel — full width, card color, bottom of image ──
+        MDBoxLayout:
+            size_hint: 1, None
+            height: dp(38)
             pos_hint: {'center_x': 0.5, 'y': 0}
-            
-        # Project Emoji Icon
+            padding: dp(8), 0
+            canvas.before:
+                Color:
+                    rgba: root.card_color if not app.edit_mode else utils.get_color_from_hex("#FFCDD2")
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(16), dp(16), dp(16), dp(16)]
+
+            MDLabel:
+                text: root.title
+                font_style: root.title_font_style
+                bold: True
+                halign: "center"
+                valign: "middle"
+                theme_text_color: "Custom"
+                text_color: utils.get_color_from_hex("#1A1A1A")
+                shorten: True
+                shorten_from: "right"
+
+        # ── Emoji badge — top-right corner, rotated -30°, scaled up ──
         MDIcon:
             icon: root.emoji_source
             size_hint: None, None
-            size: root.emoji_size, root.emoji_size
-            icon_size: root.emoji_size
-            pos_hint: {'right': 1.05, 'top': 1.05}
+            size: root.emoji_size * 1.6, root.emoji_size * 1.6
+            font_size: root.emoji_size * 1.6
+            icon_size: root.emoji_size * 1.6
+            pos_hint: {'right': 1.15, 'top': 1.18}
             theme_text_color: "Custom"
-            # Do not tint the emoji if it is a PNG image
             text_color: (1, 1, 1, 1) if root.emoji_source.endswith('.png') else (1, 0.8, 0, 1)
+            canvas.before:
+                PushMatrix
+                Rotate:
+                    angle: -30
+                    origin: self.center
+            canvas.after:
+                PopMatrix
 
 # Section: Card showing details of the most recent time tracking session
 <SessionCard>:
