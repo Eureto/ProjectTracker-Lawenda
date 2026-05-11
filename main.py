@@ -6,7 +6,8 @@ from kivy.utils import platform
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.uix.screenmanager import ScreenManager, Screen
 from screens.home import HomeScreen
-from screens.add_project import AddProjectScreen # Import the new screen class
+from screens.add_project import AddProjectScreen
+from screens.statistics import StatisticsScreen
 
 # Window size for testing on pc
 if platform in ('win', 'linux', 'macosx'):
@@ -24,10 +25,12 @@ class TimeTrackerApp(MDApp):
         # Load all KV files
         Builder.load_file("kv/home.kv")
         Builder.load_file("kv/addProject.kv")
+        Builder.load_file("kv/statistics.kv")
 
         self.screen_manager = ScreenManager()
         self.screen_manager.add_widget(HomeScreen(name='home'))
         self.screen_manager.add_widget(AddProjectScreen(name='add_project'))
+        self.screen_manager.add_widget(StatisticsScreen(name='statistics'))
         return self.screen_manager
 
     def on_start(self):

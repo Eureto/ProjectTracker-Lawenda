@@ -1,7 +1,8 @@
 #:import MDSegmentedControl kivymd.uix.segmentedcontrol.MDSegmentedControl
 #:import MDSegmentedControlItem kivymd.uix.segmentedcontrol.MDSegmentedControlItem
+#:import PieChart screens.statistics.PieChart
 
-MainScreen:
+<StatisticsScreen>:
     # Główne fioletowe tło (dobrane na podstawie Twojego obrazka z Figmy)
     md_bg_color: 0.54, 0.22, 0.89, 1 
 
@@ -148,6 +149,7 @@ MainScreen:
                     icon: "chart-box-outline"
                     pos_hint: {"center_y": .5}
                     icon_size: dp(30)
+                    on_release: app.root.current = "statistics"
                 
                 Widget: # Puste pole
 
@@ -165,6 +167,7 @@ MainScreen:
                         theme_text_color: "Custom"
                         text_color: 1, 1, 1, 1
                         pos_hint: {"center_x": .5, "center_y": .5}
+                        on_release: app.root.current = "add_project"
                         
                 Widget: # Puste pole
                 
@@ -173,3 +176,4 @@ MainScreen:
                     icon: "home-outline"
                     pos_hint: {"center_y": .5}
                     icon_size: dp(30)
+                    on_release: app.root.current = "home"
