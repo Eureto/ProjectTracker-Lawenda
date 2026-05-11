@@ -1,79 +1,246 @@
+#:import utils kivy.utils
+#:import ProjectCard screens.home.ProjectCard
+
+# Section: Custom clickable container combining Button logic with Box Layout
+<ClickableBoxLayout@ButtonBehavior+BoxLayout>:
+
+# Section: Custom clickable container combining Button logic with Anchor Layout
+<ClickableAnchorLayout@ButtonBehavior+AnchorLayout>:
+
+# Reusable component for the Text Input (Nazwa Projektu)
+<ProjectTextInput@BoxLayout>:
+    size_hint_y: None
+    height: dp(50)
+    padding: dp(15), 0, dp(15), 0
+    spacing: dp(10)
+    hint_text: ""
+    icon_text: ""
+    text: ""
+    canvas.before:
+        Color:
+            rgba: utils.get_color_from_hex("#E8E8E8")
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(3)]
+
+    TextInput:
+        text: root.text
+        hint_text: root.hint_text
+        background_color: 0, 0, 0, 0
+        foreground_color: utils.get_color_from_hex("#333333")
+        hint_text_color: utils.get_color_from_hex("#777777")
+        font_size: sp(16)
+        multiline: False
+        # Center the text vertically
+        padding_y: [self.height / 2.0 - (self.line_height / 2.0) * len(self._lines), 0]
+        cursor_color: utils.get_color_from_hex("#8A4AF3")
+        on_text: root.text = self.text
+
+    # Slot for the icon, ensuring it is centered vertically and horizontally
+    AnchorLayout:
+        size_hint_x: None
+        width: dp(30)
+        MDIcon:
+            icon: root.icon_text
+            adaptive_size: True
+            theme_text_color: "Custom"
+            text_color: utils.get_color_from_hex("#555555")
+            icon_size: sp(22)
+
+# Reusable component for the clickable rows (+ Zdjęcie, Wybierz kolor, etc.)
+<ProjectButton@ButtonBehavior+BoxLayout>:
+    size_hint_y: None
+    height: dp(50)
+    padding: dp(15), 0, dp(15), 0
+    spacing: dp(10)
+    text: ""
+    icon_text: ""
+    preview_source: ""
+    preview_icon: ""
+    preview_color: [0, 0, 0, 0]
+    preview_text: ""
+    canvas.before:
+        Color:
+            rgba: utils.get_color_from_hex("#E8E8E8")
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(3)]
+
+    Label:
+        text: root.text
+        color: utils.get_color_from_hex("#777777")
+        text_size: self.size
+        halign: 'left'
+        valign: 'middle'
+        font_size: sp(15)
+        size_hint_x: 1
+
+    # Preview Area for Image/Color
+    BoxLayout:
+        size_hint_x: None
+        width: self.minimum_width
+        spacing: dp(10)
+        
+        # Text/Emoji Preview within the row
+        Label:
+            text: root.preview_text
+            color: utils.get_color_from_hex("#333333")
+            font_size: sp(18)
+            size_hint_x: None
+            width: self.texture_size[0] if root.preview_text else 0
+            opacity: 1 if root.preview_text else 0
+
+        # Color Preview
+        Widget:
+            size_hint: None, None
+            size: (dp(30), dp(30)) if root.preview_color[3] > 0 else (0, 0)
+            opacity: 1 if root.preview_color[3] > 0 else 0
+            pos_hint: {'center_y': .5}
+            canvas.before:
+                Color:
+                    rgba: root.preview_color
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(5)]
+
+        # Photo Preview Thumbnail
+        FitImage:
+            source: root.preview_source
+            size_hint: None, None
+            size: (dp(40), dp(40)) if root.preview_source else (0, 0)
+            opacity: 1 if root.preview_source else 0
+            pos_hint: {'center_y': .5}
+            radius: [dp(5), ]
+
+        # Icon Preview within the selection row
+        MDIcon:
+            icon: root.preview_icon
+            theme_text_color: "Custom"
+            text_color: (1, 1, 1, 1) if root.preview_icon.endswith('.png') else utils.get_color_from_hex("#333333")
+            icon_size: sp(22)
+            size_hint: None, None
+            size: (dp(30), dp(30)) if root.preview_icon else (0, 0)
+            opacity: 1 if root.preview_icon else 0
+            pos_hint: {'center_y': .5}
+
+    # Slot for the icon, ensuring it is centered vertically and horizontally
+    AnchorLayout:
+        size_hint_x: None
+        width: dp(30)
+        MDIcon:
+            icon: root.icon_text
+            adaptive_size: True
+            theme_text_color: "Custom"
+            text_color: utils.get_color_from_hex("#444444")
+            icon_size: sp(20)
+
+# Section: Add Project Screen definition
 <AddProjectScreen>:
-    md_bg_color: 0.58, 0.28, 0.94, 1
+    # Main screen background color
+    canvas.before:
+        Color:
+            rgba: utils.get_color_from_hex("#8A4BF4") # Primary Purple Background
+        Rectangle:
+            pos: self.pos
+            size: self.size
 
+    # Main layout with ScrollView to support large previews
     MDBoxLayout:
-        orientation: 'vertical'
-        padding: [20, 20, 20, 20]
-        spacing: 15
+        orientation: "vertical"
+        padding: dp(30), dp(40), dp(30), dp(10)
+        spacing: dp(15)
 
-        # Header with Back Button
-        MDBoxLayout:
+        # Header Area
+        BoxLayout:
             size_hint_y: None
-            height: "60dp"
-            spacing: 10
-            
-            MDIconButton:
-                icon: "arrow-left"
-                icon_size: "32sp"
-                theme_icon_color: "Custom"
-                icon_color: 1, 1, 1, 1
-                on_release: root.manager.current = 'home'
-            
-            MDLabel:
-                text: "Dodaj Nowy Projekt"
-                theme_text_color: "Custom"
-                text_color: 1, 1, 1, 1
-                font_style: "H6"
+            height: dp(40)
+            ClickableAnchorLayout:
+                size_hint_x: None
+                width: dp(30)
+                on_release: app.root.current = "home"
+                MDIcon:
+                    icon: "chevron-left"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+                    icon_size: sp(28)
+                    adaptive_size: True
+            Label:
+                text: "Dodawanie projektu"
+                font_size: sp(20)
                 bold: True
-                valign: "middle"
+                halign: 'center'
+            Widget:
+                size_hint_x: None
+                width: dp(30)
 
-        # Form Container
-        MDCard:
-            orientation: "vertical"
-            padding: [25, 30, 25, 30]
-            spacing: 25
-            radius: 35
-            md_bg_color: 1, 1, 1, 1
-            elevation: 4
-            
-            ScrollView:
-                MDBoxLayout:
-                    orientation: 'vertical'
-                    adaptive_height: True
-                    spacing: 30
+        ScrollView:
+            do_scroll_x: False
+            MDBoxLayout:
+                orientation: 'vertical'
+                adaptive_height: True
+                spacing: dp(20)
+                padding: [0, dp(30), 0, dp(100)] # Top padding prevents emoji clipping
 
-                    MDTextField:
-                        id: project_name
-                        hint_text: "Nazwa projektu"
-                        helper_text: "np. Nauka Chińskiego"
-                        helper_text_mode: "on_focus"
-                        mode: "fill"
-                        fill_color_normal: 0.95, 0.92, 1, 1
-                        icon_left: "pencil"
+                # Section: Live Preview of the Project Card
+                ProjectCard:
+                    id: preview_card
+                    size_hint: 0.95, None
+                    height_multiplier: 1 # Taller ratio to fit large photo
+                    pos_hint: {'center_x': 0.5}
+                    title: project_name_input.text if project_name_input.text else "Tytuł Projektu"
+                    image_source: root.selected_image_path
+                    emoji_source: root.selected_icon
+                    card_color: root.selected_color
+                    title_font_style: "H5"
+                    emoji_size: dp(80)
 
-                    MDTextField:
-                        id: image_url
-                        hint_text: "URL obrazka"
-                        helper_text: "Link do zdjęcia z Unsplash lub innego źródła"
-                        helper_text_mode: "on_focus"
-                        mode: "fill"
-                        fill_color_normal: 0.95, 0.92, 1, 1
-                        icon_left: "image-plus"
+                # Form Fields
+                ProjectTextInput:
+                    id: project_name_input
+                    hint_text: "Nazwa Projektu"
+                    icon_text: "close-circle-outline"
 
-                    MDTextField:
-                        id: motivational_quote
-                        hint_text: "Twój motywujący cytat"
-                        mode: "fill"
-                        fill_color_normal: 0.95, 0.92, 1, 1
-                        icon_left: "format-quote-close"
-                        multiline: True
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(50)
+                    spacing: dp(15)
+                    ProjectButton:
+                        text: "Kolor"
+                        icon_text: "palette"
+                        on_release: root.select_color()
+                    ProjectButton:
+                        text: "Emotka"
+                        icon_text: "emoticon-happy-outline"
+                        preview_icon: root.selected_icon
+                        on_release: root.select_emoji()
 
-                    MDFillRoundFlatButton:
-                        text: "ZAPISZ I ROZPOCZNIJ"
-                        size_hint_x: 1
-                        height: "50dp"
-                        font_style: "Button"
-                        md_bg_color: 0.58, 0.28, 0.94, 1
-                        on_release: root.save_project(project_name.text, image_url.text, motivational_quote.text)
+                ProjectButton:
+                    text: "+ Zdjęcie"
+                    icon_text: "image-plus"
+                    on_release: root.select_photo()
 
-        Widget: # Spacer
+    # Section: Floating Action Button (Confirm/Save action)
+    ClickableAnchorLayout:
+        # Centering and sizing the action button to match the Home screen style
+        size_hint: None, None
+        size: dp(140), dp(65)
+        pos_hint: {'center_x': 0.5, 'y': 0.05}
+        on_release: root.save_project()
+        canvas.before:
+            # Visual styling for the FAB rounded rectangle
+            Color:
+                rgba: utils.get_color_from_hex("#F3E9FF")
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(20)]
+        MDIcon:
+            icon: "check"
+            # Adjusted to a large size that fits within the button height
+            icon_size: sp(50)
+            theme_text_color: "Custom"
+            text_color: utils.get_color_from_hex("#333333")
+            adaptive_size: True

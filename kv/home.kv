@@ -1,150 +1,236 @@
-<ActivityCard@MDCard>: # Defines a custom widget named ActivityCard, inheriting from MDCard.
-    image: "" # Custom property for the image source.
-    text: "" # Custom property for the text to display.
-    orientation: 'vertical' # Arranges children vertically.
-    radius: 30 # Sets the corner radius of the card.
-    elevation: 2 # Adds a shadow effect to the card.
-    padding: 0 # No internal padding.
-    spacing: 0 # No spacing between children.
+#:import utils kivy.utils
+#:import DotProgressBar screens.home.DotProgressBar
+#:import ProjectCard screens.home.ProjectCard
+#:import SessionCard screens.home.SessionCard
 
-    RelativeLayout: # A layout that allows children to be positioned relative to each other or the parent.
-        FitImage: # A custom image widget that fits the image within its bounds.
-            source: root.image # Binds the image source to the ActivityCard's image property.
-            radius: [30, 30, 30, 30] # Sets the corner radius of the image.
+# Section: Custom clickable container combining Button logic with Box Layout
+<ClickableBoxLayout@ButtonBehavior+BoxLayout>:
+
+# Section: Custom clickable container combining Button logic with Anchor Layout
+<ClickableAnchorLayout@ButtonBehavior+AnchorLayout>:
+
+# Section: Custom widget for displaying a sequence of dots as a progress bar
+<DotProgressBar>:
+    size_hint_y: None
+    height: dp(20)
+
+# Section: Visual representation of a single project card
+<ProjectCard>:
+    size_hint: 0.4, None
+    height: self.width * self.height_multiplier
+    radius: [dp(24), ]
+    md_bg_color: root.card_color if not app.edit_mode else utils.get_color_from_hex("#FFCDD2")
+    elevation: 2
+    padding: dp(12)
+
+    canvas.before:
+        PushMatrix
+        Rotate:
+            angle: self.angle
+            origin: self.center
+    canvas.after:
+        PopMatrix
+
+    MDRelativeLayout:
+        # Sub-section: Project Image Container
+        MDCard:
+            size_hint: 1, 0.68
+            pos_hint: {'center_x': 0.5, 'top': 1}
+            radius: [dp(18), ]
+            elevation: 0
+            # Added a light placeholder color so the area is visible before the photo loads
+            md_bg_color: 1, 1, 1, 0.1
+            FitImage:
+                source: root.image_source
+                radius: self.parent.radius
+
+        # Project Title
+        MDLabel:
+            text: root.title
+            font_style: root.title_font_style
+            bold: True
+            halign: "center"
+            theme_text_color: "Custom"
+            text_color: utils.get_color_from_hex(app.theme_text_dark)
+            size_hint: 1, 0.28
+            pos_hint: {'center_x': 0.5, 'y': 0}
+            
+        # Project Emoji Icon
+        MDIcon:
+            icon: root.emoji_source
+            size_hint: None, None
+            size: root.emoji_size, root.emoji_size
+            icon_size: root.emoji_size
+            pos_hint: {'right': 1.05, 'top': 1.05}
+            theme_text_color: "Custom"
+            # Do not tint the emoji if it is a PNG image
+            text_color: (1, 1, 1, 1) if root.emoji_source.endswith('.png') else (1, 0.8, 0, 1)
+
+# Section: Card showing details of the most recent time tracking session
+<SessionCard>:
+    size_hint: 0.9, None
+    height: dp(140)
+    radius: [dp(24), ]
+    md_bg_color: utils.get_color_from_hex(app.theme_session_bg)
+    elevation: 3
+    padding: dp(15)
+    orientation: 'vertical'
+    
+    # Header: Session context labels
+    MDRelativeLayout:
+        size_hint_y: None
+        height: dp(20)
+        MDLabel:
+            text: "Ostatnia sesja"
+            bold: True
+            font_style: "Caption"
+            halign: "left"
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+        MDLabel:
+            text: "Wczoraj"
+            bold: True
+            font_style: "Caption"
+            halign: "right"
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+            
+    # Session Info: Project icon and name
+    MDBoxLayout:
+        spacing: dp(10)
+        size_hint_y: None
+        height: dp(40)
+        MDIcon:
+            icon: "crown"
+            theme_text_color: "Custom"
+            text_color: 1, 0.8, 0, 1
+        MDLabel:
+            text: "Nazwa Projektu"
+            font_style: "H6"
+            bold: True
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+                
+    # Elapsed time display
+    MDLabel:
+        text: "Czas:  01:12:53"
+        halign: "right"
+        font_style: "Caption"
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
         
-        MDCard: # An MDCard nested within the RelativeLayout.
-            size_hint: (0.8, 0.3) # Sets the size of the card relative to its parent (80% width, 30% height).
-            pos_hint: {"center_x": .5, "center_y": .5} # Centers the card horizontally and vertically within its parent.
-            radius: 20 # Sets the corner radius of this inner card.
-            md_bg_color: 0.7, 0.5, 0.9, 1 # Sets the background color of the card (RGBA values).
-            
-            MDLabel: # A Material Design label to display text.
-                text: root.text # Binds the label's text to the ActivityCard's text property.
-                halign: "center" # Horizontally aligns the text to the center.
-                theme_text_color: "Primary" # Uses the primary text color from the KivyMD theme.
-                font_style: "Caption" # Sets the font style to "Caption".
-                bold: True # Makes the text bold.
+    # Progress tracking within the session card
+    DotProgressBar:
+        size_hint_x: 1
+        total_steps: 5
+        current_step: 2
 
-<HomeScreen>: # Defines the main screen widget, inheriting from a KivyMD screen (implied by context).
-    md_bg_color: 0.58, 0.28, 0.94, 1 # Sets the background color of the screen.
+# Section: Main Dashboard Screen
+<HomeScreen>:
+    md_bg_color: utils.get_color_from_hex(app.theme_bg)
 
-    MDBoxLayout: # A Material Design Box Layout for arranging widgets.
-        orientation: 'vertical' # Arranges children vertically.
-        padding: [20, 20, 20, 0] # Sets padding around the layout (left, top, right, bottom).
-        spacing: 15 # Sets spacing between children.
-
-        # Górna sekcja: Logo i Plus (Top section: Logo and Plus)
-        MDBoxLayout: # A horizontal box layout for the header.
-            size_hint_y: None # Disables vertical size hinting, allowing explicit height.
-            height: "80dp" # Sets the height of the header.
-            
-            Image: # An image widget for the logo.
-                source: "https://via.placeholder.com/150/8A4AF3/FFFFFF?text=Logo" # Source URL for the logo image.
-                size_hint_x: 0.3 # Sets the width of the image to 30% of the parent's width.
-            
-            Widget: # A blank widget used as a spacer to push the icon button to the right.
-            
-            MDIconButton: # A Material Design icon button.
-                icon: "plus" # Sets the icon to a "plus" symbol.
-                icon_size: "64sp" # Sets the size of the icon.
-                theme_icon_color: "Custom" # Allows custom icon color.
-                icon_color: 1, 1, 1, 1 # Sets the icon color to white.
-                on_release: root.plus_button_pressed() # Calls the plus_button_pressed method on release.
-
-        # Cytat (Quote)
-        MDLabel: # A Material Design label for displaying a quote.
-            text: "Super motywujący cytat!!!" # The text of the quote.
-            halign: "center" # Horizontally aligns the text to the center.
-            size_hint_y: None # Disables vertical size hinting.
-            height: "40dp" # Sets the height of the label.
-            theme_text_color: "Custom" # Allows custom text color.
-            text_color: 1, 1, 1, 1 # Sets the text color to white.
-            font_style: "H5" # Sets the font style to "H5".
-
-        MDSeparator: # A Material Design separator line.
-            color: 1, 1, 1, 0.5 # Sets the color of the separator (white with 50% opacity).
-
-        # Siatka z aktywnościami (Grid of activities)
-        MDGridLayout: # A Material Design Grid Layout.
-            cols: 2 # Sets the number of columns to 2.
-            spacing: 15 # Sets spacing between grid cells.
-            padding: [0, 10, 0, 10] # Sets padding around the grid (left, top, right, bottom).
-            
-            ActivityCard: # An instance of the custom ActivityCard widget.
-                text: "Nauka Chińskiego" # Sets the text for this card.
-                image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&q=80" # Sets the image for this card.
-            
-            ActivityCard: # Another instance of ActivityCard.
-                text: "Taniec" # Sets the text for this card.
-                image: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=400&q=80" # Sets the image for this card.
-                
-            ActivityCard: # Another instance of ActivityCard.
-                text: "Nauka Chińskiego" # Sets the text for this card.
-                image: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=400&q=80" # Sets the image for this card.
-            
-            ActivityCard: # Another instance of ActivityCard.
-                text: "Taniec" # Sets the text for this card.
-                image: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?auto=format&fit=crop&w=400&q=80" # Sets the image for this card.
-
-        # Sekcja "Ostatnia sesja" (Last session section)
-        MDCard: # A Material Design card for displaying the last session.
-            size_hint_y: None # Disables vertical size hinting.
-            height: "160dp" # Sets the height of the card.
-            radius: 35 # Sets the corner radius.
-            md_bg_color: 0.7, 0.5, 0.9, 1 # Sets the background color.
-            padding: [15, 10, 15, 15] # Sets internal padding.
-            orientation: 'vertical' # Arranges children vertically.
-            
-            MDLabel: # Label for "Ostatnia sesja".
-                text: "Ostatnia sesja" # Text of the label.
-                font_style: "Caption" # Font style.
-                theme_text_color: "Primary" # Text color from theme.
-                size_hint_y: None # Disables vertical size hinting.
-                height: "20dp" # Sets the height.
-            
-            MDCard: # Inner card for session details.
-                radius: 20 # Corner radius.
-                md_bg_color: 0.85, 0.85, 0.85, 1 # Background color.
-                padding: 10 # Internal padding.
-                orientation: 'vertical' # Arranges children vertically.
-                
-                MDBoxLayout: # Box layout for project name and time.
-                    adaptive_height: True # Adapts height to content.
-                    spacing: 5 # Spacing between children.
-                    MDIcon: # Icon for play.
-                        icon: "play-outline" # Play icon.
-                        size_hint: (None, None) # Disables size hinting.
-                        size: "20dp", "20dp" # Sets explicit size.
-                    MDLabel: # Label for project name and time.
-                        text: "Nazwa Projektu   HH:MM" # Placeholder text.
-                        font_style: "Caption" # Font style.
-                        valign: "middle" # Vertically aligns text to middle.
-                
-                # Własny widget Timeline zastępujący statyczny obrazek (Custom TimelineWidget replacing static image)
-                TimelineWidget: # A custom widget for a timeline.
-                    size_hint_y: 1 # Takes up all available vertical space.
-
-        Widget: # A blank widget used as a spacer.
-
-    # Dolny pasek nawigacji (Bottom navigation bar)
-    MDBoxLayout: # Box layout for the navigation bar.
-        size_hint_y: None # Disables vertical size hinting.
-        height: "80dp" # Sets the height.
-        md_bg_color: 0.85, 0.85, 0.85, 1 # Background color.
-        padding: [50, 0, 50, 0] # Internal padding.
+    MDBoxLayout:
+        orientation: 'vertical'
+        spacing: dp(10)
         
-        MDIconButton: # Navigation icon button.
-            icon: "circle" # Circle icon.
-            icon_size: "48sp" # Icon size.
-            theme_icon_color: "Custom" # Allows custom icon color.
-            icon_color: 0, 0, 0, 1 # Black icon color.
-            pos_hint: {"center_y": .5} # Centers vertically.
+        # Spacer for system status bar
+        Widget:
+            size_hint_y: None
+            height: dp(35) 
+            
+        MDFloatLayout:
+            size_hint_y: None
+            height: dp(70)
+            canvas.after:
+                Color:
+                    rgba: 1, 1, 1, 1
+                Line:
+                    points: [self.x, self.y, self.right, self.y]
+                    width: dp(1.5)
+            
+            # App Branding/Title
+            MDLabel:
+                text: "JUST DO IT"
+                font_style: "H4"
+                bold: True
+                halign: "center"
+                pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                
+            # Layout/Grid toggle button
+            MDIconButton:
+                icon: "view-grid"
+                pos_hint: {'right': 0.98, 'center_y': 0.5}
+                theme_text_color: "Custom"
+                text_color: (1, 1, 0, 1) if app.edit_mode else (1, 1, 1, 1)
+                on_release: app.toggle_layout_menu()
 
-        Widget: # Spacer widget.
+        # Fixed SessionCard that stays on top of the list and doesn't scroll
+        SessionCard:
+            id: last_session_card
+            pos_hint: {'center_x': 0.5}
 
-        MDIconButton: # Another navigation icon button.
-            icon: "circle" # Circle icon.
-            icon_size: "48sp" # Icon size.
-            theme_icon_color: "Custom" # Allows custom icon color.
-            icon_color: 0, 0, 0, 1 # Black icon color.
-            pos_hint: {"center_y": .5} # Centers vertically.
+        # Main scrollable list of content
+        ScrollView:
+            do_scroll_x: False
+            
+            MDFloatLayout:
+                id: projects_container
+                size_hint_y: None
+                height: dp(1000) # Initial large height
+               
+    # Section: Bottom Navigation and Global Actions
+    MDFloatLayout:
+        size_hint: 1, None
+        height: dp(90)
+        pos_hint: {'center_x': 0.5, 'y': 0}
+        
+        # Main Bottom Navbar
+        MDCard:
+            size_hint: 0.96, 0.75
+            pos_hint: {'center_x': 0.5, 'y': 0.1}
+            radius: [dp(25), ]
+            elevation: 4
+            md_bg_color: 1, 1, 1, 1
+            
+            MDBoxLayout:
+                # We use three equal slots to distribute the icons to the centers of the outer thirds
+                AnchorLayout:
+                    anchor_x: 'center'
+                    anchor_y: 'center'
+                    MDIconButton:
+                        icon: "home-outline"
+                        icon_size: dp(45)
+
+                # Middle slot: Empty to provide space for the Floating Action Button
+                Widget:
+
+                AnchorLayout:
+                    anchor_x: 'center'
+                    anchor_y: 'center'
+                    MDIconButton:
+                        icon: "chart-arc"
+                        icon_size: dp(45)
+
+        # Section: Global Floating Action Button (Add Project/Session)
+        # We use ClickableAnchorLayout to center the icon perfectly within the rectangle
+        ClickableAnchorLayout:
+            size_hint: None, None
+            size: dp(140), dp(65)
+            pos_hint: {'center_x': 0.5, 'center_y': 0.65}
+            on_release: app.root.current = "add_project"
+            canvas.before:
+                Color:
+                    rgba: utils.get_color_from_hex(app.theme_card_bg)
+                RoundedRectangle:
+                    pos: self.pos
+                    size: self.size
+                    radius: [dp(20)]
+            
+            MDIcon:
+                icon: "plus"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                icon_size: dp(55)
+                adaptive_size: True

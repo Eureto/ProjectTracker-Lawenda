@@ -1,0 +1,175 @@
+#:import MDSegmentedControl kivymd.uix.segmentedcontrol.MDSegmentedControl
+#:import MDSegmentedControlItem kivymd.uix.segmentedcontrol.MDSegmentedControlItem
+
+MainScreen:
+    # Główne fioletowe tło (dobrane na podstawie Twojego obrazka z Figmy)
+    md_bg_color: 0.54, 0.22, 0.89, 1 
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        padding: dp(15)
+        spacing: dp(20)
+
+        # --- GÓRA: Przełącznik czasu ---
+        MDBoxLayout:
+            size_hint_y: None
+            height: dp(50)
+            pos_hint: {"center_x": .5}
+            padding: dp(10)
+
+            # Opcja 1: Nowoczesny Segmented Control
+            MDSegmentedControl:
+                pos_hint: {"center_x": .5, "center_y": .5}
+                md_bg_color: 0.8, 0.8, 0.8, 0.5
+                
+                MDSegmentedControlItem:
+                    text: "Miesiąc"
+                MDSegmentedControlItem:
+                    text: "Tydzień"
+                MDSegmentedControlItem:
+                    text: "Dzień"
+
+            # Opcja 2 (Zakomentowana): Przycisk wywołujący Dropdown Menu
+            # MDRaisedButton:
+            #     id: dropdown_button
+            #     text: "Wybierz okres"
+            #     pos_hint: {"center_x": .5, "center_y": .5}
+            #     on_release: app.menu.open()
+
+        # --- NAPIS SUMA ---
+        MDLabel:
+            text: "suma: hh:mm"
+            halign: "right"
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+            size_hint_y: None
+            height: dp(20)
+
+        # --- WYKRES KOŁOWY ---
+        MDBoxLayout:
+            size_hint_y: 0.4
+            
+            # Nasz niestandardowy widget zdefiniowany w Pythonie
+            PieChart:
+                id: pie_chart
+                size_hint: None, None
+                size: dp(220), dp(220)
+                pos_hint: {"center_x": .5, "center_y": .5}
+
+        # --- KARTA Z LEGENDĄ (Statystyki) ---
+        MDCard:
+            size_hint_y: 0.35
+            radius: [dp(20)]
+            md_bg_color: 0.65, 0.45, 0.9, 1 # Jasniejszy fioletowy (karta z Figmy)
+            padding: dp(20)
+            spacing: dp(10)
+            orientation: 'vertical'
+            elevation: 0
+
+            # Element 1: Niebieski kwadrat
+            MDBoxLayout:
+                orientation: 'horizontal'
+                size_hint_y: None
+                height: dp(30)
+                spacing: dp(10)
+                
+                MDLabel:
+                    text: "Nazwa"
+                    color: 1, 1, 1, 1
+                    size_hint_x: 0.4
+                
+                Widget: # Kwadrat koloru
+                    size_hint: None, None
+                    size: dp(20), dp(20)
+                    pos_hint: {"center_y": .5}
+                    canvas:
+                        Color:
+                            rgba: 0.13, 0.59, 0.95, 1 # Niebieski
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                
+                MDLabel:
+                    text: "hh:mm  %"
+                    halign: "right"
+                    color: 1, 1, 1, 1
+
+            # Element 2: Czerwony kwadrat + ikona auta
+            MDBoxLayout:
+                orientation: 'horizontal'
+                size_hint_y: None
+                height: dp(30)
+                spacing: dp(10)
+                
+                MDIcon:
+                    icon: "car-sports" # Ikona z bazy Material Design
+                    theme_text_color: "Custom"
+                    text_color: 0.85, 0.19, 0.19, 1
+                    size_hint_x: 0.4
+                    halign: "right"
+                    
+                Widget: # Kwadrat koloru
+                    size_hint: None, None
+                    size: dp(20), dp(20)
+                    pos_hint: {"center_y": .5}
+                    canvas:
+                        Color:
+                            rgba: 0.85, 0.19, 0.19, 1 # Czerwony
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                            
+                MDLabel:
+                    text: "hh:mm  %"
+                    halign: "right"
+                    color: 1, 1, 1, 1
+
+            Widget: # Spacer wypychający elementy do góry
+                size_hint_y: 1
+
+    # --- DOLNY PASEK NAWIGACYJNY (Custom) ---
+    # Używam AnchorLayout, aby przykleić pasek do samego dołu ekranu
+    AnchorLayout:
+        anchor_y: 'bottom'
+        
+        MDCard:
+            size_hint_y: None
+            height: dp(60)
+            radius: [dp(25), dp(25), 0, 0]
+            md_bg_color: 1, 1, 1, 1
+            elevation: 2
+            padding: [dp(20), 0, dp(20), 0]
+
+            MDBoxLayout:
+                orientation: 'horizontal'
+                
+                # Lewa ikona (Statystyki)
+                MDIconButton:
+                    icon: "chart-box-outline"
+                    pos_hint: {"center_y": .5}
+                    icon_size: dp(30)
+                
+                Widget: # Puste pole
+
+                # Środkowy przycisk ("+")
+                MDCard:
+                    size_hint: None, None
+                    size: dp(80), dp(50)
+                    radius: [dp(20)]
+                    md_bg_color: 0.65, 0.45, 0.9, 1
+                    pos_hint: {"center_y": .5}
+                    elevation: 0
+                    
+                    MDIconButton:
+                        icon: "plus"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 1
+                        pos_hint: {"center_x": .5, "center_y": .5}
+                        
+                Widget: # Puste pole
+                
+                # Prawa ikona (Domek)
+                MDIconButton:
+                    icon: "home-outline"
+                    pos_hint: {"center_y": .5}
+                    icon_size: dp(30)

@@ -4,4 +4,6 @@ buildozer
 debugpy
 setuptools
 cython==0.29.34
-
+plyer
+Pillow
+emoji
