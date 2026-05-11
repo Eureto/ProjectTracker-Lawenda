@@ -48,6 +48,18 @@
             text_color: utils.get_color_from_hex("#555555")
             icon_size: sp(22)
 
+# Visual rule for the emoji icons in the picker dialog
+<EmojiButton>:
+    size_hint: None, None
+    size: dp(60), dp(60)
+    canvas.before:
+        Color:
+            rgba: (0, 0, 0, 0.1) if self.state == 'down' else (0, 0, 0, 0)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(8)]
+
 # Reusable component for the clickable rows (+ Zdjęcie, Wybierz kolor, etc.)
 <ProjectButton@ButtonBehavior+BoxLayout>:
     size_hint_y: None
@@ -116,14 +128,23 @@
             radius: [dp(5), ]
 
         # Icon Preview within the selection row
+        
+        FitImage:
+            source: root.preview_icon if root.preview_icon.endswith('.png') else ""
+            size_hint: None, None
+            size: (dp(35), dp(35)) if root.preview_icon.endswith('.png') else (0, 0)
+            opacity: 1 if root.preview_icon.endswith('.png') else 0
+            pos_hint: {'center_y': .5}
+            radius: [dp(4),]
+
         MDIcon:
-            icon: root.preview_icon
+            icon: root.preview_icon if not root.preview_icon.endswith('.png') else ""
             theme_text_color: "Custom"
-            text_color: (1, 1, 1, 1) if root.preview_icon.endswith('.png') else utils.get_color_from_hex("#333333")
+            text_color: utils.get_color_from_hex("#333333")
             icon_size: sp(22)
             size_hint: None, None
-            size: (dp(30), dp(30)) if root.preview_icon else (0, 0)
-            opacity: 1 if root.preview_icon else 0
+            size: (dp(35), dp(35)) if root.preview_icon and not root.preview_icon.endswith('.png') else (0, 0)
+            opacity: 1 if root.preview_icon and not root.preview_icon.endswith('.png') else 0
             pos_hint: {'center_y': .5}
 
     # Slot for the icon, ensuring it is centered vertically and horizontally
