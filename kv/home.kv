@@ -106,7 +106,7 @@
             theme_text_color: "Custom"
             text_color: 1, 1, 1, 1
         MDLabel:
-            text: "Wczoraj"
+            text: root.when_label if root.has_session else "—"
             bold: True
             font_style: "Caption"
             halign: "right"
@@ -119,11 +119,11 @@
         size_hint_y: None
         height: dp(40)
         MDIcon:
-            icon: "crown"
+            icon: root.emoji_source if root.has_session else "clock-outline"
             theme_text_color: "Custom"
-            text_color: 1, 0.8, 0, 1
+            text_color: (1, 1, 1, 1) if root.emoji_source.endswith('.png') else (1, 0.8, 0, 1)
         MDLabel:
-            text: "Nazwa Projektu"
+            text: root.project_name if root.has_session else "Brak ostatniej sesji"
             font_style: "H6"
             bold: True
             theme_text_color: "Custom"
@@ -131,7 +131,7 @@
                 
     # Elapsed time display
     MDLabel:
-        text: "Czas:  01:12:53"
+        text: root.duration_text if root.has_session else "Uruchom timer w projekcie"
         halign: "right"
         font_style: "Caption"
         theme_text_color: "Custom"

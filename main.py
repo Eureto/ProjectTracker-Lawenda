@@ -52,6 +52,7 @@ class TimeTrackerApp(MDApp):
         home_screen = self.screen_manager.get_screen('home')
         home_screen.load_projects()
         home_screen.restore_card_positions()
+        home_screen.refresh_last_session()
 
 
     def toggle_layout_menu(self):

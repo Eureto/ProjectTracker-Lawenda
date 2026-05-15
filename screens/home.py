@@ -1,6 +1,13 @@
 import os
 import json
 
+from screens.session_store import (
+    format_duration_hms,
+    format_when_label,
+    get_last_session,
+    schedule_home_last_session_refresh,
+)
+
 from kivy.uix.widget import Widget
 from kivy.properties import StringProperty, NumericProperty, BooleanProperty, ColorProperty
 from kivy.metrics import dp
@@ -145,9 +152,36 @@ class ProjectCard(MDCard):
             print(f"Position saved for {self.title}: x={rel_x:.2f}, top={rel_y:.2f}")
 
 class SessionCard(MDCard):
-    pass
+    has_session = BooleanProperty(False)
+    project_name = StringProperty("")
+    emoji_source = StringProperty("folder-outline")
+    when_label = StringProperty("")
+    duration_text = StringProperty("Czas:  00:00:00")
+
+    def apply_last_session(self, session):
+        if not session:
+            self.has_session = False
+            self.project_name = ""
+            self.when_label = ""
+            self.duration_text = "Czas:  00:00:00"
+            self.emoji_source = "folder-outline"
+            return
+        self.has_session = True
+        self.project_name = session.get("project_title", "")
+        self.emoji_source = session.get("emoji_source", "folder-outline")
+        self.when_label = format_when_label(session.get("ended_at"))
+        self.duration_text = f"Czas:  {format_duration_hms(session.get('duration_seconds', 0))}"
+
 
 class HomeScreen(MDScreen):
+    def refresh_last_session(self):
+        card = self.ids.last_session_card
+        if card is not None:
+            card.apply_last_session(get_last_session())
+
+    def on_enter(self, *_args):
+        # Delayed refresh covers home entering before project_info.on_leave records.
+        schedule_home_last_session_refresh()
     def load_projects(self):
         """Loads project definitions from storage and adds them to the UI."""
         app = MDApp.get_running_app()

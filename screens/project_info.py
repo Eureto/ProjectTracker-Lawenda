@@ -27,6 +27,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 
 from screens.keyboard_inset import keyboard_inset
+from screens.session_store import record_session, schedule_home_last_session_refresh
 
 # Project root = parent of `screens/` (works on device and desktop).
 _PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -196,6 +197,17 @@ class ProjectInfoScreen(MDScreen):
 
     _timer_ev = None
     _timer_elapsed_seconds = 0
+    _run_base_elapsed = 0
+    _run_started_at = None
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(project_title=self._on_project_title_changed)
+
+    def _on_project_title_changed(self, *_args):
+        mgr = self.manager
+        if mgr is not None and mgr.current == self.name:
+            self.load_project_content()
 
     def on_enter(self):
         Window.bind(on_keyboard=self._on_keyboard)
@@ -204,6 +216,7 @@ class ProjectInfoScreen(MDScreen):
     def on_leave(self):
         Window.unbind(on_keyboard=self._on_keyboard)
         if self.timer_running:
+            self._finish_timer_run()
             self.timer_running = False
             self.timer_button_caption = "start"
         self._stop_timer_event()
@@ -217,7 +230,7 @@ class ProjectInfoScreen(MDScreen):
 
     def _on_keyboard(self, window, key, scancode, codepoint, modifier):
         if key == 27:
-            MDApp.get_running_app().root.current = "home"
+            self._finalize_and_go_home()
             return True
         return False
 
@@ -253,6 +266,12 @@ class ProjectInfoScreen(MDScreen):
         self._write_all_states(data)
 
     def load_project_content(self):
+        if self.timer_running:
+            self._finish_timer_run()
+            self.timer_running = False
+            self.timer_button_caption = "start"
+            self._stop_timer_event()
+        self._run_started_at = None
         self._clear_dynamic_widgets()
         key = self.project_title or "_"
         blob = self._read_all_states().get(key)
@@ -297,6 +316,7 @@ class ProjectInfoScreen(MDScreen):
         else:
             self._timer_elapsed_seconds = 0
             self._refresh_timer_label()
+        self._run_base_elapsed = self._timer_elapsed_seconds
 
     def _clear_dynamic_widgets(self):
         for c in list(self.ids.notes_list.children):
@@ -426,14 +446,30 @@ class ProjectInfoScreen(MDScreen):
         m, sec = divmod(r, 60)
         self.timer_display = f"{h:02d}:{m:02d}:{sec:02d}"
 
+    def _finish_timer_run(self):
+        if self._run_started_at is None:
+            return
+        duration = self._timer_elapsed_seconds - int(self._run_base_elapsed)
+        if duration >= 1:
+            record_session(
+                self.project_title,
+                duration,
+                started_at=self._run_started_at,
+            )
+        self._run_started_at = None
+        self._run_base_elapsed = self._timer_elapsed_seconds
+
     def toggle_timer(self):
         if self.timer_running:
             self._stop_timer_event()
+            self._finish_timer_run()
             self.timer_running = False
             self.timer_button_caption = "start"
             self.save_project_content()
         else:
             self._stop_timer_event()
+            self._run_base_elapsed = self._timer_elapsed_seconds
+            self._run_started_at = datetime.datetime.now()
             self._timer_ev = Clock.schedule_interval(self._on_timer_tick, 1.0)
             self.timer_running = True
             self.timer_button_caption = "stop"
@@ -449,8 +485,18 @@ class ProjectInfoScreen(MDScreen):
 
     # --- Bottom bar / settings ---
 
-    def go_home(self):
+    def _finalize_and_go_home(self):
+        if self.timer_running:
+            self._finish_timer_run()
+            self.timer_running = False
+            self.timer_button_caption = "start"
+            self._stop_timer_event()
+        self.save_project_content()
         MDApp.get_running_app().root.current = "home"
+        schedule_home_last_session_refresh()
+
+    def go_home(self):
+        self._finalize_and_go_home()
 
     def go_statistics(self):
         MDApp.get_running_app().root.current = "statistics"

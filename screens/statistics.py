@@ -6,6 +6,8 @@ from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.widget import Widget
 from kivy.graphics import Color, Ellipse, RoundedRectangle
 
+from screens.session_store import statistics_from_sessions
+
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDLabel
@@ -234,13 +236,19 @@ class StatisticsScreen(MDScreen):
         row_gaps = row_spacing * max(0, len(cont.children) - 1)
         card.height = pt + pb + header_h + gap + row_heights + row_gaps
 
+    def refresh_statistics(self):
+        pie, rows = statistics_from_sessions(self.selected_period)
+        if not pie:
+            set_screen_statistics(self, [], [])
+            return
+        set_screen_statistics(self, pie, rows)
+
+    def on_selected_period(self, _instance, value):
+        self.refresh_statistics()
+
     def on_enter(self):
-        set_screen_statistics(
-            self,
-            [
-                {"color": (0.13, 0.59, 0.95, 1), "percent": 45},
-                {"color": (0.85, 0.19, 0.19, 1), "percent": 30},
-                {"color": (0.6, 0.4, 0.8, 1), "percent": 25},
-            ],
-            sample_statistics_rows(),
-        )
+        self.refresh_statistics()
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.bind(selected_period=self.on_selected_period)
