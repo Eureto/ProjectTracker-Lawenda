@@ -6,7 +6,8 @@ from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp, sp
-from kivy.properties import BooleanProperty, NumericProperty, ObjectProperty, StringProperty
+from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
+from kivy.graphics import Color, RoundedRectangle
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.button import Button
 from kivy.uix.image import Image
@@ -38,6 +39,80 @@ def _car_asset_path(filename):
 RESET_NEVER = "never"
 RESET_DAILY = "daily"
 RESET_WEEKLY = "weekly"
+
+_SHEET_FIELD_RADIUS = dp(12)
+_SHEET_BTN_RADIUS = dp(12)
+
+
+class _RoundedSheetBackground:
+    """Draw a rounded fill behind sheet inputs (TextInput / Spinner)."""
+
+    fill_color = ListProperty([0.97, 0.97, 0.97, 1])
+    corner_radius = NumericProperty(_SHEET_FIELD_RADIUS)
+
+    def _init_rounded_bg(self):
+        self.bind(pos=self._redraw_rounded_bg, size=self._redraw_rounded_bg)
+        self.bind(fill_color=lambda *_: self._redraw_rounded_bg())
+        self.bind(corner_radius=lambda *_: self._redraw_rounded_bg())
+        Clock.schedule_once(lambda _dt: self._redraw_rounded_bg(), 0)
+
+    def _redraw_rounded_bg(self, *_args):
+        r = float(self.corner_radius)
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*self.fill_color)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[r, r, r, r])
+
+
+class RoundedSheetTextInput(_RoundedSheetBackground, TextInput):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_active", "")
+        super().__init__(**kwargs)
+        self._init_rounded_bg()
+
+
+class RoundedSheetSpinner(_RoundedSheetBackground, Spinner):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
+        super().__init__(**kwargs)
+        self._init_rounded_bg()
+
+
+class RoundedSheetButton(Button):
+    """Rounded action button for bottom sheets (replaces flat MD buttons in sheets)."""
+
+    bg_color = ListProperty([0.7, 0.5, 1, 1])
+    text_rgb = ListProperty([1, 1, 1, 1])
+    corner_radius = NumericProperty(_SHEET_BTN_RADIUS)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
+        kwargs.setdefault("bold", True)
+        super().__init__(**kwargs)
+        self.bind(
+            pos=self._redraw,
+            size=self._redraw,
+            state=self._redraw,
+            bg_color=lambda *_: self._redraw(),
+            text_rgb=lambda *_: self._redraw(),
+        )
+        Clock.schedule_once(lambda _dt: self._redraw(), 0)
+
+    def _redraw(self, *_args):
+        bg = list(self.bg_color)
+        if self.state == "down":
+            bg = [c * 0.9 for c in bg[:3]] + [bg[3]]
+        r = float(self.corner_radius)
+        self.color = self.text_rgb
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*bg)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[r, r, r, r])
 
 
 def current_period_key(reset_mode):
@@ -682,7 +757,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
-        self.field = TextInput(
+        self.field = RoundedSheetTextInput(
             hint_text="Treść notatki…",
             text=note_row.display_text if note_row else "",
             multiline=True,
@@ -690,7 +765,6 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             height=self._note_field_height(),
             font_size=sp(16),
             padding=[dp(12), dp(12), dp(12), dp(12)],
-            background_color=(0.97, 0.97, 0.97, 1),
             foreground_color=get_color_from_hex("#222222"),
             cursor_color=get_color_from_hex("#7e57c2"),
             hint_text_color=(0.55, 0.55, 0.55, 1),
@@ -704,24 +778,30 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             spacing=dp(12),
         )
         if note_row is not None:
-            btn_delete = MDRaisedButton(
+            btn_delete = RoundedSheetButton(
                 text="Usuń",
-                md_bg_color=get_color_from_hex("#e53935"),
-                theme_text_color="Custom",
-                text_color=(1, 1, 1, 1),
+                size_hint_x=None,
+                width=dp(88),
+                bg_color=list(get_color_from_hex("#e53935")),
             )
             btn_delete.bind(on_release=lambda *a: self._delete_note_and_close())
             bar.add_widget(btn_delete)
         bar.add_widget(Widget(size_hint_x=1))
-        btn_cancel = MDFlatButton(text="Anuluj")
+        btn_cancel = RoundedSheetButton(
+            text="Anuluj",
+            size_hint_x=None,
+            width=dp(96),
+            bg_color=[0.94, 0.94, 0.96, 1],
+            text_rgb=list(get_color_from_hex("#444444")),
+        )
         btn_cancel.bind(on_release=lambda *a: self.dismiss())
         app = MDApp.get_running_app()
         add_label = "Zapisz" if note_row else "Dodaj"
-        btn_add = MDRaisedButton(
+        btn_add = RoundedSheetButton(
             text=add_label,
-            md_bg_color=get_color_from_hex(app.theme_card_bg),
-            theme_text_color="Custom",
-            text_color=(1, 1, 1, 1),
+            size_hint_x=None,
+            width=dp(104),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
         )
         btn_add.bind(on_release=lambda *a: self._commit_and_close())
         bar.add_widget(btn_cancel)
@@ -853,19 +933,18 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             height=dp(210),
         )
 
-        self.title_field = TextInput(
+        self.title_field = RoundedSheetTextInput(
             hint_text="Nazwa celu",
             multiline=False,
             size_hint_y=None,
             height=dp(44),
             font_size=sp(16),
             padding=[dp(12), dp(10), dp(12), dp(10)],
-            background_color=(0.97, 0.97, 0.97, 1),
             foreground_color=get_color_from_hex("#222222"),
         )
         self._body.add_widget(self.title_field)
 
-        self.goal_field = TextInput(
+        self.goal_field = RoundedSheetTextInput(
             hint_text="Ile czasu (np. 3h, 15min)",
             text="1h",
             multiline=False,
@@ -873,7 +952,6 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             height=dp(44),
             font_size=sp(15),
             padding=[dp(12), dp(10), dp(12), dp(10)],
-            background_color=(0.97, 0.97, 0.97, 1),
             foreground_color=get_color_from_hex("#222222"),
         )
         self._body.add_widget(self.goal_field)
@@ -894,13 +972,13 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             "Tygodniowo": RESET_WEEKLY,
             "Bez resetu": RESET_NEVER,
         }
-        self.freq_spinner = Spinner(
+        self.freq_spinner = RoundedSheetSpinner(
             text="Tygodniowo",
             values=("Codziennie", "Tygodniowo", "Bez resetu"),
             size_hint_x=1,
             size_hint_y=None,
             height=dp(44),
-            background_color=(0.95, 0.95, 0.97, 1),
+            fill_color=[0.95, 0.95, 0.97, 1],
             color=(0.1, 0.1, 0.1, 1),
         )
         self._body.add_widget(self.freq_spinner)
@@ -930,14 +1008,20 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             spacing=dp(8),
         )
         bar.add_widget(Widget(size_hint_x=1))
-        btn_cancel = MDFlatButton(text="Anuluj")
+        btn_cancel = RoundedSheetButton(
+            text="Anuluj",
+            size_hint_x=None,
+            width=dp(96),
+            bg_color=[0.94, 0.94, 0.96, 1],
+            text_rgb=list(get_color_from_hex("#444444")),
+        )
         btn_cancel.bind(on_release=lambda *a: self.dismiss())
         app = MDApp.get_running_app()
-        btn_add = MDRaisedButton(
+        btn_add = RoundedSheetButton(
             text="Dodaj cel",
-            md_bg_color=get_color_from_hex(app.theme_card_bg),
-            theme_text_color="Custom",
-            text_color=(1, 1, 1, 1),
+            size_hint_x=None,
+            width=dp(112),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
         )
         btn_add.bind(on_release=lambda *a: self._commit())
         bar.add_widget(btn_cancel)
