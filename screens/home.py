@@ -1,6 +1,13 @@
 import os
 import json
 
+from screens.session_store import (
+    format_duration_hms,
+    format_when_label,
+    get_last_session,
+    schedule_home_last_session_refresh,
+)
+
 from kivy.uix.widget import Widget
 from kivy.properties import StringProperty, NumericProperty, BooleanProperty, ColorProperty
 from kivy.metrics import dp
@@ -52,14 +59,18 @@ class ProjectCard(MDCard):
     height_multiplier = NumericProperty(1.0)
     title_font_style = StringProperty("Subtitle2")
     emoji_size = NumericProperty(dp(40))
+    interactive = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._long_press_ev = None
         self._shake_anim = None
-    
+
     def on_touch_down(self, touch):
+        if not self.interactive:
+            return False
         if self.collide_point(*touch.pos):
+            touch.ud["project_card_origin"] = touch.pos
             # Start 2s timer for long press detection
             self._long_press_ev = Clock.schedule_once(lambda dt: self._start_drag_mode(touch), 1.0)
             touch.grab(self)
@@ -74,6 +85,8 @@ class ProjectCard(MDCard):
         self._shake_anim.start(self)
 
     def on_touch_move(self, touch):
+        if not self.interactive:
+            return False
         if touch.grab_current is self:
             if self._shake_anim:
                 self.x += touch.dx
@@ -86,17 +99,34 @@ class ProjectCard(MDCard):
         return super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
+        if not self.interactive:
+            return False
         if touch.grab_current is self:
+            entered_drag = self._shake_anim is not None
             if self._long_press_ev:
                 Clock.unschedule(self._long_press_ev)
-            if self._shake_anim:
+                self._long_press_ev = None
+            if entered_drag:
                 self._shake_anim.stop(self)
                 self._shake_anim = None
                 Animation(angle=0, d=0.1).start(self)
                 self.save_position()
+            else:
+                origin = touch.ud.get("project_card_origin")
+                if origin and self.collide_point(*touch.pos):
+                    dx = touch.pos[0] - origin[0]
+                    dy = touch.pos[1] - origin[1]
+                    if (dx * dx + dy * dy) ** 0.5 < dp(15):
+                        self.open_project_info()
             touch.ungrab(self)
             return True
         return super().on_touch_up(touch)
+
+    def open_project_info(self):
+        app = MDApp.get_running_app()
+        info = app.root.get_screen("project_info")
+        info.project_title = self.title
+        app.root.current = "project_info"
 
     def save_position(self):
         if self.parent:
@@ -122,9 +152,36 @@ class ProjectCard(MDCard):
             print(f"Position saved for {self.title}: x={rel_x:.2f}, top={rel_y:.2f}")
 
 class SessionCard(MDCard):
-    pass
+    has_session = BooleanProperty(False)
+    project_name = StringProperty("")
+    emoji_source = StringProperty("folder-outline")
+    when_label = StringProperty("")
+    duration_text = StringProperty("Czas:  00:00:00")
+
+    def apply_last_session(self, session):
+        if not session:
+            self.has_session = False
+            self.project_name = ""
+            self.when_label = ""
+            self.duration_text = "Czas:  00:00:00"
+            self.emoji_source = "folder-outline"
+            return
+        self.has_session = True
+        self.project_name = session.get("project_title", "")
+        self.emoji_source = session.get("emoji_source", "folder-outline")
+        self.when_label = format_when_label(session.get("ended_at"))
+        self.duration_text = f"Czas:  {format_duration_hms(session.get('duration_seconds', 0))}"
+
 
 class HomeScreen(MDScreen):
+    def refresh_last_session(self):
+        card = self.ids.last_session_card
+        if card is not None:
+            card.apply_last_session(get_last_session())
+
+    def on_enter(self, *_args):
+        # Delayed refresh covers home entering before project_info.on_leave records.
+        schedule_home_last_session_refresh()
     def load_projects(self):
         """Loads project definitions from storage and adds them to the UI."""
         app = MDApp.get_running_app()

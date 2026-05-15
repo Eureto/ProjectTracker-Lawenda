@@ -3,3 +3,4 @@ __pycache__
 bin
 .buildozer
 .sys_deps_installed
+.vscode

@@ -14,6 +14,9 @@ ACTIVATE = . $(BIN)/activate
 # Prefix for commands that need to run inside the activated environment
 RUN_ENV = $(ACTIVATE) &&
 
+# Staging dir buildozer clears with Python rmtree before each copy (fails on FUSE/NTFS).
+BUILDOZER_APP_DIR = .buildozer/android/app
+
 # Set help as the default command when no arguments are passed
 .DEFAULT_GOAL := help
 
@@ -23,7 +26,7 @@ RUN_ENV = $(ACTIVATE) &&
 # 3. head -n 1: takes the first available device
 DEVICE_CONNECTED = $(shell adb devices 2>/dev/null | grep -v "List of devices" | grep -v "^$$" | head -n 1)
 
-.PHONY: help deploy debug test clean logcat prepare default
+.PHONY: help deploy debug test clean logcat prepare android-app-reset default
 
 # Detect if Java 17 is already the active version
 JAVA_VER_CHECK = $(shell java -version 2>&1 | grep -q "17\." && echo "1" || echo "0")
@@ -61,7 +64,13 @@ help: ## Display this help message
 	@echo -e "Kivy Deployment Automation\n--------------------------"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
 
-deploy: prepare ## Auto-deploy: Android (if connected) or PC (fallback)
+android-app-reset: ## Remove Android app staging dir (fixes buildozer rmtree on FUSE/NTFS)
+	@if [ -d "$(BUILDOZER_APP_DIR)" ]; then \
+		echo "[INFO] Removing $(BUILDOZER_APP_DIR) (shell rm; Python rmtree fails on large Emoji_PNG here)..."; \
+		rm -rf "$(BUILDOZER_APP_DIR)"; \
+	fi
+
+deploy: prepare android-app-reset ## Auto-deploy: Android (if connected) or PC (fallback)
 	@$(RUN_ENV) if [ -n "$(DEVICE_CONNECTED)" ]; then \
 		echo "[INFO] Android device detected: $(DEVICE_CONNECTED)"; \
 		echo "[INFO] Packaging and deploying to device..."; \
@@ -71,7 +80,7 @@ deploy: prepare ## Auto-deploy: Android (if connected) or PC (fallback)
 		python3 $(ENTRY_POINT); \
 	fi
 
-debug: prepare ## Build & Run with logs: Android (logcat) or PC (debug level)
+debug: prepare android-app-reset ## Build & Run with logs: Android (logcat) or PC (debug level)
 	@$(RUN_ENV) if [ -n "$(DEVICE_CONNECTED)" ]; then \
 		echo "[INFO] Starting Android Debug Cycle..."; \
 		buildozer android debug deploy run logcat; \
@@ -90,6 +99,7 @@ test: prepare ## Run project tests using pytest
 
 clean: ## Remove build artifacts and temporary cache
 	@echo "[INFO] Cleaning build environment..."
+	@$(MAKE) android-app-reset
 	@$(RUN_ENV) buildozer appclean
 	rm -rf bin/
 	find . -type d -name "__pycache__" -exec rm -rf {} +
