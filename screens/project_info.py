@@ -7,7 +7,7 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp, sp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.graphics import Color, RoundedRectangle
+from kivy.graphics import Color, Ellipse, Line, RoundedRectangle
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.button import Button
 from kivy.uix.image import Image
@@ -15,10 +15,12 @@ from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.modalview import ModalView
 from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner
+from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
 from kivy.uix.scrollview import ScrollView
 from kivymd.app import MDApp
+from kivy.uix.boxlayout import BoxLayout
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.card import MDCard
@@ -43,6 +45,16 @@ RESET_WEEKLY = "weekly"
 
 _SHEET_FIELD_RADIUS = dp(12)
 _SHEET_BTN_RADIUS = dp(12)
+
+_PURPLE = get_color_from_hex("#7e57c2")
+_GREY_NODE = get_color_from_hex("#9e9e9e")
+_CHIP_INACTIVE = get_color_from_hex("#5e35b1")
+_CHIP_ACTIVE = get_color_from_hex("#b388ff")
+_CROWN_GOLD = get_color_from_hex("#ffc107")
+
+ETAPY_ADD_GROUP = "Grupa etapów"
+ETAPY_ADD_STEP = "Krok etapu"
+ETAPY_ADD_SUB = "Podkrok"
 
 
 class _RoundedSheetBackground:
@@ -187,6 +199,411 @@ def format_goal_elapsed(seconds):
     return f"{h}h{m}m" if m else f"{h}h"
 
 
+class UnderlineTextBlock(BoxLayout):
+    """White label with a horizontal rule underneath (mockup list / stage lines)."""
+
+    text = StringProperty("")
+    text_color = ListProperty([1, 1, 1, 1])
+    font_size = NumericProperty(sp(14))
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("spacing", dp(2))
+        super().__init__(**kwargs)
+        self._lbl = Label(
+            color=self.text_color,
+            font_size=self.font_size,
+            halign="left",
+            valign="middle",
+            size_hint_y=None,
+        )
+        self._rule = Widget(size_hint_y=None, height=dp(2))
+        self.add_widget(self._lbl)
+        self.add_widget(self._rule)
+        self._rule.bind(pos=self._draw_rule, size=self._draw_rule)
+        self.bind(text=self._relayout, width=self._relayout, text_color=self._relayout)
+        Clock.schedule_once(lambda _dt: self._relayout(), 0)
+
+    def _draw_rule(self, *_args):
+        self._rule.canvas.clear()
+        with self._rule.canvas:
+            Color(1, 1, 1, 1)
+            Line(
+                points=[self._rule.x, self._rule.center_y, self._rule.right, self._rule.center_y],
+                width=dp(1.2),
+            )
+
+    def _relayout(self, *_args):
+        self._lbl.text = self.text or ""
+        self._lbl.color = tuple(self.text_color)
+        self._lbl.font_size = float(self.font_size)
+        if self.width > 1:
+            self._lbl.text_size = (self.width, None)
+            self._lbl.texture_update()
+            th = max(sp(16), self._lbl.texture_size[1])
+            self._lbl.height = th
+            self.height = th + dp(6)
+        self._draw_rule()
+
+
+class StatusCircleButton(Button):
+    """Circle toggle on the right — white ring for checklist, purple/crown for etapy."""
+
+    done = BooleanProperty(False)
+    show_crown = BooleanProperty(True)
+    white_style = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
+        kwargs.setdefault("size_hint", (None, None))
+        kwargs.setdefault("size", (dp(26), dp(26)))
+        super().__init__(**kwargs)
+        self.bind(
+            done=self._redraw,
+            show_crown=self._redraw,
+            white_style=self._redraw,
+            pos=self._redraw,
+            size=self._redraw,
+        )
+        Clock.schedule_once(lambda _dt: self._redraw(), 0)
+
+    def _redraw(self, *_args):
+        self.canvas.before.clear()
+        if self.width < 1 or self.height < 1:
+            return
+        cx = self.center_x
+        cy = self.center_y
+        r = min(self.width, self.height) * 0.36
+        ring_w = dp(2.5)
+        with self.canvas.before:
+            if self.white_style:
+                if self.done:
+                    Color(1, 1, 1, 1)
+                    Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+                else:
+                    Color(1, 1, 1, 1)
+                    Line(circle=(cx, cy, r), width=ring_w)
+            elif self.done and self.show_crown:
+                Color(*_PURPLE)
+                Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+            elif self.done:
+                Color(*_PURPLE)
+                Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+            else:
+                Color(*_PURPLE)
+                Line(circle=(cx, cy, r), width=dp(2))
+        if self.done and self.show_crown:
+            self.text = "\u2655"
+            self.font_size = sp(12)
+            self.color = _CROWN_GOLD
+        else:
+            self.text = ""
+
+
+class ChecklistGoalRow(MDBoxLayout):
+    index_label = StringProperty("1.")
+    display_text = StringProperty("")
+    done = BooleanProperty(False)
+    parent_screen = ObjectProperty(None, allownone=True)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("spacing", dp(10))
+        super().__init__(**kwargs)
+        self.size_hint_y = None
+        self._underline = None
+        self._status_btn = None
+        self.bind(display_text=self._sync_height, width=self._sync_height)
+
+    def on_kv_post(self, base_widget):
+        self._underline = self.ids.underline_block
+        self._status_btn = self.ids.status_btn
+        self._status_btn.show_crown = False
+        self._status_btn.bind(on_release=self._toggle_done)
+        self.ids.index_lbl.text = self.index_label
+        self._underline.text = self.display_text
+        self._apply_done_to_ui()
+        Clock.schedule_once(self._sync_height, 0)
+
+    def _apply_done_to_ui(self):
+        btn = self._status_btn or self.ids.get("status_btn")
+        if btn is not None:
+            btn.done = self.done
+
+    def _toggle_done(self, *_args):
+        self.done = not self.done
+        self._apply_done_to_ui()
+        if self.parent_screen:
+            self.parent_screen.relocate_checklist_goal(self)
+
+    def _sync_height(self, *_args):
+        if self._underline is None:
+            return
+        self._underline.text = self.display_text
+        if "index_lbl" in self.ids:
+            self.ids.index_lbl.text = self.index_label
+        btn_w = dp(30)
+        idx_w = dp(22) if self.index_label else 0
+        if self.width > 1:
+            self._underline.width = max(sp(40), self.width - idx_w - btn_w - dp(16))
+        row_h = max(dp(32), self._underline.height)
+        self.height = row_h
+        if "index_lbl" in self.ids:
+            self.ids.index_lbl.height = row_h
+        if self._status_btn is not None:
+            self._status_btn.size = (btn_w, btn_w)
+        self._apply_done_to_ui()
+
+    def on_touch_up(self, touch):
+        if super().on_touch_up(touch):
+            return True
+        if not self.collide_point(*touch.pos):
+            return False
+        if "status_btn" in self.ids and self.ids.status_btn.collide_point(*touch.pos):
+            return False
+        self.open_edit()
+        return True
+
+    def open_edit(self):
+        if self.parent_screen:
+            self.parent_screen.open_edit_checklist_goal_sheet(self)
+
+
+class ZrobioneHeaderBar(MDBoxLayout):
+    """Tappable row: title + chevron (children must not steal touches)."""
+
+    section = ObjectProperty(None, allownone=True)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(40))
+        kwargs.setdefault("padding", [dp(2), 0, dp(4), 0])
+        kwargs.setdefault("spacing", dp(8))
+        super().__init__(**kwargs)
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            touch.grab(self)
+            return True
+        return super().on_touch_down(touch)
+
+    def on_touch_up(self, touch):
+        if touch.grab_current is self:
+            touch.ungrab(self)
+            if self.collide_point(*touch.pos):
+                sec = self.section
+                if sec is not None:
+                    sec._toggle_expanded()
+            return True
+        return super().on_touch_up(touch)
+
+
+class ZrobioneSection(MDBoxLayout):
+    """Collapsible 'Zrobione' bucket for completed checklist goals."""
+
+    expanded = BooleanProperty(True)
+    done_count = NumericProperty(0)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("spacing", dp(8))
+        kwargs.setdefault("size_hint_y", None)
+        super().__init__(**kwargs)
+        self.bind(expanded=self._apply_expanded, done_count=self._apply_visibility)
+        self._setup_attempts = 0
+
+    def on_kv_post(self, base_widget):
+        Clock.schedule_once(self._setup_after_kv, 0)
+
+    def _setup_after_kv(self, _dt):
+        if "zrobione_header" not in self.ids:
+            self._setup_attempts += 1
+            if self._setup_attempts < 20:
+                Clock.schedule_once(self._setup_after_kv, 0.05)
+            return
+        header = self.ids.zrobione_header
+        header.section = self
+        self.bind(done_count=self._refresh_header, expanded=self._refresh_header)
+        self.ids.checklist_done_list.bind(
+            minimum_height=lambda *_: Clock.schedule_once(self._sync_section_height, 0)
+        )
+        self._refresh_all()
+
+    def _toggle_expanded(self, *_args):
+        self.expanded = not self.expanded
+        self._apply_expanded()
+        self._sync_section_height()
+
+    def _refresh_header(self, *_args):
+        if "zrobione_header" not in self.ids:
+            return
+        header = self.ids.zrobione_header
+        n = int(self.done_count)
+        title = f"Zrobione ({n})" if n else "Zrobione"
+        if "zrobione_title" in header.ids:
+            header.ids.zrobione_title.text = title
+        if "zrobione_chevron" in header.ids:
+            header.ids.zrobione_chevron.icon = (
+                "chevron-down" if self.expanded else "chevron-right"
+            )
+
+    def _apply_visibility(self, *_args):
+        visible = self.done_count > 0
+        self.opacity = 1 if visible else 0
+        self.disabled = False
+        self.size_hint_y = None
+        if not visible:
+            self.height = 0
+            self.collide_disabled = True
+        else:
+            self.collide_disabled = False
+            Clock.schedule_once(self._apply_expanded, 0)
+            Clock.schedule_once(self._sync_section_height, 0)
+
+    def _apply_expanded(self, *_args):
+        if self.done_count <= 0 or "checklist_done_list" not in self.ids:
+            return
+        lst = self.ids.checklist_done_list
+        self._refresh_header()
+        if self.expanded:
+            lst.opacity = 1
+            lst.disabled = False
+            lst.height = lst.minimum_height
+        else:
+            lst.opacity = 0
+            lst.disabled = True
+            lst.height = 0
+        Clock.schedule_once(self._sync_section_height, 0)
+
+    def _sync_section_height(self, *_args):
+        if self.done_count <= 0:
+            self.height = 0
+            return
+        if "zrobione_header" not in self.ids or "checklist_done_list" not in self.ids:
+            return
+        header_h = self.ids.zrobione_header.height
+        body_h = self.ids.checklist_done_list.height if self.expanded else 0
+        self.height = header_h + body_h + float(self.spacing)
+
+    def _refresh_all(self, *_args):
+        self._apply_visibility()
+        self._apply_expanded()
+
+
+class StageItemRow(MDBoxLayout):
+    """Timeline row: spine + underline text + status (crown when done)."""
+
+    display_text = StringProperty("")
+    done = BooleanProperty(False)
+    is_sub = BooleanProperty(False)
+    is_first = BooleanProperty(False)
+    is_last = BooleanProperty(False)
+    parent_screen = ObjectProperty(None, allownone=True)
+    group_index = NumericProperty(0)
+    item_index = NumericProperty(0)
+    child_index = NumericProperty(-1)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("spacing", dp(8))
+        super().__init__(**kwargs)
+        self.size_hint_y = None
+        self._spine = None
+        self.bind(display_text=self._sync_height, width=self._sync_height)
+
+    def on_kv_post(self, base_widget):
+        self._spine = self.ids.spine
+        self._underline = self.ids.underline_block
+        self._status_btn = self.ids.status_btn
+        self._status_btn.bind(on_release=self._toggle_done)
+        self.ids.sub_arrow.opacity = 1 if self.is_sub else 0
+        self.ids.sub_arrow.width = dp(16) if self.is_sub else 0
+        self._spine.is_sub = self.is_sub
+        self._spine.is_first = self.is_first
+        self._spine.is_last = self.is_last
+        if self.is_sub:
+            self.padding = [dp(18), 0, 0, 0]
+        self._apply_done_to_ui()
+        Clock.schedule_once(self._sync_height, 0)
+
+    def _apply_done_to_ui(self):
+        if self._spine is not None:
+            self._spine.done = self.done
+        btn = self._status_btn or self.ids.get("status_btn")
+        if btn is not None:
+            btn.done = self.done
+
+    def _toggle_done(self, *_args):
+        self.done = not self.done
+        self._apply_done_to_ui()
+        if self.parent_screen:
+            self.parent_screen._set_etapy_item_done(
+                self.group_index, self.item_index, self.child_index, self.done
+            )
+
+    def _sync_height(self, *_args):
+        self._underline.text = self.display_text
+        if self.width > 1:
+            pad = dp(50) if self.is_sub else dp(34)
+            self._underline.width = max(sp(40), self.width - pad)
+        line_h = sp(14) * 1.45
+        if self.width > 1 and self._underline.width > 1:
+            from kivy.core.text import Label as CoreLabel
+
+            lbl = CoreLabel(text=self.display_text or " ", font_size=sp(14))
+            lbl.bind(size=lbl.setter("text_size"))
+            lbl.text_size = (self._underline.width, None)
+            lbl.refresh()
+            line_h = max(line_h, lbl.texture.size[1])
+        self._underline.height = line_h + dp(10)
+        self.height = max(dp(40), self._underline.height + dp(4))
+        self._apply_done_to_ui()
+
+
+class TimelineSpine(Widget):
+    is_sub = BooleanProperty(False)
+    is_first = BooleanProperty(False)
+    is_last = BooleanProperty(False)
+    done = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint_x", None)
+        kwargs.setdefault("width", dp(22))
+        super().__init__(**kwargs)
+        self.bind(pos=self._redraw, size=self._redraw, is_sub=self._redraw)
+        self.bind(is_first=self._redraw, is_last=self._redraw, done=self._redraw)
+
+    def _redraw(self, *_args):
+        self.canvas.clear()
+        if self.height < 1:
+            return
+        cx = self.center_x
+        node_r = dp(5) if self.is_sub else dp(6)
+        node_cy = self.center_y
+        with self.canvas:
+            if not self.is_sub:
+                Color(*_GREY_NODE)
+                Line(points=[cx, self.top, cx, self.y], width=dp(1.5))
+            Color(*(_PURPLE if self.done else _GREY_NODE))
+            Ellipse(
+                pos=(cx - node_r, node_cy - node_r),
+                size=(2 * node_r, 2 * node_r),
+            )
+
+
+class EtapyFinishRow(MDBoxLayout):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(44))
+        kwargs.setdefault("spacing", dp(8))
+        super().__init__(**kwargs)
+
+
 class ProjectInfoScreen(MDScreen):
     """Project detail panel: dynamic notes & goals, timer, bottom nav like home."""
 
@@ -199,9 +616,15 @@ class ProjectInfoScreen(MDScreen):
     _timer_elapsed_seconds = 0
     _run_base_elapsed = 0
     _run_started_at = None
+    _etapy_groups = []
+    _etapy_selected_index = 0
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._checklist_sheet = None
+        self._etapy_sheet = None
+        self._add_note_sheet = None
+        self._goal_sheet = None
         self.bind(project_title=self._on_project_title_changed)
 
     def _on_project_title_changed(self, *_args):
@@ -262,6 +685,8 @@ class ProjectInfoScreen(MDScreen):
             "timer_elapsed": self._timer_elapsed_seconds,
             "notes": self._serialize_notes(),
             "goals": self._serialize_goals(),
+            "checklist_goals": self._serialize_checklist_goals(),
+            "etapy": self._serialize_etapy(),
         }
         self._write_all_states(data)
 
@@ -313,16 +738,41 @@ class ProjectInfoScreen(MDScreen):
                     reset_mode=rm,
                     period_key=pk,
                 )
+            for cg in blob.get("checklist_goals") or []:
+                t = (cg.get("text") or "").strip()
+                if t:
+                    self.add_checklist_goal(text=t, done=bool(cg.get("done", False)))
+            et = blob.get("etapy") or {}
+            self._etapy_groups = et.get("groups") or []
+            self._etapy_selected_index = int(et.get("selected_index", 0))
         else:
             self._timer_elapsed_seconds = 0
             self._refresh_timer_label()
+            self._etapy_groups = []
+            self._etapy_selected_index = 0
         self._run_base_elapsed = self._timer_elapsed_seconds
+        self._clamp_etapy_selection()
+        self._rebuild_etapy_chips()
+        self._rebuild_etapy_timeline()
 
     def _clear_dynamic_widgets(self):
         for c in list(self.ids.notes_list.children):
             self.ids.notes_list.remove_widget(c)
         for c in list(self.ids.goals_list.children):
             self.ids.goals_list.remove_widget(c)
+        cl = self.ids.get("checklist_goals_list")
+        if cl is not None:
+            for c in list(cl.children):
+                cl.remove_widget(c)
+        dl = self._checklist_done_list()
+        if dl is not None:
+            for c in list(dl.children):
+                dl.remove_widget(c)
+        zr = self.ids.get("zrobione_section")
+        if zr is not None:
+            zr.done_count = 0
+        self._etapy_groups = []
+        self._etapy_selected_index = 0
 
     def _serialize_notes(self):
         out = []
@@ -351,6 +801,337 @@ class ProjectInfoScreen(MDScreen):
                     }
                 )
         return out
+
+    def _iter_checklist_rows(self):
+        lists = [self.ids.get("checklist_goals_list"), self._checklist_done_list()]
+        for cl in lists:
+            if cl is None:
+                continue
+            for c in reversed(cl.children):
+                if isinstance(c, ChecklistGoalRow):
+                    yield c
+
+    def _serialize_checklist_goals(self):
+        out = []
+        for row in self._iter_checklist_rows():
+            t = (row.display_text or "").strip()
+            if t:
+                out.append({"text": t, "done": bool(row.done)})
+        return out
+
+    def _serialize_etapy(self):
+        return {
+            "selected_index": int(self._etapy_selected_index),
+            "groups": self._etapy_groups,
+        }
+
+    # --- Lista celów (checklist) ---
+
+    def _checklist_done_list(self):
+        zr = self.ids.get("zrobione_section")
+        if zr is None:
+            return None
+        return zr.ids.get("checklist_done_list")
+
+    def _clear_stale_checklist_sheet(self):
+        sheet = getattr(self, "_checklist_sheet", None)
+        if sheet is None:
+            return
+        if getattr(sheet, "parent", None) is None:
+            self._checklist_sheet = None
+
+    def open_add_checklist_goal_sheet(self, *_args):
+        self._clear_stale_checklist_sheet()
+        if self._checklist_sheet is not None:
+            return
+        sheet = AddChecklistGoalBottomSheet(self, goal_row=None)
+
+        def _cleared(*_a):
+            self._checklist_sheet = None
+
+        sheet.bind(on_dismiss=_cleared)
+        self._checklist_sheet = sheet
+        try:
+            sheet.open()
+        except Exception:
+            self._checklist_sheet = None
+            raise
+
+    def open_edit_checklist_goal_sheet(self, row):
+        self._clear_stale_checklist_sheet()
+        if self._checklist_sheet is not None:
+            return
+        sheet = AddChecklistGoalBottomSheet(self, goal_row=row)
+
+        def _cleared(*_a):
+            self._checklist_sheet = None
+
+        sheet.bind(on_dismiss=_cleared)
+        self._checklist_sheet = sheet
+        try:
+            sheet.open()
+        except Exception:
+            self._checklist_sheet = None
+            raise
+
+    def add_checklist_goal(self, text="", done=False):
+        row = ChecklistGoalRow(
+            display_text=text,
+            done=done,
+            parent_screen=self,
+        )
+        target = self._checklist_done_list() if done else self.ids.checklist_goals_list
+        if target is None:
+            return
+        target.add_widget(row)
+        self._renumber_checklist_goals()
+        self._refresh_zrobione_section()
+        self.save_project_content()
+
+    def remove_checklist_goal_row(self, row):
+        parent = row.parent
+        if parent is not None:
+            parent.remove_widget(row)
+        self._renumber_checklist_goals()
+        self._refresh_zrobione_section()
+        self.save_project_content()
+
+    def relocate_checklist_goal(self, row):
+        active = self.ids.checklist_goals_list
+        done_box = self._checklist_done_list()
+        if done_box is None:
+            return
+        if row.parent is not None:
+            row.parent.remove_widget(row)
+        if row.done:
+            done_box.add_widget(row)
+            row.index_label = ""
+            row.opacity = 0.72
+        else:
+            active.add_widget(row)
+            row.opacity = 1.0
+        self._renumber_checklist_goals()
+        self._refresh_zrobione_section()
+        zr = self.ids.get("zrobione_section")
+        if zr is not None and row.done:
+            zr.expanded = True
+        self.save_project_content()
+
+    def _refresh_zrobione_section(self):
+        done_box = self._checklist_done_list()
+        zr = self.ids.get("zrobione_section")
+        if done_box is None or zr is None:
+            return
+        n = sum(1 for c in done_box.children if isinstance(c, ChecklistGoalRow))
+        zr.done_count = n
+        for row in done_box.children:
+            if isinstance(row, ChecklistGoalRow):
+                row.index_label = ""
+                row.opacity = 0.72
+
+    def _renumber_checklist_goals(self):
+        cl = self.ids.get("checklist_goals_list")
+        if cl is None:
+            return
+        rows = [c for c in reversed(cl.children) if isinstance(c, ChecklistGoalRow)]
+        for i, row in enumerate(rows, start=1):
+            row.index_label = f"{i}."
+            row.opacity = 1.0
+            row._sync_height()
+
+    # --- Etapy ---
+
+    _etapy_sheet = None
+
+    def open_add_etapy_sheet(self):
+        if self._etapy_sheet is not None:
+            return
+        sheet = AddEtapyBottomSheet(self)
+
+        def _cleared(*_a):
+            self._etapy_sheet = None
+
+        sheet.bind(on_dismiss=_cleared)
+        self._etapy_sheet = sheet
+        sheet.open()
+
+    def _clamp_etapy_selection(self):
+        if not self._etapy_groups:
+            self._etapy_selected_index = 0
+            return
+        self._etapy_selected_index = max(
+            0, min(self._etapy_selected_index, len(self._etapy_groups) - 1)
+        )
+
+    def _selected_etapy_group(self):
+        self._clamp_etapy_selection()
+        if not self._etapy_groups:
+            return None
+        return self._etapy_groups[self._etapy_selected_index]
+
+    def select_etapy_group(self, index):
+        self._etapy_selected_index = int(index)
+        self._clamp_etapy_selection()
+        self._rebuild_etapy_chips()
+        self._rebuild_etapy_timeline()
+        self.save_project_content()
+
+    def _set_etapy_item_done(self, group_index, item_index, child_index, done):
+        try:
+            group = self._etapy_groups[group_index]
+            if child_index >= 0:
+                group["items"][item_index]["children"][child_index]["done"] = done
+            else:
+                group["items"][item_index]["done"] = done
+        except (IndexError, KeyError, TypeError):
+            return
+        self.save_project_content()
+
+    def add_etapy_group(self, name):
+        name = (name or "").strip() or "Etap"
+        self._etapy_groups.append({"name": name, "items": []})
+        self._etapy_selected_index = len(self._etapy_groups) - 1
+        self._rebuild_etapy_chips()
+        self._rebuild_etapy_timeline()
+        self.save_project_content()
+
+    def add_etapy_step(self, text, parent_item_index=None):
+        text = (text or "").strip()
+        if not text:
+            return
+        group = self._selected_etapy_group()
+        if group is None:
+            self.add_etapy_group("Ogólne")
+            group = self._selected_etapy_group()
+        if parent_item_index is None:
+            group["items"].append({"text": text, "done": False, "children": []})
+        else:
+            try:
+                children = group["items"][parent_item_index].setdefault("children", [])
+                children.append({"text": text, "done": False})
+            except (IndexError, KeyError):
+                group["items"].append({"text": text, "done": False, "children": []})
+        self._rebuild_etapy_timeline()
+        self.save_project_content()
+
+    def _rebuild_etapy_chips(self):
+        box = self.ids.get("etapy_chips_box")
+        if box is None:
+            return
+        box.clear_widgets()
+        if not self._etapy_groups:
+            hint = MDLabel(
+                text="Dodaj grupę etapów przyciskiem +",
+                font_size=sp(13),
+                theme_text_color="Custom",
+                text_color=(1, 1, 1, 0.65),
+                size_hint=(None, None),
+                height=dp(32),
+            )
+            hint.texture_update()
+            hint.width = hint.texture_size[0] + dp(16)
+            box.add_widget(hint)
+            return
+        for idx, group in enumerate(self._etapy_groups):
+            active = idx == self._etapy_selected_index
+            chip = Button(
+                text=group.get("name", "Etap"),
+                size_hint=(None, None),
+                height=dp(32),
+                padding=(dp(14), dp(6)),
+                background_normal="",
+                background_color=(0, 0, 0, 0),
+                color=(0.12, 0.12, 0.12, 1) if active else (1, 1, 1, 1),
+                font_size=sp(13),
+            )
+            chip.texture_update()
+            chip.width = chip.texture_size[0] + dp(28)
+
+            def _paint_chip(btn, is_active, *_a):
+                btn.canvas.before.clear()
+                bg = _CHIP_ACTIVE if is_active else _CHIP_INACTIVE
+                with btn.canvas.before:
+                    Color(*bg)
+                    RoundedRectangle(
+                        pos=btn.pos,
+                        size=btn.size,
+                        radius=[dp(16), dp(16), dp(16), dp(16)],
+                    )
+
+            _paint_chip(chip, active)
+            chip.bind(pos=lambda b, *a, ia=active: _paint_chip(b, ia))
+            chip.bind(size=lambda b, *a, ia=active: _paint_chip(b, ia))
+            gi = idx
+            chip.bind(on_release=lambda *a, i=gi: self.select_etapy_group(i))
+            box.add_widget(chip)
+
+    def _rebuild_etapy_timeline(self):
+        timeline = self.ids.get("etapy_timeline_list")
+        if timeline is None:
+            return
+        timeline.clear_widgets()
+        group = self._selected_etapy_group()
+        if group is None:
+            timeline.add_widget(
+                MDLabel(
+                    text="Dodaj grupę etapów przyciskiem +",
+                    font_size=sp(13),
+                    theme_text_color="Custom",
+                    text_color=(1, 1, 1, 0.65),
+                    size_hint_y=None,
+                    height=dp(36),
+                )
+            )
+            return
+        items = group.get("items") or []
+        flat_count = sum(1 + len(it.get("children") or []) for it in items)
+        if flat_count == 0:
+            empty = MDLabel(
+                text="Brak kroków — dodaj krok etapu przyciskiem +",
+                font_size=sp(13),
+                theme_text_color="Custom",
+                text_color=(1, 1, 1, 0.65),
+                size_hint_y=None,
+                height=dp(36),
+            )
+            timeline.add_widget(empty)
+        else:
+            gi = self._etapy_selected_index
+            seq = 0
+            for ii, item in enumerate(items):
+                seq += 1
+                timeline.add_widget(
+                    StageItemRow(
+                        display_text=item.get("text", ""),
+                        done=bool(item.get("done", False)),
+                        is_sub=False,
+                        is_first=(seq == 1),
+                        is_last=False,
+                        parent_screen=self,
+                        group_index=gi,
+                        item_index=ii,
+                        child_index=-1,
+                    )
+                )
+                for ci, child in enumerate(item.get("children") or []):
+                    seq += 1
+                    timeline.add_widget(
+                        StageItemRow(
+                            display_text=child.get("text", ""),
+                            done=bool(child.get("done", False)),
+                            is_sub=True,
+                            is_first=False,
+                            is_last=False,
+                            parent_screen=self,
+                            group_index=gi,
+                            item_index=ii,
+                            child_index=ci,
+                        )
+                    )
+            children = timeline.children
+            if children and isinstance(children[0], StageItemRow):
+                children[0].is_last = False
+        timeline.add_widget(EtapyFinishRow())
 
     # --- Notes ---
 
@@ -1166,6 +1947,378 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         h = max(self.panel.height, dp(1))
         anim = Animation(y=-h, d=0.22, t="in_cubic")
         anim.bind(on_complete=lambda *a: super(AddTimeGoalBottomSheet, self).dismiss())
+        anim.start(self.panel)
+
+
+class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
+    """Add or edit a simple checklist goal (Lista celów)."""
+
+    def __init__(self, project_screen, goal_row=None, **kwargs):
+        super().__init__(**kwargs)
+        self.project_screen = project_screen
+        self.goal_row = goal_row
+        self._closing = False
+        self.size_hint = (1, 1)
+        self.auto_dismiss = False
+        self.background_color = (0, 0, 0, 0)
+        self.background = ""
+
+        root = FloatLayout()
+        dim = Button(
+            size_hint=(1, 1),
+            background_normal="",
+            background_color=(0, 0, 0, 0.45),
+            on_release=lambda *a: self.dismiss(),
+        )
+        root.add_widget(dim)
+
+        self.panel = MDCard(
+            orientation="vertical",
+            padding=[dp(14), dp(10), dp(14), 0],
+            spacing=dp(8),
+            size_hint=(1, None),
+            height=dp(220),
+            radius=[dp(22), dp(22), 0, 0],
+            md_bg_color=(1, 1, 1, 1),
+            elevation=16,
+        )
+        root.add_widget(self.panel)
+
+        title = "Edytuj cel" if goal_row else "Nowy cel"
+        self.panel.add_widget(
+            MDLabel(
+                text=title,
+                font_style="Subtitle1",
+                bold=True,
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#222222"),
+                size_hint_y=None,
+                height=dp(24),
+            )
+        )
+        self.field = RoundedSheetTextInput(
+            hint_text="Opis celu…",
+            text=goal_row.display_text if goal_row else "",
+            multiline=False,
+            size_hint_y=None,
+            height=dp(48),
+            font_size=sp(16),
+            padding=[dp(12), dp(12), dp(12), dp(12)],
+            foreground_color=get_color_from_hex("#222222"),
+            cursor_color=get_color_from_hex("#7e57c2"),
+        )
+        self.panel.add_widget(self.field)
+
+        bar = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(12))
+        if goal_row is not None:
+            btn_delete = RoundedSheetButton(
+                text="Usuń",
+                size_hint_x=None,
+                width=dp(88),
+                bg_color=list(get_color_from_hex("#e53935")),
+            )
+            btn_delete.bind(on_release=lambda *a: self._delete_and_close())
+            bar.add_widget(btn_delete)
+        bar.add_widget(Widget(size_hint_x=1))
+        btn_cancel = RoundedSheetButton(
+            text="Anuluj",
+            size_hint_x=None,
+            width=dp(96),
+            bg_color=[0.94, 0.94, 0.96, 1],
+            text_rgb=list(get_color_from_hex("#444444")),
+        )
+        btn_cancel.bind(on_release=lambda *a: self.dismiss())
+        app = MDApp.get_running_app()
+        btn_add = RoundedSheetButton(
+            text="Zapisz" if goal_row else "Dodaj",
+            size_hint_x=None,
+            width=dp(104),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+        )
+        btn_add.bind(on_release=lambda *a: self._commit_and_close())
+        bar.add_widget(btn_cancel)
+        bar.add_widget(btn_add)
+        self.panel.add_widget(bar)
+        self.add_widget(root)
+
+    def _apply_sheet_layout(self, animate=False):
+        self._sync_modal_height()
+        self.panel.width = self.width or Window.width
+        self.panel.x = 0
+        self.panel.pos_hint = {}
+        self.panel.height = self._panel_height_for_content(self.panel, 0)
+        win_h = float(self.height or Window.height or 640)
+        target_y = self._sheet_bottom_y(win_h)
+        if animate:
+            Animation(y=target_y, d=0.12, t="out_cubic").start(self.panel)
+        else:
+            self.panel.y = target_y
+
+    def _relayout_for_keyboard(self, animate=False):
+        self._apply_sheet_layout(animate)
+
+    def on_open(self):
+        self._sheet_kb_bound = False
+        self._sheet_bind_keyboard()
+        self._enable_resize_softinput()
+        self.panel.y = -dp(300)
+        Clock.schedule_once(self._open_anim, 0)
+
+    def _open_anim(self, _dt):
+        self.panel.height = max(
+            dp(220),
+            self._panel_height_for_content(self.panel, 0),
+        )
+        self._apply_sheet_layout(False)
+        target_y = self.panel.y
+        self.panel.y = -self.panel.height
+        Animation(y=target_y, d=0.28, t="out_cubic").start(self.panel)
+        Clock.schedule_once(self._request_focus, 0.3)
+
+    def _request_focus(self, _dt):
+        self.field.focus = True
+        self._schedule_keyboard_relayout(True)
+
+    def on_size(self, *_):
+        if self.panel is not None and self.parent is not None:
+            self.panel.width = self.width
+            self._sync_modal_height()
+            self._schedule_keyboard_relayout(False)
+
+    def _delete_and_close(self):
+        if self.goal_row is not None:
+            self.project_screen.remove_checklist_goal_row(self.goal_row)
+        self.dismiss()
+
+    def _commit_and_close(self):
+        text = (self.field.text or "").strip()
+        if self.goal_row is not None:
+            self.goal_row.display_text = text
+            self.goal_row._sync_height()
+            self.project_screen._renumber_checklist_goals()
+            self.project_screen.save_project_content()
+            self.dismiss()
+            return
+        if text:
+            self.project_screen.add_checklist_goal(text=text)
+            self.project_screen.save_project_content()
+        self.dismiss()
+
+    def dismiss(self, *largs):
+        if self._closing:
+            return
+        self._closing = True
+        self._sheet_unbind_keyboard()
+        self.field.focus = False
+        h = max(self.panel.height, dp(1))
+        anim = Animation(y=-h, d=0.22, t="in_cubic")
+        anim.bind(on_complete=lambda *a: super(AddChecklistGoalBottomSheet, self).dismiss())
+        anim.start(self.panel)
+
+
+class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
+    """Add etapy group, main step, or sub-step."""
+
+    def __init__(self, project_screen, **kwargs):
+        super().__init__(**kwargs)
+        self.project_screen = project_screen
+        self._closing = False
+        self.size_hint = (1, 1)
+        self.auto_dismiss = False
+        self.background_color = (0, 0, 0, 0)
+        self.background = ""
+
+        root = FloatLayout()
+        dim = Button(
+            size_hint=(1, 1),
+            background_normal="",
+            background_color=(0, 0, 0, 0.45),
+            on_release=lambda *a: self.dismiss(),
+        )
+        root.add_widget(dim)
+
+        self.panel = MDCard(
+            orientation="vertical",
+            padding=[dp(14), dp(10), dp(14), 0],
+            spacing=dp(8),
+            size_hint=(1, None),
+            height=dp(300),
+            radius=[dp(22), dp(22), 0, 0],
+            md_bg_color=(1, 1, 1, 1),
+            elevation=16,
+        )
+        root.add_widget(self.panel)
+
+        self.panel.add_widget(
+            MDLabel(
+                text="Dodaj do etapów",
+                font_style="Subtitle1",
+                bold=True,
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#222222"),
+                size_hint_y=None,
+                height=dp(24),
+            )
+        )
+
+        self.type_spinner = RoundedSheetSpinner(
+            text=ETAPY_ADD_STEP,
+            values=[ETAPY_ADD_GROUP, ETAPY_ADD_STEP, ETAPY_ADD_SUB],
+            size_hint_y=None,
+            height=dp(44),
+            font_size=sp(15),
+        )
+        self.type_spinner.bind(text=self._on_type_changed)
+        self.panel.add_widget(self.type_spinner)
+
+        self.parent_spinner = RoundedSheetSpinner(
+            text="",
+            values=[""],
+            size_hint_y=None,
+            height=dp(44),
+            font_size=sp(15),
+            opacity=0,
+            disabled=True,
+        )
+        self.panel.add_widget(self.parent_spinner)
+
+        self.field = RoundedSheetTextInput(
+            hint_text="Nazwa…",
+            multiline=False,
+            size_hint_y=None,
+            height=dp(48),
+            font_size=sp(16),
+            padding=[dp(12), dp(12), dp(12), dp(12)],
+            foreground_color=get_color_from_hex("#222222"),
+            cursor_color=get_color_from_hex("#7e57c2"),
+        )
+        self.panel.add_widget(self.field)
+
+        bar = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(12))
+        bar.add_widget(Widget(size_hint_x=1))
+        btn_cancel = RoundedSheetButton(
+            text="Anuluj",
+            size_hint_x=None,
+            width=dp(96),
+            bg_color=[0.94, 0.94, 0.96, 1],
+            text_rgb=list(get_color_from_hex("#444444")),
+        )
+        btn_cancel.bind(on_release=lambda *a: self.dismiss())
+        app = MDApp.get_running_app()
+        btn_add = RoundedSheetButton(
+            text="Dodaj",
+            size_hint_x=None,
+            width=dp(104),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+        )
+        btn_add.bind(on_release=lambda *a: self._commit_and_close())
+        bar.add_widget(btn_cancel)
+        bar.add_widget(btn_add)
+        self.panel.add_widget(bar)
+        self.add_widget(root)
+        self._refresh_parent_spinner()
+
+    def _apply_sheet_layout(self, animate=False):
+        self._sync_modal_height()
+        self.panel.width = self.width or Window.width
+        self.panel.x = 0
+        self.panel.pos_hint = {}
+        self.panel.height = self._panel_height_for_content(self.panel, 0)
+        win_h = float(self.height or Window.height or 640)
+        target_y = self._sheet_bottom_y(win_h)
+        max_h = win_h - target_y
+        if self.panel.height > max_h:
+            self.panel.height = max(dp(180), max_h)
+        if animate:
+            Animation(y=target_y, d=0.12, t="out_cubic").start(self.panel)
+        else:
+            self.panel.y = target_y
+
+    def _relayout_for_keyboard(self, animate=False):
+        self._apply_sheet_layout(animate)
+
+    def _on_type_changed(self, _spinner, value):
+        sub = value == ETAPY_ADD_SUB
+        self.parent_spinner.opacity = 1 if sub else 0
+        self.parent_spinner.disabled = not sub
+        self.parent_spinner.height = dp(44) if sub else 0
+        if sub:
+            self._refresh_parent_spinner()
+        if value == ETAPY_ADD_GROUP:
+            self.field.hint_text = "Nazwa grupy (np. Salto)…"
+        elif value == ETAPY_ADD_SUB:
+            self.field.hint_text = "Nazwa podkroku…"
+        else:
+            self.field.hint_text = "Nazwa kroku…"
+        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(True), 0)
+
+    def _refresh_parent_spinner(self):
+        group = self.project_screen._selected_etapy_group()
+        labels = []
+        if group:
+            for i, it in enumerate(group.get("items") or []):
+                t = (it.get("text") or f"Krok {i + 1}").strip()
+                labels.append(f"{i + 1}. {t[:40]}")
+        if not labels:
+            labels = ["(najpierw dodaj krok)"]
+        self.parent_spinner.values = labels
+        self.parent_spinner.text = labels[0]
+
+    def on_open(self):
+        self._sheet_kb_bound = False
+        self._sheet_bind_keyboard()
+        self._enable_resize_softinput()
+        self.panel.y = -dp(400)
+        Clock.schedule_once(self._open_anim, 0)
+
+    def _open_anim(self, _dt):
+        self._apply_sheet_layout(False)
+        target_y = self.panel.y
+        self.panel.y = -self.panel.height
+        Animation(y=target_y, d=0.28, t="out_cubic").start(self.panel)
+        Clock.schedule_once(self._request_focus, 0.3)
+
+    def _request_focus(self, _dt):
+        self.field.focus = True
+        self._schedule_keyboard_relayout(True)
+
+    def on_size(self, *_):
+        if self.panel is not None and self.parent is not None:
+            self.panel.width = self.width
+            self._sync_modal_height()
+            self._schedule_keyboard_relayout(False)
+
+    def _commit_and_close(self):
+        kind = self.type_spinner.text
+        text = (self.field.text or "").strip()
+        if not text:
+            self.dismiss()
+            return
+        if kind == ETAPY_ADD_GROUP:
+            self.project_screen.add_etapy_group(text)
+        elif kind == ETAPY_ADD_SUB:
+            parent_txt = self.parent_spinner.text or ""
+            if parent_txt.startswith("("):
+                self.dismiss()
+                return
+            try:
+                idx = int(parent_txt.split(".", 1)[0]) - 1
+            except ValueError:
+                idx = 0
+            self.project_screen.add_etapy_step(text, parent_item_index=idx)
+        else:
+            self.project_screen.add_etapy_step(text)
+        self.dismiss()
+
+    def dismiss(self, *largs):
+        if self._closing:
+            return
+        self._closing = True
+        self._sheet_unbind_keyboard()
+        self.field.focus = False
+        h = max(self.panel.height, dp(1))
+        anim = Animation(y=-h, d=0.22, t="in_cubic")
+        anim.bind(on_complete=lambda *a: super(AddEtapyBottomSheet, self).dismiss())
         anim.start(self.panel)
 
 
