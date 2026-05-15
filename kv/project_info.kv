@@ -1,0 +1,402 @@
+#:import utils kivy.utils
+#:import BoxLayout kivy.uix.boxlayout.BoxLayout
+#:import Label kivy.uix.label.Label
+#:import ProjectNoteRow screens.project_info.ProjectNoteRow
+#:import TimeGoalTrackRow screens.project_info.TimeGoalTrackRow
+#:import CarProgressButton screens.project_info.CarProgressButton
+
+<ProjectNoteRow>:
+    orientation: "horizontal"
+    spacing: dp(10)
+    size_hint_y: None
+
+    MDBoxLayout:
+        size_hint_x: 1
+        size_hint_y: 1
+        padding: dp(2)
+        canvas.before:
+            Color:
+                rgba: 1, 1, 1, 1
+            RoundedRectangle:
+                pos: self.pos
+                size: self.size
+                radius: [dp(12), dp(12), dp(12), dp(12)]
+
+        ScrollView:
+            id: note_scroll
+            size_hint: 1, 1
+            do_scroll_x: False
+            bar_width: dp(4)
+
+            MDLabel:
+                id: note_label
+                text: root.display_text
+                halign: "left"
+                valign: "top"
+                theme_text_color: "Custom"
+                text_color: (0.45, 0.45, 0.48, 1) if not root.display_text else (0.12, 0.12, 0.12, 1)
+                font_size: sp(14)
+                padding: dp(8), dp(6), dp(8), dp(6)
+                size_hint_y: None
+                height: self.texture_size[1]
+                shorten: False
+                max_lines: 0
+                line_height: 1.2
+
+    Button:
+        id: delete_btn
+        size_hint_x: None
+        size_hint_y: 1
+        width: dp(48)
+        text: "×"
+        color: 1, 1, 1, 1
+        font_size: sp(22)
+        bold: True
+        background_normal: ""
+        background_color: 0, 0, 0, 0
+        on_press: root.request_delete()
+        canvas.before:
+            Color:
+                rgba: utils.get_color_from_hex("#7e57c2")
+            Ellipse:
+                pos: self.center_x - dp(18), self.center_y - dp(18)
+                size: dp(36), dp(36)
+
+<TimeGoalTrackRow>:
+    orientation: "horizontal"
+    spacing: dp(10)
+    size_hint_y: None
+    height: dp(140)
+
+    MDBoxLayout:
+        orientation: "vertical"
+        size_hint_x: 1
+        spacing: dp(4)
+
+        # Road + car + flag (elapsed drawn last so it stays above the car)
+        RelativeLayout:
+            size_hint_y: None
+            height: dp(110)
+
+            canvas.before:
+                Color:
+                    rgba: 0, 0, 0, 1
+                Line:
+                    width: dp(2.5)
+                    points: [dp(8), dp(16), self.width - dp(8), dp(16)]
+
+            CarProgressButton:
+                id: car_btn
+                source: root.car_source_active if root.tracking_active else root.car_source_idle
+                size_hint: None, None
+                size: dp(96), dp(68)
+                allow_stretch: True
+                keep_ratio: True
+                pos_hint: {"center_x": root.car_hint_x}
+                # Road line at y=16; lower y moves the car down (wheels toward the line).
+                y: -dp(9)
+                on_release: root.on_car_button_release()
+
+            MDIcon:
+                icon: "flag-checkered"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                icon_size: dp(22)
+                adaptive_size: True
+                pos_hint: {"right": 0.98, "top": 0.62}
+
+            MDLabel:
+                text: root.elapsed_text
+                opacity: 1 if root.elapsed_text else 0
+                font_size: sp(11)
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                halign: "center"
+                valign: "middle"
+                max_lines: 1
+                shorten: False
+                text_size: (dp(200), None)
+                size_hint: None, None
+                height: dp(16)
+                width: max(dp(44), self.texture_size[0])
+                pos_hint: {"center_x": root.car_hint_x}
+                y: car_btn.top - self.height - dp(2)
+
+        # Goal name + period (plain Kivy widgets — avoids MD “black bar” / invisible MDLabel)
+        BoxLayout:
+            id: goal_caption_box
+            orientation: "horizontal"
+            size_hint_y: None
+            height: dp(26)
+            padding: [dp(6), dp(2), dp(8), dp(2)]
+            spacing: dp(8)
+
+            Label:
+                id: goal_title_lbl
+                text: root.title_text
+                color: 1, 1, 1, 1
+                font_size: sp(14)
+                size_hint_x: 1
+                size_hint_y: 1
+                text_size: (dp(200), None)
+                halign: "left"
+                valign: "middle"
+                shorten: True
+                shorten_from: "right"
+
+            Label:
+                id: goal_period_lbl
+                text: root.goal_text
+                color: 1, 1, 1, 1
+                font_size: sp(13)
+                size_hint_x: None
+                size_hint_y: 1
+                width: dp(80)
+                text_size: (dp(80), None)
+                halign: "right"
+                valign: "middle"
+
+    AnchorLayout:
+        size_hint_x: None
+        width: dp(48)
+        anchor_x: "center"
+        anchor_y: "center"
+
+        MDCard:
+            size_hint: None, None
+            width: dp(46)
+            height: dp(40)
+            radius: [dp(8), dp(8), dp(8), dp(8)]
+            md_bg_color: utils.get_color_from_hex("#7e57c2")
+            elevation: 0
+
+            MDLabel:
+                text: root.percent_text
+                halign: "center"
+                valign: "middle"
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                font_size: sp(13)
+                bold: True
+
+<ProjectInfoScreen>:
+    md_bg_color: utils.get_color_from_hex(app.theme_bg)
+
+    FloatLayout:
+        MDBoxLayout:
+            orientation: "vertical"
+            size_hint: 1, 1
+            padding: [dp(18), dp(28), dp(18), dp(100)]
+
+            MDLabel:
+                text: root.project_title or "Projekt"
+                font_size: sp(17)
+                bold: True
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                halign: "center"
+                valign: "middle"
+                shorten: True
+                shorten_from: "right"
+                size_hint_y: None
+                height: self.texture_size[1] + dp(4)
+
+            Widget:
+                size_hint_y: None
+                height: dp(10)
+
+            ScrollView:
+                do_scroll_x: False
+                size_hint_y: 1
+                bar_width: dp(4)
+
+                MDBoxLayout:
+                    orientation: "vertical"
+                    spacing: dp(8)
+                    size_hint_y: None
+                    height: self.minimum_height
+                    padding: [0, dp(20), 0, dp(8)]
+
+                    # --- Notatki ---
+                    MDBoxLayout:
+                        orientation: "vertical"
+                        spacing: dp(12)
+                        size_hint_y: None
+                        height: self.minimum_height
+
+                        MDBoxLayout:
+                            size_hint_y: None
+                            height: dp(28)
+                            MDLabel:
+                                text: "Notatki"
+                                font_size: sp(17)
+                                bold: True
+                                theme_text_color: "Custom"
+                                text_color: 1, 1, 1, 1
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            Widget:
+                                size_hint_x: 1
+                            MDIconButton:
+                                icon: "plus"
+                                theme_text_color: "Custom"
+                                text_color: 1, 1, 1, 1
+                                icon_size: dp(24)
+                                md_bg_color: 0, 0, 0, 0
+                                on_release: root.open_add_note_sheet()
+
+                        MDBoxLayout:
+                            id: notes_list
+                            orientation: "vertical"
+                            spacing: dp(12)
+                            size_hint_y: None
+                            height: self.minimum_height
+
+                    Widget:
+                        size_hint_y: None
+                        height: dp(28)
+
+                    # --- Czas ---
+                    MDBoxLayout:
+                        orientation: "vertical"
+                        spacing: dp(14)
+                        size_hint_y: None
+                        height: self.minimum_height
+
+                        MDLabel:
+                            text: "Czas"
+                            font_size: sp(17)
+                            bold: True
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 1
+                            halign: "left"
+                            size_hint_y: None
+                            height: dp(26)
+
+                        MDLabel:
+                            text: root.timer_display
+                            font_size: sp(44)
+                            bold: False
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 1
+                            halign: "center"
+                            size_hint_y: None
+                            height: self.texture_size[1]
+
+                        AnchorLayout:
+                            size_hint_y: None
+                            height: dp(44)
+                            anchor_x: "center"
+                            anchor_y: "center"
+
+                            Button:
+                                text: root.timer_button_caption
+                                font_size: sp(16)
+                                bold: False
+                                color: 1, 1, 1, 1
+                                size_hint: None, None
+                                width: self.texture_size[0] + dp(48)
+                                height: dp(38)
+                                background_normal: ""
+                                background_color: 0, 0, 0, 0
+                                on_release: root.toggle_timer()
+                                canvas.before:
+                                    Color:
+                                        rgba: utils.get_color_from_hex("#43a047") if not root.timer_running else utils.get_color_from_hex("#e53935")
+                                    RoundedRectangle:
+                                        pos: self.pos
+                                        size: self.size
+                                        radius: [dp(19), dp(19), dp(19), dp(19)]
+
+                    Widget:
+                        size_hint_y: None
+                        height: dp(28)
+
+                    # --- Cele czasowy ---
+                    MDBoxLayout:
+                        orientation: "vertical"
+                        spacing: dp(16)
+                        size_hint_y: None
+                        height: self.minimum_height
+
+                        MDBoxLayout:
+                            size_hint_y: None
+                            height: dp(28)
+                            MDLabel:
+                                text: "Cele czasowy"
+                                font_size: sp(17)
+                                bold: True
+                                theme_text_color: "Custom"
+                                text_color: 1, 1, 1, 1
+                                halign: "left"
+                                valign: "middle"
+                                text_size: self.size
+                            Widget:
+                                size_hint_x: 1
+                            MDIconButton:
+                                icon: "plus"
+                                theme_text_color: "Custom"
+                                text_color: 1, 1, 1, 1
+                                icon_size: dp(24)
+                                md_bg_color: 0, 0, 0, 0
+                                on_release: root.on_goals_add_clicked()
+
+                        MDBoxLayout:
+                            id: goals_list
+                            orientation: "vertical"
+                            spacing: dp(16)
+                            size_hint_y: None
+                            height: self.minimum_height
+
+        # Bottom navigation (same layout as home; middle action = project settings)
+        MDFloatLayout:
+            size_hint: 1, None
+            height: dp(90)
+            pos_hint: {"center_x": 0.5, "y": 0}
+
+            MDCard:
+                size_hint: 0.96, 0.75
+                pos_hint: {"center_x": 0.5, "y": 0.1}
+                radius: [dp(25), ]
+                elevation: 4
+                md_bg_color: 1, 1, 1, 1
+
+                MDBoxLayout:
+                    AnchorLayout:
+                        anchor_x: "center"
+                        anchor_y: "center"
+                        MDIconButton:
+                            icon: "home-outline"
+                            icon_size: dp(45)
+                            on_release: root.go_home()
+
+                    Widget:
+
+                    AnchorLayout:
+                        anchor_x: "center"
+                        anchor_y: "center"
+                        MDIconButton:
+                            icon: "chart-arc"
+                            icon_size: dp(45)
+                            on_release: root.go_statistics()
+
+            ClickableAnchorLayout:
+                size_hint: None, None
+                size: dp(140), dp(65)
+                pos_hint: {"center_x": 0.5, "center_y": 0.65}
+                on_release: root.open_project_settings()
+                canvas.before:
+                    Color:
+                        rgba: utils.get_color_from_hex(app.theme_card_bg)
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(20)]
+
+                MDIcon:
+                    icon: "cog-outline"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+                    icon_size: dp(55)
+                    adaptive_size: True

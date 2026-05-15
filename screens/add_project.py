@@ -19,6 +19,7 @@ from kivy.utils import platform
 from kivy.clock import Clock
 from plyer import filechooser
 
+from screens.image_utils import prepare_project_image
 from kivymd.app import MDApp
 from kivymd.uix.behaviors import RectangularRippleBehavior
 from kivy.uix.behaviors import ButtonBehavior
@@ -151,6 +152,7 @@ class AddProjectScreen(Screen):
         
         # Initialize search timer
         self._search_timer = None
+        self._reset_preview_card()
 
     def select_emoji(self):
         """Opens a custom emoji picker dialog with search."""
@@ -282,8 +284,16 @@ class AddProjectScreen(Screen):
     def _on_image_selected(self, selection):
         if selection:
             # Android callbacks often run outside the main thread.
-            # We use Clock to ensure the UI updates correctly.
-            Clock.schedule_once(lambda dt: self._update_image_preview(selection[0]))
+            Clock.schedule_once(lambda _dt: self._apply_selected_photo(selection[0]), 0)
+
+    def _apply_selected_photo(self, path):
+        app = MDApp.get_running_app()
+        cache_dir = os.path.join(app.user_data_dir, "project_images")
+        try:
+            path = prepare_project_image(path, cache_dir)
+        except Exception as exc:
+            print(f"[AddProject] Image normalize failed, using original: {exc}")
+        self._update_image_preview(path)
 
     def _update_image_preview(self, path):
         # Briefly clear path to force Kivy to reload the image widget
@@ -295,6 +305,44 @@ class AddProjectScreen(Screen):
             self.selected_image_path = path
             print(f"Image updated in preview: {path}")
         Clock.schedule_once(reapply_path, 0.1)
+
+    def _reset_preview_card(self):
+        card = self.ids.preview_card
+        card.interactive = False
+        if card._long_press_ev:
+            Clock.unschedule(card._long_press_ev)
+            card._long_press_ev = None
+        if card._shake_anim:
+            card._shake_anim.cancel(card)
+            card._shake_anim = None
+        card.angle = 0
+        card.size_hint = None, None
+        card.width = dp(200)
+        card.height = dp(220)
+        card.pos_hint = {"center_x": 0.5, "center_y": 0.5}
+        if card.parent:
+            card.parent.do_layout()
+
+    def _clear_image_preview(self):
+        path = self.selected_image_path
+        if path:
+            Cache.remove("kv.image", path)
+            Cache.remove("kv.texture", path)
+        self.selected_image_path = ""
+        card = self.ids.preview_card
+        card.image_source = ""
+        for widget in card.walk(restrict=True):
+            if isinstance(widget, FitImage):
+                widget.source = ""
+                if hasattr(widget, "reload"):
+                    widget.reload()
+
+    def _clear_form(self):
+        self.ids.project_name_input.text = ""
+        self.selected_icon = "emoticon-happy-outline"
+        self.selected_color = [0.7, 0.5, 1, 1]
+        self._clear_image_preview()
+        self._reset_preview_card()
 
     def save_project(self):
         """Saves the project data to disk and adds it to the Home Screen."""
@@ -333,10 +381,7 @@ class AddProjectScreen(Screen):
         )
 
         # 3. Cleanup and Navigation
-        self.ids.project_name_input.text = ""
-        self.selected_image_path = ""
-        self.selected_icon = "emoticon-happy-outline"
-        self.selected_color = [0.7, 0.5, 1, 1]
+        self._clear_form()
         app.root.current = "home"
 
     def select_color(self):

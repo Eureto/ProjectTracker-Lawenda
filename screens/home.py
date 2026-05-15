@@ -52,14 +52,18 @@ class ProjectCard(MDCard):
     height_multiplier = NumericProperty(1.0)
     title_font_style = StringProperty("Subtitle2")
     emoji_size = NumericProperty(dp(40))
+    interactive = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._long_press_ev = None
         self._shake_anim = None
-    
+
     def on_touch_down(self, touch):
+        if not self.interactive:
+            return False
         if self.collide_point(*touch.pos):
+            touch.ud["project_card_origin"] = touch.pos
             # Start 2s timer for long press detection
             self._long_press_ev = Clock.schedule_once(lambda dt: self._start_drag_mode(touch), 1.0)
             touch.grab(self)
@@ -74,6 +78,8 @@ class ProjectCard(MDCard):
         self._shake_anim.start(self)
 
     def on_touch_move(self, touch):
+        if not self.interactive:
+            return False
         if touch.grab_current is self:
             if self._shake_anim:
                 self.x += touch.dx
@@ -86,17 +92,34 @@ class ProjectCard(MDCard):
         return super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
+        if not self.interactive:
+            return False
         if touch.grab_current is self:
+            entered_drag = self._shake_anim is not None
             if self._long_press_ev:
                 Clock.unschedule(self._long_press_ev)
-            if self._shake_anim:
+                self._long_press_ev = None
+            if entered_drag:
                 self._shake_anim.stop(self)
                 self._shake_anim = None
                 Animation(angle=0, d=0.1).start(self)
                 self.save_position()
+            else:
+                origin = touch.ud.get("project_card_origin")
+                if origin and self.collide_point(*touch.pos):
+                    dx = touch.pos[0] - origin[0]
+                    dy = touch.pos[1] - origin[1]
+                    if (dx * dx + dy * dy) ** 0.5 < dp(15):
+                        self.open_project_info()
             touch.ungrab(self)
             return True
         return super().on_touch_up(touch)
+
+    def open_project_info(self):
+        app = MDApp.get_running_app()
+        info = app.root.get_screen("project_info")
+        info.project_title = self.title
+        app.root.current = "project_info"
 
     def save_position(self):
         if self.parent:

@@ -1,4 +1,10 @@
 import os
+
+from kivy.config import Config
+
+# Must be set before the Window is created (critical on Android).
+Config.set("graphics", "softinput_mode", "resize")
+
 from kivymd.app import MDApp
 from kivy.lang import Builder
 from kivy.core.window import Window
@@ -8,6 +14,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from screens.home import HomeScreen
 from screens.add_project import AddProjectScreen
 from screens.statistics import StatisticsScreen
+from screens.project_info import ProjectInfoScreen
 
 # Window size for testing on pc
 if platform in ('win', 'linux', 'macosx'):
@@ -26,14 +33,21 @@ class TimeTrackerApp(MDApp):
         Builder.load_file("kv/home.kv")
         Builder.load_file("kv/addProject.kv")
         Builder.load_file("kv/statistics.kv")
+        Builder.load_file("kv/project_info.kv")
 
         self.screen_manager = ScreenManager()
         self.screen_manager.add_widget(HomeScreen(name='home'))
         self.screen_manager.add_widget(AddProjectScreen(name='add_project'))
         self.screen_manager.add_widget(StatisticsScreen(name='statistics'))
+        self.screen_manager.add_widget(ProjectInfoScreen(name='project_info'))
         return self.screen_manager
 
     def on_start(self):
+        if platform == "android":
+            try:
+                Window.softinput_mode = "resize"
+            except Exception:
+                pass
         # Initialize the 3 samples once the app starts
         home_screen = self.screen_manager.get_screen('home')
         home_screen.load_projects()
