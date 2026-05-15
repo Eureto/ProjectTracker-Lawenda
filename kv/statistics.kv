@@ -1,6 +1,44 @@
 #:import utils kivy.utils
 #:import PieChart screens.statistics.PieChart
 #:import PeriodSegmentButton screens.statistics.PeriodSegmentButton
+#:import StatisticsDetailRow screens.statistics.StatisticsDetailRow
+
+<StatisticsDetailRow>:
+    MDBoxLayout:
+        orientation: "horizontal"
+        spacing: dp(8)
+        size_hint_x: 1
+        MDIcon:
+            icon: root.icon_name
+            theme_text_color: "Custom"
+            text_color: root.icon_rgba
+            size_hint: None, None
+            size: dp(28), dp(28)
+            pos_hint: {"center_y": 0.5}
+        MDLabel:
+            text: root.project_name
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+            valign: "middle"
+            shorten: True
+            shorten_from: "right"
+            size_hint_x: 1
+    AnchorLayout:
+        size_hint_x: 1
+        anchor_x: "center"
+        anchor_y: "center"
+        Widget:
+            id: segment_dot
+            size_hint: None, None
+            size: dp(20), dp(20)
+    MDLabel:
+        text: root.time_text
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+        size_hint_x: None
+        width: dp(76)
+        halign: "right"
+        valign: "middle"
 
 <StatisticsScreen>:
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
@@ -19,6 +57,7 @@
             padding: 0, 0, 0, 0
 
             GridLayout:
+                id: stats_scroll_content
                 cols: 1
                 spacing: dp(16)
                 padding: [dp(12), dp(2), dp(12), dp(12)]
@@ -63,7 +102,7 @@
                             font_size: dp(15)
 
                 MDLabel:
-                    text: "suma: hh:mm"
+                    text: root.total_time_text
                     halign: "right"
                     theme_text_color: "Custom"
                     text_color: 1, 1, 1, 1
@@ -87,9 +126,10 @@
                             size_hint: None, None
                             size: dp(220), dp(220)
                             pos_hint: {"center_x": .5}
+                            opacity: 1 if root.has_data else 0.25
 
                         MDLabel:
-                            text: "Łączny czas spędzony na projektach"
+                            text: root.empty_hint_text if not root.has_data else "Łączny czas spędzony na projektach"
                             halign: "center"
                             valign: "middle"
                             theme_text_color: "Custom"
@@ -104,7 +144,7 @@
                 MDCard:
                     id: stats_card
                     size_hint_y: None
-                    height: dp(218)
+                    height: root.stats_card_height
                     radius: [dp(20)]
                     md_bg_color: 0.65, 0.45, 0.9, 1
                     padding: dp(14)
@@ -140,12 +180,23 @@
                             halign: "right"
                             valign: "middle"
 
-                    GridLayout:
+                    MDBoxLayout:
                         id: stats_rows_container
-                        cols: 1
+                        orientation: "vertical"
                         spacing: dp(10)
                         size_hint_y: None
                         height: self.minimum_height
+
+                    MDLabel:
+                        text: "Brak danych — zatrzymaj timer w projekcie, aby dodać czas."
+                        opacity: 0 if root.has_data else 1
+                        halign: "center"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 0.75
+                        font_size: sp(13)
+                        size_hint_y: None
+                        height: dp(48) if not root.has_data else 0
+                        text_size: self.width, None
 
         # --- Bottom bar (same structure as home) ---
         MDFloatLayout:

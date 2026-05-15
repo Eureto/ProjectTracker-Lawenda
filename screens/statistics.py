@@ -1,3 +1,4 @@
+from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.animation import Animation
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, StringProperty
@@ -6,7 +7,10 @@ from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.widget import Widget
 from kivy.graphics import Color, Ellipse, RoundedRectangle
 
-from screens.session_store import statistics_from_sessions
+from screens.session_store import (
+    format_statistics_total,
+    statistics_from_sessions,
+)
 
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.boxlayout import MDBoxLayout
@@ -80,88 +84,48 @@ def _make_segment_color_dot(rgba, size_dp=20):
     return dot
 
 
-def build_statistics_detail_row(
-    name,
-    icon,
-    segment_rgba,
-    time_text,
-    icon_rgba=(1, 1, 1, 1),
-):
-    """
-    One statistics table row: icon+name | color dot | time.
-    segment_rgba: color shown on the pie / legend dot (r, g, b, a).
-    """
-    row = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(36), spacing=dp(6))
+class StatisticsDetailRow(MDBoxLayout):
+    """One project row in the stats table; properties so time text always updates."""
 
-    left = MDBoxLayout(orientation="horizontal", spacing=dp(8), size_hint_x=1)
-    ic = MDIcon(
-        icon=icon,
-        theme_text_color="Custom",
-        text_color=icon_rgba,
-        size_hint=(None, None),
-        size=(dp(28), dp(28)),
-        pos_hint={"center_y": 0.5},
-    )
-    lbl = MDLabel(
-        text=name,
-        theme_text_color="Custom",
-        text_color=(1, 1, 1, 1),
-        valign="middle",
-        shorten=True,
-        shorten_from="right",
-    )
-    left.add_widget(ic)
-    left.add_widget(lbl)
+    project_name = StringProperty("")
+    time_text = StringProperty("0 s")
+    icon_name = StringProperty("folder-outline")
+    icon_rgba = ListProperty([1, 1, 1, 1])
+    segment_rgba = ListProperty([0.6, 0.4, 0.8, 1])
 
-    mid = AnchorLayout(size_hint_x=1, anchor_x="center", anchor_y="center")
-    mid.add_widget(_make_segment_color_dot(segment_rgba))
+    def __init__(self, row_data, **kwargs):
+        self._row_data = row_data
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(36))
+        kwargs.setdefault("spacing", dp(6))
+        super().__init__(**kwargs)
 
-    right = MDLabel(
-        text=time_text,
-        theme_text_color="Custom",
-        text_color=(1, 1, 1, 1),
-        size_hint_x=1,
-        halign="right",
-        valign="middle",
-    )
+    def on_kv_post(self, base_widget):
+        self.apply_row(self._row_data)
+        self.bind(segment_rgba=self._redraw_segment_dot)
+        if "segment_dot" in self.ids:
+            self.ids.segment_dot.bind(pos=self._redraw_segment_dot, size=self._redraw_segment_dot)
+        Clock.schedule_once(self._redraw_segment_dot, 0)
 
-    row.add_widget(left)
-    row.add_widget(mid)
-    row.add_widget(right)
-    return row
+    def apply_row(self, row_data):
+        self.project_name = row_data.get("name", "")
+        self.time_text = row_data.get("time", "0 s")
+        self.icon_name = row_data.get("icon", "folder-outline")
+        self.icon_rgba = list(row_data.get("icon_color", (1, 1, 1, 1)))
+        self.segment_rgba = list(row_data.get("segment_color", (0.6, 0.4, 0.8, 1)))
 
-
-def set_screen_statistics(screen, pie_slices, detail_rows):
-    """Update pie chart and detail rows in one call."""
-    screen.ids.pie_chart.data = pie_slices
-    screen.set_statistics_rows(detail_rows)
-
-
-def sample_statistics_rows():
-    """Demo data; replace with real aggregation later."""
-    return [
-        {
-            "name": "Projekt A",
-            "icon": "folder-outline",
-            "segment_color": (0.13, 0.59, 0.95, 1),
-            "time": "12:30",
-            "icon_color": (1, 1, 1, 1),
-        },
-        {
-            "name": "Dojazdy",
-            "icon": "car-sports",
-            "segment_color": (0.85, 0.19, 0.19, 1),
-            "time": "08:15",
-            "icon_color": (0.85, 0.19, 0.19, 1),
-        },
-        {
-            "name": "Inne",
-            "icon": "star-outline",
-            "segment_color": (0.6, 0.4, 0.8, 1),
-            "time": "04:00",
-            "icon_color": (0.6, 0.4, 0.8, 1),
-        },
-    ]
+    def _redraw_segment_dot(self, *_args):
+        if "segment_dot" not in self.ids:
+            return
+        dot = self.ids.segment_dot
+        rgba = self.segment_rgba
+        if len(rgba) == 3:
+            rgba = (*rgba, 1.0)
+        dot.canvas.clear()
+        with dot.canvas:
+            Color(*rgba)
+            Ellipse(pos=dot.pos, size=dot.size)
 
 
 class PieChart(Widget):
@@ -190,28 +154,28 @@ class PieChart(Widget):
 
 class StatisticsScreen(MDScreen):
     selected_period = StringProperty("Miesiąc")
+    total_time_text = StringProperty("suma: 0 s")
+    has_data = BooleanProperty(False)
+    empty_hint_text = StringProperty("Brak czasu w tym okresie.\nUruchom timer w projekcie.")
+    stats_card_height = NumericProperty(dp(120))
 
     def set_period(self, label: str):
+        if label not in ("Dzień", "Tydzień", "Miesiąc"):
+            return
         self.selected_period = label
+        Clock.schedule_once(lambda _dt: self.refresh_statistics(), 0)
 
     def set_statistics_rows(self, rows):
-        """
-        Fill the details panel from a list of dicts with keys:
-        name, icon, segment_color (rgba tuple), time;
-        optional: icon_color (rgba), defaults to white.
-        """
+        """Fill the details panel; always rebuild rows for the active period."""
         cont = self.ids.stats_rows_container
-        cont.clear_widgets()
-        for r in rows:
-            row = build_statistics_detail_row(
-                r["name"],
-                r["icon"],
-                r["segment_color"],
-                r["time"],
-                r.get("icon_color", (1, 1, 1, 1)),
-            )
-            cont.add_widget(row)
+        while cont.children:
+            cont.remove_widget(cont.children[0])
+        rows = list(rows or [])
+        for r in reversed(rows):
+            cont.add_widget(StatisticsDetailRow(r))
+        cont.height = max(dp(36), cont.minimum_height)
         self._layout_stats_card()
+        Clock.schedule_once(self._relayout_stats_scroll, 0)
 
     def _layout_stats_card(self):
         card = self.ids.stats_card
@@ -232,19 +196,28 @@ class StatisticsScreen(MDScreen):
             row_spacing = float(row_spacing[1]) if len(row_spacing) > 1 else float(row_spacing[0])
         else:
             row_spacing = float(row_spacing)
-        row_heights = sum(c.height for c in cont.children)
+        row_heights = sum(float(c.height) for c in cont.children)
         row_gaps = row_spacing * max(0, len(cont.children) - 1)
-        card.height = pt + pb + header_h + gap + row_heights + row_gaps
+        empty_h = dp(48) if not self.has_data else 0
+        self.stats_card_height = pt + pb + header_h + gap + row_heights + row_gaps + empty_h
+
+    def _relayout_stats_scroll(self, _dt=None):
+        if "stats_scroll_content" in self.ids:
+            grid = self.ids.stats_scroll_content
+            grid.height = grid.minimum_height
 
     def refresh_statistics(self):
-        pie, rows = statistics_from_sessions(self.selected_period)
-        if not pie:
-            set_screen_statistics(self, [], [])
-            return
-        set_screen_statistics(self, pie, rows)
+        period = self.selected_period
+        pie, rows, total_sec = statistics_from_sessions(period)
+        self.total_time_text = format_statistics_total(total_sec)
+        self.has_data = total_sec > 0
+        self.ids.pie_chart.data = list(pie) if pie else []
+        self.set_statistics_rows(rows)
+        self._relayout_stats_scroll()
 
     def on_selected_period(self, _instance, value):
-        self.refresh_statistics()
+        if value in ("Dzień", "Tydzień", "Miesiąc"):
+            self.refresh_statistics()
 
     def on_enter(self):
         self.refresh_statistics()
