@@ -7,7 +7,7 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp, sp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.graphics import Color, Ellipse, Line, RoundedRectangle
+from kivy.graphics import Color, Ellipse, Line, Rectangle, RoundedRectangle
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.button import Button
 from kivy.uix.image import Image
@@ -276,46 +276,72 @@ class UnderlineTextBlock(BoxLayout):
     text = StringProperty("")
     text_color = ListProperty([1, 1, 1, 1])
     font_size = NumericProperty(sp(14))
+    compact_rule = BooleanProperty(False)
+    line_box_height = NumericProperty(0)
 
     def __init__(self, **kwargs):
         kwargs.setdefault("orientation", "vertical")
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("spacing", dp(2))
+        kwargs.setdefault("spacing", 0)
         super().__init__(**kwargs)
+        self._top_pad = Widget(size_hint_y=None, height=0)
         self._lbl = Label(
             color=self.text_color,
             font_size=self.font_size,
             halign="left",
-            valign="middle",
+            valign="bottom",
             size_hint_y=None,
         )
-        self._rule = Widget(size_hint_y=None, height=dp(2))
+        self._rule = Widget(size_hint_x=1, size_hint_y=None, height=dp(4))
+        self.add_widget(self._top_pad)
         self.add_widget(self._lbl)
         self.add_widget(self._rule)
         self._rule.bind(pos=self._draw_rule, size=self._draw_rule)
-        self.bind(text=self._relayout, width=self._relayout, text_color=self._relayout)
+        self.bind(
+            text=self._relayout,
+            width=self._relayout,
+            size=self._relayout,
+            text_color=self._relayout,
+            compact_rule=self._relayout,
+            line_box_height=self._relayout,
+        )
         Clock.schedule_once(lambda _dt: self._relayout(), 0)
 
     def _draw_rule(self, *_args):
         self._rule.canvas.clear()
+        w, h = self._rule.size
+        if w < 1 or h < 1:
+            return
+        stroke = dp(1.2)
         with self._rule.canvas:
             Color(1, 1, 1, 1)
-            Line(
-                points=[self._rule.x, self._rule.center_y, self._rule.right, self._rule.center_y],
-                width=dp(1.2),
-            )
+            Rectangle(pos=(0, (h - stroke) * 0.5), size=(w, stroke))
+
+    def _compact_content_height(self, text_h):
+        gap = dp(3) if self.compact_rule else dp(4)
+        return text_h + gap + dp(4)
 
     def _relayout(self, *_args):
         self._lbl.text = self.text or ""
         self._lbl.color = tuple(self.text_color)
         self._lbl.font_size = float(self.font_size)
-        if self.width > 1:
-            self._lbl.text_size = (self.width, None)
-            self._lbl.texture_update()
-            th = max(sp(16), self._lbl.texture_size[1])
-            self._lbl.height = th
-            self.height = th + dp(6)
-        self._draw_rule()
+        if self.width < 1:
+            return
+        self._lbl.text_size = (self.width, None)
+        self._lbl.texture_update()
+        th = max(sp(16), self._lbl.texture_size[1])
+        self._lbl.height = th
+        gap = dp(3) if self.compact_rule else dp(4)
+        self.spacing = gap
+        self._rule.opacity = 1
+        self._rule.height = dp(4)
+        natural_h = th + gap + self._rule.height
+        extra_top = 0
+        if self.line_box_height > natural_h:
+            extra_top = self.line_box_height - natural_h
+        self._top_pad.height = extra_top
+        self.height = natural_h + extra_top
+        Clock.schedule_once(lambda _dt: self._draw_rule(), 0)
 
 
 class StatusCircleButton(Button):
@@ -383,11 +409,28 @@ class ChecklistGoalRow(MDBoxLayout):
     def __init__(self, **kwargs):
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("spacing", dp(10))
+        kwargs.setdefault("padding", [0, dp(2)])
+        kwargs.setdefault("size_hint_x", 1)
         super().__init__(**kwargs)
         self.size_hint_y = None
+        self.height = dp(32)
         self._underline = None
         self._status_btn = None
-        self.bind(display_text=self._sync_height, width=self._sync_height)
+        self.bind(
+            display_text=self._schedule_sync_height,
+            index_label=self._schedule_sync_height,
+            size=self._schedule_sync_height,
+        )
+        self._sync_clock = None
+
+    def _schedule_sync_height(self, *_args):
+        if self._sync_clock is not None:
+            self._sync_clock.cancel()
+        self._sync_clock = Clock.schedule_once(self._sync_height, 0)
+
+    def on_parent(self, _instance, parent):
+        if parent is not None:
+            self._schedule_sync_height()
 
     def on_kv_post(self, base_widget):
         self._underline = self.ids.underline_block
@@ -411,22 +454,53 @@ class ChecklistGoalRow(MDBoxLayout):
             self.parent_screen.relocate_checklist_goal(self)
 
     def _sync_height(self, *_args):
-        if self._underline is None:
+        underline = self._underline or self.ids.get("underline_block")
+        btn = self._status_btn or self.ids.get("status_btn")
+        if underline is None:
             return
-        self._underline.text = self.display_text
-        if "index_lbl" in self.ids:
-            self.ids.index_lbl.text = self.index_label
-        btn_w = dp(30)
+        self._underline = underline
+        self._status_btn = btn
         idx_w = dp(22) if self.index_label else 0
+        btn_w = dp(30)
+        btn_h = dp(26)
+
+        underline.text = self.display_text
         if self.width > 1:
-            self._underline.width = max(sp(40), self.width - idx_w - btn_w - dp(16))
-        row_h = max(dp(32), self._underline.height)
-        self.height = row_h
-        if "index_lbl" in self.ids:
-            self.ids.index_lbl.height = row_h
-        if self._status_btn is not None:
-            self._status_btn.size = (btn_w, btn_w)
+            underline.width = max(sp(40), self.width - idx_w - btn_w - self.spacing)
+        underline.line_box_height = 0
+        underline._relayout()
+        text_h = max(sp(16), underline._lbl.texture_size[1])
+        content_h = underline._compact_content_height(text_h)
+        line_h = max(content_h, btn_h, dp(32))
+        underline.line_box_height = line_h
+        underline._relayout()
+
+        self.height = line_h
+        underline.height = line_h
+
+        if "index_anchor" in self.ids:
+            anchor = self.ids.index_anchor
+            anchor.size_hint_y = None
+            anchor.height = line_h
+            if "index_lbl" in self.ids:
+                idx = self.ids.index_lbl
+                idx.text = self.index_label
+                idx.text_size = (None, None)
+                idx.texture_update()
+                idx.size = idx.texture_size
+
+        status_anchor = btn.parent if btn is not None else self.ids.get("status_anchor")
+        if status_anchor is not None:
+            status_anchor.size_hint_y = None
+            status_anchor.height = line_h
+            status_anchor.width = btn_w
+        if btn is not None:
+            btn.size = (btn_h, btn_h)
+
         self._apply_done_to_ui()
+        parent = self.parent
+        if parent is not None and hasattr(parent, "minimum_height"):
+            parent.height = parent.minimum_height
 
     def on_touch_up(self, touch):
         if super().on_touch_up(touch):
@@ -444,7 +518,7 @@ class ChecklistGoalRow(MDBoxLayout):
 
 
 class ZrobioneHeaderBar(MDBoxLayout):
-    """Tappable row: title + chevron (children must not steal touches)."""
+    """Tappable row: title + chevron."""
 
     section = ObjectProperty(None, allownone=True)
 
@@ -465,10 +539,8 @@ class ZrobioneHeaderBar(MDBoxLayout):
     def on_touch_up(self, touch):
         if touch.grab_current is self:
             touch.ungrab(self)
-            if self.collide_point(*touch.pos):
-                sec = self.section
-                if sec is not None:
-                    sec._toggle_expanded()
+            if self.collide_point(*touch.pos) and self.section is not None:
+                self.section._toggle_expanded()
             return True
         return super().on_touch_up(touch)
 
@@ -484,8 +556,13 @@ class ZrobioneSection(MDBoxLayout):
         kwargs.setdefault("spacing", dp(8))
         kwargs.setdefault("size_hint_y", None)
         super().__init__(**kwargs)
-        self.bind(expanded=self._apply_expanded, done_count=self._apply_visibility)
+        self.bind(
+            expanded=self._apply_expanded,
+            done_count=self._apply_visibility,
+        )
+        self.bind(expanded=lambda *_: Clock.schedule_once(self._sync_section_height, 0))
         self._setup_attempts = 0
+        self._detached_done_rows = []
 
     def on_kv_post(self, base_widget):
         Clock.schedule_once(self._setup_after_kv, 0)
@@ -506,8 +583,6 @@ class ZrobioneSection(MDBoxLayout):
 
     def _toggle_expanded(self, *_args):
         self.expanded = not self.expanded
-        self._apply_expanded()
-        self._sync_section_height()
 
     def _refresh_header(self, *_args):
         if "zrobione_header" not in self.ids:
@@ -530,6 +605,7 @@ class ZrobioneSection(MDBoxLayout):
         if not visible:
             self.height = 0
             self.collide_disabled = True
+            self._detached_done_rows = []
         else:
             self.collide_disabled = False
             Clock.schedule_once(self._apply_expanded, 0)
@@ -541,24 +617,50 @@ class ZrobioneSection(MDBoxLayout):
         lst = self.ids.checklist_done_list
         self._refresh_header()
         if self.expanded:
-            lst.opacity = 1
+            if self._detached_done_rows:
+                for row in reversed(self._detached_done_rows):
+                    lst.add_widget(row)
+                self._detached_done_rows = []
+            for child in list(lst.children):
+                if not isinstance(child, ChecklistGoalRow):
+                    continue
+                child.collide_disabled = False
+                child.disabled = False
+                child.opacity = getattr(child, "_zrobione_saved_opacity", 0.72)
+                child._sync_height()
+            lst.collide_disabled = False
             lst.disabled = False
             lst.height = lst.minimum_height
         else:
-            lst.opacity = 0
-            lst.disabled = True
+            self._detached_done_rows = []
+            for child in list(lst.children):
+                if not isinstance(child, ChecklistGoalRow):
+                    continue
+                child._zrobione_saved_opacity = child.opacity
+                self._detached_done_rows.append(child)
+                lst.remove_widget(child)
+            lst.collide_disabled = True
             lst.height = 0
         Clock.schedule_once(self._sync_section_height, 0)
 
     def _sync_section_height(self, *_args):
         if self.done_count <= 0:
             self.height = 0
+            self.collide_disabled = True
+            self._refresh_lista_celow_box()
             return
+        self.collide_disabled = False
         if "zrobione_header" not in self.ids or "checklist_done_list" not in self.ids:
             return
         header_h = self.ids.zrobione_header.height
         body_h = self.ids.checklist_done_list.height if self.expanded else 0
         self.height = header_h + body_h + float(self.spacing)
+        self._refresh_lista_celow_box()
+
+    def _refresh_lista_celow_box(self, *_args):
+        parent = self.parent
+        if parent is not None and hasattr(parent, "minimum_height"):
+            parent.height = parent.minimum_height
 
     def _refresh_all(self, *_args):
         self._apply_visibility()
@@ -617,21 +719,16 @@ class StageItemRow(MDBoxLayout):
             )
 
     def _sync_height(self, *_args):
-        self._underline.text = self.display_text
+        underline = self._underline or self.ids.get("underline_block")
+        if underline is None:
+            return
+        self._underline = underline
+        underline.text = self.display_text
         if self.width > 1:
             pad = dp(50) if self.is_sub else dp(34)
-            self._underline.width = max(sp(40), self.width - pad)
-        line_h = sp(14) * 1.45
-        if self.width > 1 and self._underline.width > 1:
-            from kivy.core.text import Label as CoreLabel
-
-            lbl = CoreLabel(text=self.display_text or " ", font_size=sp(14))
-            lbl.bind(size=lbl.setter("text_size"))
-            lbl.text_size = (self._underline.width, None)
-            lbl.refresh()
-            line_h = max(line_h, lbl.texture.size[1])
-        self._underline.height = line_h + dp(10)
-        self.height = max(dp(40), self._underline.height + dp(4))
+            underline.width = max(sp(40), self.width - pad)
+        underline._relayout()
+        self.height = max(dp(40), underline.height + dp(4))
         self._apply_done_to_ui()
 
 
@@ -873,14 +970,25 @@ class ProjectInfoScreen(MDScreen):
                 )
         return out
 
+    def _all_done_checklist_rows(self, zr=None):
+        zr = zr or self.ids.get("zrobione_section")
+        if zr is None:
+            return []
+        rows = []
+        done_list = self._checklist_done_list()
+        if done_list is not None:
+            rows.extend(c for c in done_list.children if isinstance(c, ChecklistGoalRow))
+        rows.extend(getattr(zr, "_detached_done_rows", []))
+        return rows
+
     def _iter_checklist_rows(self):
-        lists = [self.ids.get("checklist_goals_list"), self._checklist_done_list()]
-        for cl in lists:
-            if cl is None:
-                continue
-            for c in reversed(cl.children):
+        active = self.ids.get("checklist_goals_list")
+        if active is not None:
+            for c in reversed(active.children):
                 if isinstance(c, ChecklistGoalRow):
                     yield c
+        for row in self._all_done_checklist_rows():
+            yield row
 
     def _serialize_checklist_goals(self):
         out = []
@@ -955,15 +1063,26 @@ class ProjectInfoScreen(MDScreen):
         if target is None:
             return
         target.add_widget(row)
+        row._sync_height()
+        self._refresh_checklist_goals_list_height()
         self._renumber_checklist_goals()
         self._refresh_zrobione_section()
         self.save_project_content()
+
+    def _refresh_checklist_goals_list_height(self, *_args):
+        cl = self.ids.get("checklist_goals_list")
+        if cl is not None:
+            cl.height = cl.minimum_height
 
     def remove_checklist_goal_row(self, row):
         parent = row.parent
         if parent is not None:
             parent.remove_widget(row)
+        zr = self.ids.get("zrobione_section")
+        if zr is not None and row in getattr(zr, "_detached_done_rows", []):
+            zr._detached_done_rows.remove(row)
         self._renumber_checklist_goals()
+        self._refresh_checklist_goals_list_height()
         self._refresh_zrobione_section()
         self.save_project_content()
 
@@ -989,16 +1108,15 @@ class ProjectInfoScreen(MDScreen):
         self.save_project_content()
 
     def _refresh_zrobione_section(self):
-        done_box = self._checklist_done_list()
         zr = self.ids.get("zrobione_section")
-        if done_box is None or zr is None:
+        if zr is None:
             return
-        n = sum(1 for c in done_box.children if isinstance(c, ChecklistGoalRow))
-        zr.done_count = n
-        for row in done_box.children:
-            if isinstance(row, ChecklistGoalRow):
-                row.index_label = ""
-                row.opacity = 0.72
+        rows = self._all_done_checklist_rows(zr)
+        zr.done_count = len(rows)
+        for row in rows:
+            row.index_label = ""
+            row.opacity = 0.72
+        zr._apply_expanded()
 
     def _renumber_checklist_goals(self):
         cl = self.ids.get("checklist_goals_list")
@@ -1009,6 +1127,7 @@ class ProjectInfoScreen(MDScreen):
             row.index_label = f"{i}."
             row.opacity = 1.0
             row._sync_height()
+        self._refresh_checklist_goals_list_height()
 
     # --- Etapy ---
 
