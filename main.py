@@ -18,7 +18,7 @@ from screens.project_info import ProjectInfoScreen
 
 # Window size for testing on pc
 if platform in ('win', 'linux', 'macosx'):
-    Window.size = (360, 740)
+    Window.size = (450, 900)
 
 class TimeTrackerApp(MDApp):
     theme_bg = StringProperty('#8A2BE2')

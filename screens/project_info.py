@@ -70,20 +70,84 @@ class _RoundedSheetBackground:
         Clock.schedule_once(lambda _dt: self._redraw_rounded_bg(), 0)
 
     def _redraw_rounded_bg(self, *_args):
+        # Only remove our background group — clearing canvas.before drops Kivy's
+        # TextInput foreground Color rule and leaves label textures white.
+        self.canvas.before.remove_group("sheet_field_bg")
         r = float(self.corner_radius)
-        self.canvas.before.clear()
         with self.canvas.before:
-            Color(*self.fill_color)
-            RoundedRectangle(pos=self.pos, size=self.size, radius=[r, r, r, r])
+            Color(*self.fill_color, group="sheet_field_bg")
+            RoundedRectangle(
+                pos=self.pos,
+                size=self.size,
+                radius=[r, r, r, r],
+                group="sheet_field_bg",
+            )
 
 
 class RoundedSheetTextInput(_RoundedSheetBackground, TextInput):
+    """Sheet TextInput with rounded fill; bakes text color into label textures."""
+
     def __init__(self, **kwargs):
         kwargs.setdefault("background_color", (0, 0, 0, 0))
         kwargs.setdefault("background_normal", "")
         kwargs.setdefault("background_active", "")
+        kwargs.setdefault("foreground_color", get_color_from_hex("#222222"))
+        kwargs.setdefault("cursor_color", get_color_from_hex("#7e57c2"))
+        kwargs.setdefault("hint_text_color", (0.55, 0.55, 0.55, 1))
         super().__init__(**kwargs)
         self._init_rounded_bg()
+        self.bind(
+            foreground_color=self._on_sheet_text_color_changed,
+            hint_text_color=self._on_sheet_text_color_changed,
+            disabled_foreground_color=self._on_sheet_text_color_changed,
+            disabled=self._on_sheet_text_color_changed,
+        )
+
+    def _on_sheet_text_color_changed(self, *_args):
+        self._trigger_refresh_line_options()
+
+    def _line_color(self, hint=False):
+        if hint:
+            return list(self.hint_text_color)
+        if self.disabled:
+            return list(self.disabled_foreground_color)
+        return list(self.foreground_color)
+
+    def _kwargs_for_line_label(self, base_opts, hint=False):
+        keys = (
+            "font_size",
+            "font_name",
+            "font_context",
+            "font_family",
+            "text_language",
+            "base_direction",
+            "padding_x",
+            "padding_y",
+            "padding",
+        )
+        kw = {k: base_opts[k] for k in keys if k in base_opts}
+        kw["color"] = self._line_color(hint=hint)
+        return kw
+
+    def _get_line_options(self):
+        opts = super()._get_line_options()
+        color = self._line_color(hint=False)
+        if opts.get("color") != color:
+            opts = dict(opts)
+            opts["color"] = color
+            self._line_options = opts
+        return self._line_options
+
+    def _create_line_label(self, text, hint=False):
+        saved = self._line_options
+        base = dict(super()._get_line_options())
+        merged = dict(base)
+        merged.update(self._kwargs_for_line_label(base, hint=hint))
+        self._line_options = merged
+        try:
+            return super()._create_line_label(text, hint=hint)
+        finally:
+            self._line_options = saved
 
 
 class RoundedSheetSpinner(_RoundedSheetBackground, Spinner):
