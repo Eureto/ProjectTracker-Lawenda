@@ -18,6 +18,45 @@ from kivy.graphics import Color, Line, Ellipse
 from kivy.utils import get_color_from_hex
 
 from kivymd.app import MDApp
+
+_TEXT_ON_LIGHT = (0.102, 0.102, 0.102, 1)  # #1A1A1A
+_TEXT_ON_DARK = (1, 1, 1, 1)
+
+GRID_COLUMNS = 2
+CARD_SIZE_HINT_X = 0.4
+# Emoji badge uses pos_hint top 1.25 and size emoji_size * 1.6 — sits above the card top.
+GRID_EMOJI_TOP_EXTRA = 0.25
+GRID_EMOJI_BADGE_SCALE = 1.6
+
+
+def _normalize_rgba(color):
+    if isinstance(color, str):
+        return get_color_from_hex(color)
+    channels = list(color[:4])
+    while len(channels) < 3:
+        channels.append(1.0)
+    if len(channels) == 3:
+        channels.append(1.0)
+    if any(v > 1 for v in channels[:3]):
+        channels = [v / 255.0 for v in channels[:3]] + [channels[3]]
+    return tuple(channels[:4])
+
+
+def _relative_luminance(rgba):
+    r, g, b, *_ = _normalize_rgba(rgba)
+
+    def linear(channel):
+        return channel / 12.92 if channel <= 0.03928 else ((channel + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+
+
+def contrasting_text_color(background):
+    """Pick light or dark text for readable contrast on background (WCAG luminance)."""
+    lum = _relative_luminance(background)
+    contrast_light = (1.0 + 0.05) / (lum + 0.05)
+    contrast_dark = (lum + 0.05) / 0.05
+    return _TEXT_ON_DARK if contrast_light >= contrast_dark else _TEXT_ON_LIGHT
 from kivymd.uix.card import MDCard
 from kivymd.uix.screen import MDScreen
 
@@ -79,6 +118,7 @@ class ProjectCard(MDCard):
     emoji_source = StringProperty("")
     angle = NumericProperty(0)
     card_color = ColorProperty([0.7, 0.5, 1, 1])
+    title_text_color = ColorProperty(_TEXT_ON_LIGHT)
     height_multiplier = NumericProperty(1.0)
     title_font_style = StringProperty("Subtitle2")
     emoji_size = NumericProperty(dp(40))
@@ -88,21 +128,44 @@ class ProjectCard(MDCard):
         super().__init__(**kwargs)
         self._long_press_ev = None
         self._shake_anim = None
+        self._update_title_text_color()
+
+    def on_card_color(self, *_args):
+        self._update_title_text_color()
+
+    def _update_title_text_color(self):
+        self.title_text_color = contrasting_text_color(self.card_color)
+
+    def _free_layout_enabled(self):
+        app = MDApp.get_running_app()
+        return app is None or not app.grid_layout
 
     def on_touch_down(self, touch):
         if not self.interactive:
             return False
         if self.collide_point(*touch.pos):
             touch.ud["project_card_origin"] = touch.pos
-            # Start 2s timer for long press detection
-            self._long_press_ev = Clock.schedule_once(lambda dt: self._start_drag_mode(touch), 1.0)
+            if self._free_layout_enabled():
+                self._long_press_ev = Clock.schedule_once(
+                    lambda _dt: self._start_drag_mode(touch), 1.0
+                )
             touch.grab(self)
             return True
         return super().on_touch_down(touch)
 
+    def stop_drag_animation(self):
+        if self._long_press_ev:
+            Clock.unschedule(self._long_press_ev)
+            self._long_press_ev = None
+        if self._shake_anim:
+            self._shake_anim.stop(self)
+            self._shake_anim = None
+        Animation(angle=0, d=0.1).start(self)
+
     def _start_drag_mode(self, touch):
+        if not self._free_layout_enabled():
+            return
         self.pos_hint = {}  # Allow free movement within the FloatLayout
-        # Start Shaking animation
         self._shake_anim = Animation(angle=2, d=0.08) + Animation(angle=-2, d=0.08)
         self._shake_anim.repeat = True
         self._shake_anim.start(self)
@@ -152,6 +215,8 @@ class ProjectCard(MDCard):
         app.root.current = "project_info"
 
     def save_position(self):
+        if not self._free_layout_enabled():
+            return
         if self.parent:
             rel_x = self.x / self.parent.width
             rel_y = self.top / self.parent.height
@@ -238,6 +303,89 @@ class SessionCard(MDCard):
 
 
 class HomeScreen(MDScreen):
+    _last_grid_container_width = 0
+
+    def on_kv_post(self, base_widget):
+        super().on_kv_post(base_widget)
+        container = self.ids.projects_container
+        container.bind(size=self._on_projects_container_resize)
+        app = MDApp.get_running_app()
+        if app is not None:
+            app.bind(grid_layout=lambda *_a: self._on_layout_mode_changed())
+
+    def _on_layout_mode_changed(self):
+        if MDApp.get_running_app().grid_layout:
+            self.apply_grid_layout()
+        else:
+            self.restore_card_positions()
+
+    def _on_projects_container_resize(self, container, size):
+        app = MDApp.get_running_app()
+        if not app.grid_layout:
+            return
+        w = size[0]
+        if w < 1 or abs(w - self._last_grid_container_width) < 1:
+            return
+        self._last_grid_container_width = w
+        Clock.schedule_once(lambda _dt: self.apply_grid_layout(), 0)
+
+    def _project_cards(self):
+        container = self.ids.projects_container
+        cards = [c for c in container.children if isinstance(c, ProjectCard)]
+        cards.sort(key=lambda c: c.title.lower())
+        return cards
+
+    def _grid_layout_metrics(self, container, cards):
+        """Spacing for 2-column grid; top_pad clears the emoji badge above each card."""
+        margin_x = dp(16)
+        gutter = dp(12)
+        row_gap = dp(16)
+        base_top = dp(6)
+
+        card_w = container.width * CARD_SIZE_HINT_X
+        if not cards:
+            return card_w, 0, base_top, margin_x, gutter, row_gap
+
+        mult = max(c.height_multiplier for c in cards)
+        card_h = card_w * mult
+        emoji_sz = max(c.emoji_size for c in cards)
+        badge_h = emoji_sz * GRID_EMOJI_BADGE_SCALE
+        badge_above = (card_h * GRID_EMOJI_TOP_EXTRA + badge_h * 0.35) * 0.5
+        top_pad = base_top + badge_above
+        return card_w, card_h, top_pad, margin_x, gutter, row_gap
+
+    def apply_grid_layout(self):
+        """Place project cards in a fixed 2-column grid."""
+        container = self.ids.projects_container
+        if container.width < 1 or container.height < 1:
+            Clock.schedule_once(lambda _dt: self.apply_grid_layout(), 0)
+            return
+
+        cards = self._project_cards()
+        if not cards:
+            self.update_container_height()
+            return
+
+        card_w, card_h, top_pad, margin_x, gutter, row_gap = self._grid_layout_metrics(
+            container, cards
+        )
+        col_width = (container.width - 2 * margin_x - gutter) / GRID_COLUMNS
+        col_x = [
+            margin_x + (col_width - card_w) * 0.5,
+            margin_x + col_width + gutter + (col_width - card_w) * 0.5,
+        ]
+
+        for i, card in enumerate(cards):
+            card.stop_drag_animation()
+            col = i % GRID_COLUMNS
+            row = i // GRID_COLUMNS
+            row_h = card_w * card.height_multiplier
+            card.pos_hint = {}
+            card.x = col_x[col]
+            card.top = container.height - top_pad - row * (row_h + row_gap)
+
+        self.update_container_height()
+
     def refresh_last_session(self):
         card = self.ids.last_session_card
         if card is not None:
@@ -265,17 +413,22 @@ class HomeScreen(MDScreen):
 
     def restore_card_positions(self):
         app = MDApp.get_running_app()
+        if app.grid_layout:
+            return
         storage_path = os.path.join(app.user_data_dir, 'card_positions.json')
 
         if os.path.exists(storage_path):
             try:
                 with open(storage_path, 'r') as f:
                     data = json.load(f)
-                for card in self.ids.projects_container.children:
-                    if isinstance(card, ProjectCard) and card.title in data:
+                for card in self._project_cards():
+                    if card.title in data:
+                        card.stop_drag_animation()
                         card.pos_hint = data[card.title]
+                self.ids.projects_container.do_layout()
             except (IOError, json.JSONDecodeError) as e:
                 print(f"Error restoring positions: {e}")
+        self.update_container_height()
 
     def add_project_card(self, title, image, emoji, color, x_pos, y_top):
         container = self.ids.projects_container
@@ -285,13 +438,28 @@ class HomeScreen(MDScreen):
             pos_hint={'x': x_pos, 'top': y_top}
         )
         container.add_widget(new_card)
-        self.update_container_height()
+        app = MDApp.get_running_app()
+        if app.grid_layout:
+            self.apply_grid_layout()
+        else:
+            self.update_container_height()
 
     def update_container_height(self):
         container = self.ids.projects_container
-        # Ensure height is at least the height of the screen
+        cards = self._project_cards()
+        app = MDApp.get_running_app()
+
+        if app.grid_layout and cards and container.width > 0:
+            card_w, card_h, top_pad, _mx, _gut, row_gap = self._grid_layout_metrics(
+                container, cards
+            )
+            rows = (len(cards) + GRID_COLUMNS - 1) // GRID_COLUMNS
+            grid_h = top_pad + rows * card_h + max(0, rows - 1) * row_gap + dp(150)
+            container.height = max(self.height, grid_h)
+            return
+
         min_h = self.height
         for child in container.children:
             if child.top > min_h:
                 min_h = child.top
-        container.height = min_h + dp(150) # Add buffer for the bottom navbar
+        container.height = min_h + dp(150)

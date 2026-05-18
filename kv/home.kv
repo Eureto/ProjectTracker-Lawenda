@@ -19,7 +19,7 @@
     size_hint: 0.4, None
     height: self.width * self.height_multiplier
     radius: [dp(24), ]
-    md_bg_color: root.card_color if not app.edit_mode else utils.get_color_from_hex("#FFCDD2")
+    md_bg_color: root.card_color
     elevation: 2
     padding: dp(10)
 
@@ -49,7 +49,7 @@
             padding: dp(8), 0
             canvas.before:
                 Color:
-                    rgba: root.card_color if not app.edit_mode else utils.get_color_from_hex("#FFCDD2")
+                    rgba: root.card_color
                 RoundedRectangle:
                     pos: self.pos
                     size: self.size
@@ -62,7 +62,7 @@
                 halign: "center"
                 valign: "middle"
                 theme_text_color: "Custom"
-                text_color: utils.get_color_from_hex("#1A1A1A")
+                text_color: root.title_text_color
                 shorten: True
                 shorten_from: "right"
 
@@ -223,7 +223,7 @@
                 icon: "view-grid"
                 pos_hint: {'right': 0.98, 'center_y': 0.5}
                 theme_text_color: "Custom"
-                text_color: (1, 1, 0, 1) if app.edit_mode else (1, 1, 1, 1)
+                text_color: (1, 1, 0, 1) if app.grid_layout else (1, 1, 1, 1)
                 on_release: app.toggle_layout_menu()
 
         # Fixed SessionCard that stays on top of the list and doesn't scroll
