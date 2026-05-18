@@ -39,6 +39,10 @@ def _car_asset_path(filename):
     return os.path.join(_PKG_ROOT, "assets", "Progress_Car", filename)
 
 
+def _emoji_asset_path(filename):
+    return os.path.join(_PKG_ROOT, "assets", "Emoji_PNG", filename)
+
+
 RESET_NEVER = "never"
 RESET_DAILY = "daily"
 RESET_WEEKLY = "weekly"
@@ -51,6 +55,9 @@ _GREY_NODE = get_color_from_hex("#9e9e9e")
 _CHIP_INACTIVE = get_color_from_hex("#5e35b1")
 _CHIP_ACTIVE = get_color_from_hex("#b388ff")
 _CROWN_GOLD = get_color_from_hex("#ffc107")
+_GOAL_CARD_PURPLE = list(get_color_from_hex("#7e57c2"))
+_GOAL_CARD_GREEN = list(get_color_from_hex("#43a047"))
+_CROWN_EMOJI_PATH = _emoji_asset_path("u1F451.png")
 
 ETAPY_ADD_GROUP = "Grupa etapów"
 ETAPY_ADD_STEP = "Krok etapu"
@@ -1279,9 +1286,22 @@ class ProjectInfoScreen(MDScreen):
             logged_seconds=max(0.0, float(logged_seconds)),
             reset_mode=reset_mode,
             period_key=period_key,
+            parent_screen=self,
         )
         row.apply_logged_to_ui()
         self.ids.goals_list.add_widget(row)
+
+    def remove_time_goal_row(self, row):
+        if isinstance(row, TimeGoalTrackRow):
+            row.stop_tracking()
+        goals = self.ids.get("goals_list")
+        if goals is None:
+            return
+        if row.parent is goals:
+            goals.remove_widget(row)
+        elif row.parent is not None:
+            row.parent.remove_widget(row)
+        self.save_project_content()
 
     # --- Timer ---
 
@@ -2487,7 +2507,7 @@ class CarProgressButton(ButtonBehavior, Image):
 
 
 class TimeGoalTrackRow(MDBoxLayout):
-    """Time goal track: tap car to start/pause; optional daily/weekly reset of progress."""
+    """Time goal track: tap car to start/pause; × on the right deletes."""
 
     title_text = StringProperty("")
     goal_text = StringProperty("")
@@ -2495,23 +2515,49 @@ class TimeGoalTrackRow(MDBoxLayout):
     logged_seconds = NumericProperty(0.0)
     tracking_active = BooleanProperty(False)
     car_hint_x = NumericProperty(0.08)
+    car_scale_x = NumericProperty(1.0)
     percent_text = StringProperty("0%")
+    is_goal_complete = BooleanProperty(False)
+    percent_card_color = ListProperty(_GOAL_CARD_PURPLE)
+    crown_source = StringProperty(_CROWN_EMOJI_PATH)
     elapsed_text = StringProperty("")
     reset_mode = StringProperty(RESET_WEEKLY)
     period_key = StringProperty("")
     car_source_idle = StringProperty(_car_asset_path("CCcc 1.png"))
     car_source_active = StringProperty(_car_asset_path("ZZzz 1.png"))
+    parent_screen = ObjectProperty(None, allownone=True)
 
     _tick_ev = None
     _caption_scheduled = False
+    _has_reached_goal = False
+    _overflow_cx = None
+    _overflow_dir = -1
 
     def on_kv_post(self, base_widget):
         self.fbind("title_text", self._schedule_goal_caption_refresh)
         self.fbind("goal_text", self._schedule_goal_caption_refresh)
         self.fbind("width", self._schedule_goal_caption_refresh)
         self.fbind("width", lambda *a: self.apply_logged_to_ui())
+        track = self.ids.get("goal_track")
+        if track is not None:
+            track.fbind("width", lambda *a: self.apply_logged_to_ui())
+        if "delete_btn" in self.ids:
+            self.ids.delete_btn.bind(on_press=lambda *_a: self.request_delete())
         Clock.schedule_once(self._bind_caption_box_width, 0)
         Clock.schedule_once(self._refresh_goal_caption_layout, 0)
+
+    def request_delete(self, *_args):
+        self.stop_tracking()
+        scr = self.parent_screen
+        if scr is None:
+            w = self.parent
+            while w is not None:
+                if isinstance(w, ProjectInfoScreen):
+                    scr = w
+                    break
+                w = w.parent
+        if scr is not None:
+            scr.remove_time_goal_row(self)
 
     def _bind_caption_box_width(self, *args):
         box = self.ids.get("goal_caption_box")
@@ -2555,20 +2601,79 @@ class TimeGoalTrackRow(MDBoxLayout):
         if self.period_key != cur:
             self.logged_seconds = 0.0
             self.period_key = cur
+            self._has_reached_goal = False
+            self._overflow_cx = None
+            self._overflow_dir = -1
 
     def apply_logged_to_ui(self):
-        self._update_progress_from_time()
+        t = max(10.0, float(self.goal_target_seconds))
+        if float(self.logged_seconds) >= t:
+            self._has_reached_goal = True
+        self._update_progress_from_time(0)
 
-    def _update_progress_from_time(self):
+    def _track_width(self):
+        track = self.ids.get("goal_track")
+        if track is not None and track.width > 1:
+            return float(track.width)
+        return max(dp(160), float(self.width or 300) - dp(58))
+
+    def _road_bounds(self):
+        tw = self._track_width()
+        road_start = float(dp(8))
+        road_end = max(road_start + dp(96), tw - float(dp(8)))
+        car_w = float(dp(96))
+        half = car_w * 0.5
+        min_cx = road_start + half
+        max_cx = max(min_cx, road_end - half)
+        return tw, min_cx, max_cx
+
+    def _car_travel_speed(self, min_cx, max_cx):
+        """Same px/s as 0→100% progress: full road span per goal target duration."""
+        span = max(1.0, max_cx - min_cx)
+        duration = max(10.0, float(self.goal_target_seconds))
+        return span / duration
+
+    def _advance_overflow_car(self, min_cx, max_cx, dt):
+        """After 100%: drive the full road left ↔ right; flip at each end."""
+        if self._overflow_cx is None:
+            self._overflow_cx = max_cx
+            self._overflow_dir = -1
+        speed = self._car_travel_speed(min_cx, max_cx)
+        self._overflow_cx += self._overflow_dir * speed * max(float(dt), 0.0)
+        if self._overflow_cx >= max_cx:
+            self._overflow_cx = max_cx
+            self._overflow_dir = -1
+        elif self._overflow_cx <= min_cx:
+            self._overflow_cx = min_cx
+            self._overflow_dir = 1
+        self.car_scale_x = -1.0 if self._overflow_dir < 0 else 1.0
+        return self._overflow_cx
+
+    def _update_progress_from_time(self, dt=0):
         self._ensure_period()
         t = max(10.0, float(self.goal_target_seconds))
-        p = min(100.0, 100.0 * float(self.logged_seconds) / t)
-        w = max(200.0, float(self.width or 300))
-        px = 10.0 / w
-        start = 0.08 + px
-        span = max(0.2, 0.84 - px)
-        self.car_hint_x = min(0.93, start + (p / 100.0) * span)
-        self.percent_text = f"{int(round(p))}%"
+        p_raw = 100.0 * float(self.logged_seconds) / t
+        pct_int = int(round(p_raw))
+        self.percent_text = f"{pct_int}%"
+
+        if pct_int >= 100:
+            self._has_reached_goal = True
+        self.is_goal_complete = self._has_reached_goal
+        self.percent_card_color = _GOAL_CARD_GREEN if self._has_reached_goal else _GOAL_CARD_PURPLE
+
+        tw, min_cx, max_cx = self._road_bounds()
+
+        if self.tracking_active and self._has_reached_goal:
+            cx = self._advance_overflow_car(min_cx, max_cx, dt)
+        elif self._overflow_cx is not None:
+            cx = self._overflow_cx
+            self.car_scale_x = -1.0 if self._overflow_dir < 0 else 1.0
+        else:
+            self.car_scale_x = 1.0
+            p_track = min(100.0, p_raw)
+            cx = min_cx + (p_track / 100.0) * (max_cx - min_cx)
+
+        self.car_hint_x = cx / tw if tw > 0 else 0.5
         self.elapsed_text = format_goal_elapsed(self.logged_seconds) if self.logged_seconds >= 1 else ""
 
     def on_car_button_release(self, *args):
@@ -2588,11 +2693,12 @@ class TimeGoalTrackRow(MDBoxLayout):
             self._tick_ev.cancel()
             self._tick_ev = None
         self.tracking_active = False
+        self._update_progress_from_time(0)
 
     def _on_track_tick(self, dt):
         self._ensure_period()
         self.logged_seconds += float(dt)
-        self._update_progress_from_time()
+        self._update_progress_from_time(dt)
 
     def on_parent(self, *_args):
         if self.parent is None:

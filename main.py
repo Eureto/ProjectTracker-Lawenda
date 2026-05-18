@@ -24,6 +24,7 @@ class TimeTrackerApp(MDApp):
     theme_bg = StringProperty('#8A2BE2')
     theme_card_bg = StringProperty('#B388FF')
     theme_session_bg = StringProperty('#5E35B1')
+    theme_session_header = StringProperty('#E8D5FC')
     theme_text_dark = StringProperty('#212121')
     edit_mode = BooleanProperty(False)
 

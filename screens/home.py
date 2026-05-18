@@ -8,6 +8,7 @@ from screens.session_store import (
     schedule_home_last_session_refresh,
 )
 
+from kivy.core.text import Label as CoreLabel
 from kivy.uix.widget import Widget
 from kivy.properties import StringProperty, NumericProperty, BooleanProperty, ColorProperty
 from kivy.metrics import dp
@@ -23,32 +24,54 @@ from kivymd.uix.screen import MDScreen
 class DotProgressBar(Widget):
     total_steps = NumericProperty(5)
     current_step = NumericProperty(2)
+    active_color = ColorProperty([0.08, 0.08, 0.08, 1])
+    inactive_color = ColorProperty([1, 1, 1, 1])
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.bind(pos=self.update_canvas, size=self.update_canvas, 
-                  total_steps=self.update_canvas, current_step=self.update_canvas)
+        self.bind(
+            pos=self.update_canvas,
+            size=self.update_canvas,
+            total_steps=self.update_canvas,
+            current_step=self.update_canvas,
+            active_color=self.update_canvas,
+            inactive_color=self.update_canvas,
+        )
 
     def update_canvas(self, *args):
-        app = MDApp.get_running_app()
-        color_dark = get_color_from_hex(app.theme_text_dark) if hasattr(app, 'theme_text_dark') else (0.1, 0.1, 0.1, 1)
-        color_light = get_color_from_hex("#E0E0E0") 
-        
         self.canvas.clear()
+        if self.width < 1 or self.total_steps < 1:
+            return
+
+        active = tuple(self.active_color)
+        inactive = tuple(self.inactive_color)
+        start_x = self.x + dp(5)
+        end_x = self.right - dp(5)
+        line_y = self.center_y
+        step = max(0, min(int(self.current_step), int(self.total_steps)))
+        line_w = dp(2)
+
         with self.canvas:
-            Color(*color_dark)
-            start_x = self.x + dp(5)
-            end_x = self.right - dp(5)
-            line_y = self.center_y
-            Line(points=[start_x, line_y, end_x, line_y], width=dp(1.5))
-            
             if self.total_steps > 1:
                 spacing = (end_x - start_x) / (self.total_steps - 1)
+                split_x = start_x + spacing * max(0, step - 1)
+                if step > 1:
+                    Color(*active)
+                    Line(points=[start_x, line_y, split_x, line_y], width=line_w)
+                if step < self.total_steps:
+                    Color(*inactive)
+                    Line(points=[split_x, line_y, end_x, line_y], width=line_w)
                 for i in range(self.total_steps):
-                    Color(*(color_dark if i < self.current_step else color_light))
+                    Color(*(active if i < step else inactive))
                     dot_x = start_x + (i * spacing) - dp(6)
                     dot_y = line_y - dp(6)
                     Ellipse(pos=(dot_x, dot_y), size=(dp(12), dp(12)))
+            else:
+                Color(*(active if step > 0 else inactive))
+                Ellipse(
+                    pos=(start_x - dp(6), line_y - dp(6)),
+                    size=(dp(12), dp(12)),
+                )
 
 class ProjectCard(MDCard):
     title = StringProperty("")
@@ -157,6 +180,43 @@ class SessionCard(MDCard):
     emoji_source = StringProperty("folder-outline")
     when_label = StringProperty("")
     duration_text = StringProperty("Czas:  00:00:00")
+    def on_kv_post(self, base_widget):
+        super().on_kv_post(base_widget)
+        label = self.ids.session_project_title
+        label.bind(
+            texture_size=self._sync_session_title_row,
+            text=self._sync_session_title_row,
+            size=self._sync_session_title_row,
+        )
+        Clock.schedule_once(lambda _dt: self._sync_session_title_row(label), 0)
+
+    def _title_text_width(self, label):
+        """Rendered text width (not the full label box — texture_size uses full width)."""
+        if not label.text:
+            return 0
+        core = CoreLabel(
+            text=label.text,
+            font_size=label.font_size,
+            bold=label.bold,
+        )
+        if label.font_name:
+            core.font_name = label.font_name
+        core.resolve_font_name()
+        core.refresh()
+        return core.texture.size[0]
+
+    def _sync_session_title_row(self, label, *_args):
+        """Full-width title (same as Czas row); icon sits ~10dp left of the text."""
+        icon = self.ids.get("session_project_icon")
+        if icon is None:
+            return
+        text_w = min(self._title_text_width(label), label.width)
+        if text_w <= 0:
+            return
+        gap = dp(10)
+        icon.size = (dp(28), dp(28))
+        icon.y = label.y + (label.height - icon.height) * 0.5
+        icon.x = label.right - text_w - gap - icon.width
 
     def apply_last_session(self, session):
         if not session:
@@ -168,9 +228,13 @@ class SessionCard(MDCard):
             return
         self.has_session = True
         self.project_name = session.get("project_title", "")
-        self.emoji_source = session.get("emoji_source", "folder-outline")
+        icon = session.get("emoji_source") or "folder-outline"
+        self.emoji_source = icon if icon else "folder-outline"
         self.when_label = format_when_label(session.get("ended_at"))
         self.duration_text = f"Czas:  {format_duration_hms(session.get('duration_seconds', 0))}"
+        label = self.ids.get("session_project_title")
+        if label is not None:
+            Clock.schedule_once(lambda _dt, lbl=label: self._sync_session_title_row(lbl), 0)
 
 
 class HomeScreen(MDScreen):
