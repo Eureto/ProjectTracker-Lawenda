@@ -320,14 +320,18 @@ class HomeScreen(MDScreen):
             self.restore_card_positions()
 
     def _on_projects_container_resize(self, container, size):
-        app = MDApp.get_running_app()
-        if not app.grid_layout:
-            return
         w = size[0]
-        if w < 1 or abs(w - self._last_grid_container_width) < 1:
+        if w < 1:
             return
-        self._last_grid_container_width = w
-        Clock.schedule_once(lambda _dt: self.apply_grid_layout(), 0)
+        app = MDApp.get_running_app()
+        if app.grid_layout:
+            if abs(w - self._last_grid_container_width) < 1:
+                return
+            self._last_grid_container_width = w
+            Clock.schedule_once(lambda _dt: self.apply_grid_layout(), 0)
+        elif not getattr(self, "_free_layout_ready", False):
+            self._free_layout_ready = True
+            Clock.schedule_once(lambda _dt: self.restore_card_positions(), 0)
 
     def _project_cards(self):
         container = self.ids.projects_container
@@ -354,19 +358,34 @@ class HomeScreen(MDScreen):
         top_pad = base_top + badge_above
         return card_w, card_h, top_pad, margin_x, gutter, row_gap
 
+    def schedule_initial_layout(self):
+        Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
+
+    def apply_initial_layout(self):
+        """Run grid or free layout once the projects container has a real width."""
+        container = self.ids.projects_container
+        if container.width < 1:
+            Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
+            return
+        app = MDApp.get_running_app()
+        if app.grid_layout:
+            self.apply_grid_layout()
+        else:
+            self.restore_card_positions()
+
     def apply_grid_layout(self):
         """Place project cards in a fixed 2-column grid."""
         container = self.ids.projects_container
-        if container.width < 1 or container.height < 1:
+        if container.width < 1:
             Clock.schedule_once(lambda _dt: self.apply_grid_layout(), 0)
             return
 
         cards = self._project_cards()
         if not cards:
-            self.update_container_height()
+            container.height = dp(200)
             return
 
-        card_w, card_h, top_pad, margin_x, gutter, row_gap = self._grid_layout_metrics(
+        card_w, _card_h, top_pad, margin_x, gutter, row_gap = self._grid_layout_metrics(
             container, cards
         )
         col_width = (container.width - 2 * margin_x - gutter) / GRID_COLUMNS
@@ -375,16 +394,25 @@ class HomeScreen(MDScreen):
             margin_x + col_width + gutter + (col_width - card_w) * 0.5,
         ]
 
+        rows = (len(cards) + GRID_COLUMNS - 1) // GRID_COLUMNS
+        row_heights = []
+        for row in range(rows):
+            chunk = cards[row * GRID_COLUMNS : (row + 1) * GRID_COLUMNS]
+            row_heights.append(card_w * max(c.height_multiplier for c in chunk))
+
+        content_h = top_pad + sum(row_heights) + max(0, rows - 1) * row_gap
+        container.height = max(dp(200), content_h + dp(150))
+
+        y_cursor = container.height - top_pad
         for i, card in enumerate(cards):
             card.stop_drag_animation()
             col = i % GRID_COLUMNS
             row = i // GRID_COLUMNS
-            row_h = card_w * card.height_multiplier
+            if col == 0 and row > 0:
+                y_cursor -= row_heights[row - 1] + row_gap
             card.pos_hint = {}
             card.x = col_x[col]
-            card.top = container.height - top_pad - row * (row_h + row_gap)
-
-        self.update_container_height()
+            card.top = y_cursor
 
     def refresh_last_session(self):
         card = self.ids.last_session_card
@@ -394,6 +422,7 @@ class HomeScreen(MDScreen):
     def on_enter(self, *_args):
         # Delayed refresh covers home entering before project_info.on_leave records.
         schedule_home_last_session_refresh()
+        self.schedule_initial_layout()
     def load_projects(self):
         """Loads project definitions from storage and adds them to the UI."""
         app = MDApp.get_running_app()
@@ -415,19 +444,31 @@ class HomeScreen(MDScreen):
         app = MDApp.get_running_app()
         if app.grid_layout:
             return
-        storage_path = os.path.join(app.user_data_dir, 'card_positions.json')
+        container = self.ids.projects_container
+        if container.width < 1:
+            Clock.schedule_once(lambda _dt: self.restore_card_positions(), 0)
+            return
 
+        storage_path = os.path.join(app.user_data_dir, "card_positions.json")
+        data = {}
         if os.path.exists(storage_path):
             try:
-                with open(storage_path, 'r') as f:
+                with open(storage_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                for card in self._project_cards():
-                    if card.title in data:
-                        card.stop_drag_animation()
-                        card.pos_hint = data[card.title]
-                self.ids.projects_container.do_layout()
-            except (IOError, json.JSONDecodeError) as e:
+            except (OSError, json.JSONDecodeError) as e:
                 print(f"Error restoring positions: {e}")
+
+        for card in self._project_cards():
+            card.stop_drag_animation()
+            if card.title in data:
+                pos = data[card.title]
+                card.pos_hint = {
+                    "x": float(pos.get("x", 0.1)),
+                    "top": float(pos.get("top", 0.9)),
+                }
+            else:
+                card.pos_hint = {"x": 0.1, "top": 0.9}
+
         self.update_container_height()
 
     def add_project_card(self, title, image, emoji, color, x_pos, y_top):

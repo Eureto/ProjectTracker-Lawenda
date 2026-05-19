@@ -55,10 +55,7 @@ class TimeTrackerApp(MDApp):
         home_screen = self.screen_manager.get_screen('home')
         self.load_layout_pref()
         home_screen.load_projects()
-        if self.grid_layout:
-            Clock.schedule_once(lambda _dt: home_screen.apply_grid_layout(), 0)
-        else:
-            home_screen.restore_card_positions()
+        home_screen.schedule_initial_layout()
         home_screen.refresh_last_session()
         self.screen_manager.get_screen("statistics").refresh_statistics()
 
