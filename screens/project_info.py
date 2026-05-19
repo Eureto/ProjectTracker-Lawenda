@@ -7,7 +7,7 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp, sp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.graphics import Color, Ellipse, Line, RoundedRectangle
+from kivy.graphics import Color, Ellipse, Line, Rectangle, RoundedRectangle
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.button import Button
 from kivy.uix.image import Image
@@ -39,9 +39,16 @@ def _car_asset_path(filename):
     return os.path.join(_PKG_ROOT, "assets", "Progress_Car", filename)
 
 
+def _emoji_asset_path(filename):
+    return os.path.join(_PKG_ROOT, "assets", "Emoji_PNG", filename)
+
+
 RESET_NEVER = "never"
 RESET_DAILY = "daily"
 RESET_WEEKLY = "weekly"
+
+# Match MDIconButton width so + icons, Zrobione chevron, and status circles share one vertical line.
+_RIGHT_ACTION_WIDTH = dp(48)
 
 _SHEET_FIELD_RADIUS = dp(12)
 _SHEET_BTN_RADIUS = dp(12)
@@ -51,6 +58,9 @@ _GREY_NODE = get_color_from_hex("#9e9e9e")
 _CHIP_INACTIVE = get_color_from_hex("#5e35b1")
 _CHIP_ACTIVE = get_color_from_hex("#b388ff")
 _CROWN_GOLD = get_color_from_hex("#ffc107")
+_GOAL_CARD_PURPLE = list(get_color_from_hex("#7e57c2"))
+_GOAL_CARD_GREEN = list(get_color_from_hex("#43a047"))
+_CROWN_EMOJI_PATH = _emoji_asset_path("u1F451.png")
 
 ETAPY_ADD_GROUP = "Grupa etapów"
 ETAPY_ADD_STEP = "Krok etapu"
@@ -70,20 +80,84 @@ class _RoundedSheetBackground:
         Clock.schedule_once(lambda _dt: self._redraw_rounded_bg(), 0)
 
     def _redraw_rounded_bg(self, *_args):
+        # Only remove our background group — clearing canvas.before drops Kivy's
+        # TextInput foreground Color rule and leaves label textures white.
+        self.canvas.before.remove_group("sheet_field_bg")
         r = float(self.corner_radius)
-        self.canvas.before.clear()
         with self.canvas.before:
-            Color(*self.fill_color)
-            RoundedRectangle(pos=self.pos, size=self.size, radius=[r, r, r, r])
+            Color(*self.fill_color, group="sheet_field_bg")
+            RoundedRectangle(
+                pos=self.pos,
+                size=self.size,
+                radius=[r, r, r, r],
+                group="sheet_field_bg",
+            )
 
 
 class RoundedSheetTextInput(_RoundedSheetBackground, TextInput):
+    """Sheet TextInput with rounded fill; bakes text color into label textures."""
+
     def __init__(self, **kwargs):
         kwargs.setdefault("background_color", (0, 0, 0, 0))
         kwargs.setdefault("background_normal", "")
         kwargs.setdefault("background_active", "")
+        kwargs.setdefault("foreground_color", get_color_from_hex("#222222"))
+        kwargs.setdefault("cursor_color", get_color_from_hex("#7e57c2"))
+        kwargs.setdefault("hint_text_color", (0.55, 0.55, 0.55, 1))
         super().__init__(**kwargs)
         self._init_rounded_bg()
+        self.bind(
+            foreground_color=self._on_sheet_text_color_changed,
+            hint_text_color=self._on_sheet_text_color_changed,
+            disabled_foreground_color=self._on_sheet_text_color_changed,
+            disabled=self._on_sheet_text_color_changed,
+        )
+
+    def _on_sheet_text_color_changed(self, *_args):
+        self._trigger_refresh_line_options()
+
+    def _line_color(self, hint=False):
+        if hint:
+            return list(self.hint_text_color)
+        if self.disabled:
+            return list(self.disabled_foreground_color)
+        return list(self.foreground_color)
+
+    def _kwargs_for_line_label(self, base_opts, hint=False):
+        keys = (
+            "font_size",
+            "font_name",
+            "font_context",
+            "font_family",
+            "text_language",
+            "base_direction",
+            "padding_x",
+            "padding_y",
+            "padding",
+        )
+        kw = {k: base_opts[k] for k in keys if k in base_opts}
+        kw["color"] = self._line_color(hint=hint)
+        return kw
+
+    def _get_line_options(self):
+        opts = super()._get_line_options()
+        color = self._line_color(hint=False)
+        if opts.get("color") != color:
+            opts = dict(opts)
+            opts["color"] = color
+            self._line_options = opts
+        return self._line_options
+
+    def _create_line_label(self, text, hint=False):
+        saved = self._line_options
+        base = dict(super()._get_line_options())
+        merged = dict(base)
+        merged.update(self._kwargs_for_line_label(base, hint=hint))
+        self._line_options = merged
+        try:
+            return super()._create_line_label(text, hint=hint)
+        finally:
+            self._line_options = saved
 
 
 class RoundedSheetSpinner(_RoundedSheetBackground, Spinner):
@@ -92,6 +166,44 @@ class RoundedSheetSpinner(_RoundedSheetBackground, Spinner):
         kwargs.setdefault("background_color", (0, 0, 0, 0))
         super().__init__(**kwargs)
         self._init_rounded_bg()
+
+
+class ResetPeriodChip(Button):
+    """Rounded reset-period choice for the time-goal sheet."""
+
+    selected = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(40))
+        kwargs.setdefault("size_hint_x", 1)
+        kwargs.setdefault("font_size", sp(13))
+        super().__init__(**kwargs)
+        self.bind(
+            selected=self._apply_visual,
+            pos=self._apply_visual,
+            size=self._apply_visual,
+            state=self._apply_visual,
+        )
+        Clock.schedule_once(lambda _dt: self._apply_visual(), 0)
+
+    def _apply_visual(self, *_args):
+        r = float(_SHEET_BTN_RADIUS)
+        if self.selected:
+            fill = list(_PURPLE)
+            self.color = 1, 1, 1, 1
+        else:
+            fill = [0.93, 0.90, 0.98, 1]
+            self.color = list(_PURPLE[:3]) + [1]
+        if self.state == "down":
+            fill = [c * 0.92 for c in fill[:3]] + [fill[3]]
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*fill)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[r, r, r, r])
 
 
 class RoundedSheetButton(Button):
@@ -187,6 +299,20 @@ def parse_goal_target_seconds(goal_str):
     return 3600.0
 
 
+def parse_goal_hours_minutes(hours_text, minutes_text):
+    """Build target duration from separate hour and minute fields."""
+    try:
+        hours = max(0, int((hours_text or "0").strip()))
+    except ValueError:
+        hours = 0
+    try:
+        minutes = max(0, int((minutes_text or "0").strip()))
+    except ValueError:
+        minutes = 0
+    total = hours * 3600 + minutes * 60
+    return float(max(60, total))
+
+
 def format_goal_elapsed(seconds):
     s = int(max(0, round(float(seconds))))
     if s < 60:
@@ -205,46 +331,72 @@ class UnderlineTextBlock(BoxLayout):
     text = StringProperty("")
     text_color = ListProperty([1, 1, 1, 1])
     font_size = NumericProperty(sp(14))
+    compact_rule = BooleanProperty(False)
+    line_box_height = NumericProperty(0)
 
     def __init__(self, **kwargs):
         kwargs.setdefault("orientation", "vertical")
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("spacing", dp(2))
+        kwargs.setdefault("spacing", 0)
         super().__init__(**kwargs)
+        self._top_pad = Widget(size_hint_y=None, height=0)
         self._lbl = Label(
             color=self.text_color,
             font_size=self.font_size,
             halign="left",
-            valign="middle",
+            valign="bottom",
             size_hint_y=None,
         )
-        self._rule = Widget(size_hint_y=None, height=dp(2))
+        self._rule = Widget(size_hint_x=1, size_hint_y=None, height=dp(4))
+        self.add_widget(self._top_pad)
         self.add_widget(self._lbl)
         self.add_widget(self._rule)
         self._rule.bind(pos=self._draw_rule, size=self._draw_rule)
-        self.bind(text=self._relayout, width=self._relayout, text_color=self._relayout)
+        self.bind(
+            text=self._relayout,
+            width=self._relayout,
+            size=self._relayout,
+            text_color=self._relayout,
+            compact_rule=self._relayout,
+            line_box_height=self._relayout,
+        )
         Clock.schedule_once(lambda _dt: self._relayout(), 0)
 
     def _draw_rule(self, *_args):
         self._rule.canvas.clear()
+        w, h = self._rule.size
+        if w < 1 or h < 1:
+            return
+        stroke = dp(1.2)
         with self._rule.canvas:
             Color(1, 1, 1, 1)
-            Line(
-                points=[self._rule.x, self._rule.center_y, self._rule.right, self._rule.center_y],
-                width=dp(1.2),
-            )
+            Rectangle(pos=(0, (h - stroke) * 0.5), size=(w, stroke))
+
+    def _compact_content_height(self, text_h):
+        gap = dp(3) if self.compact_rule else dp(4)
+        return text_h + gap + dp(4)
 
     def _relayout(self, *_args):
         self._lbl.text = self.text or ""
         self._lbl.color = tuple(self.text_color)
         self._lbl.font_size = float(self.font_size)
-        if self.width > 1:
-            self._lbl.text_size = (self.width, None)
-            self._lbl.texture_update()
-            th = max(sp(16), self._lbl.texture_size[1])
-            self._lbl.height = th
-            self.height = th + dp(6)
-        self._draw_rule()
+        if self.width < 1:
+            return
+        self._lbl.text_size = (self.width, None)
+        self._lbl.texture_update()
+        th = max(sp(16), self._lbl.texture_size[1])
+        self._lbl.height = th
+        gap = dp(3) if self.compact_rule else dp(4)
+        self.spacing = gap
+        self._rule.opacity = 1
+        self._rule.height = dp(4)
+        natural_h = th + gap + self._rule.height
+        extra_top = 0
+        if self.line_box_height > natural_h:
+            extra_top = self.line_box_height - natural_h
+        self._top_pad.height = extra_top
+        self.height = natural_h + extra_top
+        Clock.schedule_once(lambda _dt: self._draw_rule(), 0)
 
 
 class StatusCircleButton(Button):
@@ -312,11 +464,28 @@ class ChecklistGoalRow(MDBoxLayout):
     def __init__(self, **kwargs):
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("spacing", dp(10))
+        kwargs.setdefault("padding", [0, dp(2)])
+        kwargs.setdefault("size_hint_x", 1)
         super().__init__(**kwargs)
         self.size_hint_y = None
+        self.height = dp(32)
         self._underline = None
         self._status_btn = None
-        self.bind(display_text=self._sync_height, width=self._sync_height)
+        self.bind(
+            display_text=self._schedule_sync_height,
+            index_label=self._schedule_sync_height,
+            size=self._schedule_sync_height,
+        )
+        self._sync_clock = None
+
+    def _schedule_sync_height(self, *_args):
+        if self._sync_clock is not None:
+            self._sync_clock.cancel()
+        self._sync_clock = Clock.schedule_once(self._sync_height, 0)
+
+    def on_parent(self, _instance, parent):
+        if parent is not None:
+            self._schedule_sync_height()
 
     def on_kv_post(self, base_widget):
         self._underline = self.ids.underline_block
@@ -340,22 +509,53 @@ class ChecklistGoalRow(MDBoxLayout):
             self.parent_screen.relocate_checklist_goal(self)
 
     def _sync_height(self, *_args):
-        if self._underline is None:
+        underline = self._underline or self.ids.get("underline_block")
+        btn = self._status_btn or self.ids.get("status_btn")
+        if underline is None:
             return
-        self._underline.text = self.display_text
-        if "index_lbl" in self.ids:
-            self.ids.index_lbl.text = self.index_label
-        btn_w = dp(30)
+        self._underline = underline
+        self._status_btn = btn
         idx_w = dp(22) if self.index_label else 0
+        btn_w = _RIGHT_ACTION_WIDTH
+        btn_h = dp(26)
+
+        underline.text = self.display_text
         if self.width > 1:
-            self._underline.width = max(sp(40), self.width - idx_w - btn_w - dp(16))
-        row_h = max(dp(32), self._underline.height)
-        self.height = row_h
-        if "index_lbl" in self.ids:
-            self.ids.index_lbl.height = row_h
-        if self._status_btn is not None:
-            self._status_btn.size = (btn_w, btn_w)
+            underline.width = max(sp(40), self.width - idx_w - btn_w - self.spacing)
+        underline.line_box_height = 0
+        underline._relayout()
+        text_h = max(sp(16), underline._lbl.texture_size[1])
+        content_h = underline._compact_content_height(text_h)
+        line_h = max(content_h, btn_h, dp(32))
+        underline.line_box_height = line_h
+        underline._relayout()
+
+        self.height = line_h
+        underline.height = line_h
+
+        if "index_anchor" in self.ids:
+            anchor = self.ids.index_anchor
+            anchor.size_hint_y = None
+            anchor.height = line_h
+            if "index_lbl" in self.ids:
+                idx = self.ids.index_lbl
+                idx.text = self.index_label
+                idx.text_size = (None, None)
+                idx.texture_update()
+                idx.size = idx.texture_size
+
+        status_anchor = btn.parent if btn is not None else self.ids.get("status_anchor")
+        if status_anchor is not None:
+            status_anchor.size_hint_y = None
+            status_anchor.height = line_h
+            status_anchor.width = btn_w
+        if btn is not None:
+            btn.size = (btn_h, btn_h)
+
         self._apply_done_to_ui()
+        parent = self.parent
+        if parent is not None and hasattr(parent, "minimum_height"):
+            parent.height = parent.minimum_height
 
     def on_touch_up(self, touch):
         if super().on_touch_up(touch):
@@ -373,15 +573,15 @@ class ChecklistGoalRow(MDBoxLayout):
 
 
 class ZrobioneHeaderBar(MDBoxLayout):
-    """Tappable row: title + chevron (children must not steal touches)."""
+    """Tappable row: title + chevron."""
 
     section = ObjectProperty(None, allownone=True)
 
     def __init__(self, **kwargs):
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", dp(40))
-        kwargs.setdefault("padding", [dp(2), 0, dp(4), 0])
+        kwargs.setdefault("height", dp(28))
+        kwargs.setdefault("padding", [0, 0, 0, 0])
         kwargs.setdefault("spacing", dp(8))
         super().__init__(**kwargs)
 
@@ -394,10 +594,8 @@ class ZrobioneHeaderBar(MDBoxLayout):
     def on_touch_up(self, touch):
         if touch.grab_current is self:
             touch.ungrab(self)
-            if self.collide_point(*touch.pos):
-                sec = self.section
-                if sec is not None:
-                    sec._toggle_expanded()
+            if self.collide_point(*touch.pos) and self.section is not None:
+                self.section._toggle_expanded()
             return True
         return super().on_touch_up(touch)
 
@@ -413,8 +611,13 @@ class ZrobioneSection(MDBoxLayout):
         kwargs.setdefault("spacing", dp(8))
         kwargs.setdefault("size_hint_y", None)
         super().__init__(**kwargs)
-        self.bind(expanded=self._apply_expanded, done_count=self._apply_visibility)
+        self.bind(
+            expanded=self._apply_expanded,
+            done_count=self._apply_visibility,
+        )
+        self.bind(expanded=lambda *_: Clock.schedule_once(self._sync_section_height, 0))
         self._setup_attempts = 0
+        self._detached_done_rows = []
 
     def on_kv_post(self, base_widget):
         Clock.schedule_once(self._setup_after_kv, 0)
@@ -435,8 +638,6 @@ class ZrobioneSection(MDBoxLayout):
 
     def _toggle_expanded(self, *_args):
         self.expanded = not self.expanded
-        self._apply_expanded()
-        self._sync_section_height()
 
     def _refresh_header(self, *_args):
         if "zrobione_header" not in self.ids:
@@ -459,6 +660,7 @@ class ZrobioneSection(MDBoxLayout):
         if not visible:
             self.height = 0
             self.collide_disabled = True
+            self._detached_done_rows = []
         else:
             self.collide_disabled = False
             Clock.schedule_once(self._apply_expanded, 0)
@@ -470,24 +672,50 @@ class ZrobioneSection(MDBoxLayout):
         lst = self.ids.checklist_done_list
         self._refresh_header()
         if self.expanded:
-            lst.opacity = 1
+            if self._detached_done_rows:
+                for row in reversed(self._detached_done_rows):
+                    lst.add_widget(row)
+                self._detached_done_rows = []
+            for child in list(lst.children):
+                if not isinstance(child, ChecklistGoalRow):
+                    continue
+                child.collide_disabled = False
+                child.disabled = False
+                child.opacity = getattr(child, "_zrobione_saved_opacity", 0.72)
+                child._sync_height()
+            lst.collide_disabled = False
             lst.disabled = False
             lst.height = lst.minimum_height
         else:
-            lst.opacity = 0
-            lst.disabled = True
+            self._detached_done_rows = []
+            for child in list(lst.children):
+                if not isinstance(child, ChecklistGoalRow):
+                    continue
+                child._zrobione_saved_opacity = child.opacity
+                self._detached_done_rows.append(child)
+                lst.remove_widget(child)
+            lst.collide_disabled = True
             lst.height = 0
         Clock.schedule_once(self._sync_section_height, 0)
 
     def _sync_section_height(self, *_args):
         if self.done_count <= 0:
             self.height = 0
+            self.collide_disabled = True
+            self._refresh_lista_celow_box()
             return
+        self.collide_disabled = False
         if "zrobione_header" not in self.ids or "checklist_done_list" not in self.ids:
             return
         header_h = self.ids.zrobione_header.height
         body_h = self.ids.checklist_done_list.height if self.expanded else 0
         self.height = header_h + body_h + float(self.spacing)
+        self._refresh_lista_celow_box()
+
+    def _refresh_lista_celow_box(self, *_args):
+        parent = self.parent
+        if parent is not None and hasattr(parent, "minimum_height"):
+            parent.height = parent.minimum_height
 
     def _refresh_all(self, *_args):
         self._apply_visibility()
@@ -546,21 +774,16 @@ class StageItemRow(MDBoxLayout):
             )
 
     def _sync_height(self, *_args):
-        self._underline.text = self.display_text
+        underline = self._underline or self.ids.get("underline_block")
+        if underline is None:
+            return
+        self._underline = underline
+        underline.text = self.display_text
         if self.width > 1:
             pad = dp(50) if self.is_sub else dp(34)
-            self._underline.width = max(sp(40), self.width - pad)
-        line_h = sp(14) * 1.45
-        if self.width > 1 and self._underline.width > 1:
-            from kivy.core.text import Label as CoreLabel
-
-            lbl = CoreLabel(text=self.display_text or " ", font_size=sp(14))
-            lbl.bind(size=lbl.setter("text_size"))
-            lbl.text_size = (self._underline.width, None)
-            lbl.refresh()
-            line_h = max(line_h, lbl.texture.size[1])
-        self._underline.height = line_h + dp(10)
-        self.height = max(dp(40), self._underline.height + dp(4))
+            underline.width = max(sp(40), self.width - pad)
+        underline._relayout()
+        self.height = max(dp(40), underline.height + dp(4))
         self._apply_done_to_ui()
 
 
@@ -618,6 +841,7 @@ class ProjectInfoScreen(MDScreen):
     _run_started_at = None
     _etapy_groups = []
     _etapy_selected_index = 0
+    _goal_period_ev = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -625,6 +849,7 @@ class ProjectInfoScreen(MDScreen):
         self._etapy_sheet = None
         self._add_note_sheet = None
         self._goal_sheet = None
+        self._goal_period_ev = None
         self.bind(project_title=self._on_project_title_changed)
 
     def _on_project_title_changed(self, *_args):
@@ -635,9 +860,16 @@ class ProjectInfoScreen(MDScreen):
     def on_enter(self):
         Window.bind(on_keyboard=self._on_keyboard)
         self.load_project_content()
+        self._refresh_time_goal_periods()
+        if self._goal_period_ev is not None:
+            self._goal_period_ev.cancel()
+        self._goal_period_ev = Clock.schedule_interval(self._refresh_time_goal_periods, 60)
 
     def on_leave(self):
         Window.unbind(on_keyboard=self._on_keyboard)
+        if self._goal_period_ev is not None:
+            self._goal_period_ev.cancel()
+            self._goal_period_ev = None
         if self.timer_running:
             self._finish_timer_run()
             self.timer_running = False
@@ -645,6 +877,23 @@ class ProjectInfoScreen(MDScreen):
         self._stop_timer_event()
         self._stop_all_goal_trackers()
         self.save_project_content()
+
+    def _refresh_time_goal_periods(self, *_args):
+        """Reset car-goal progress when the calendar day or ISO week rolls over."""
+        goals = self.ids.get("goals_list")
+        if goals is None:
+            return
+        changed = False
+        for row in list(goals.children):
+            if not isinstance(row, TimeGoalTrackRow):
+                continue
+            before_pk, before_log = row.period_key, row.logged_seconds
+            row._ensure_period()
+            if row.period_key != before_pk or row.logged_seconds != before_log:
+                row.apply_logged_to_ui()
+                changed = True
+        if changed:
+            self.save_project_content()
 
     def _stop_all_goal_trackers(self):
         for row in list(self.ids.goals_list.children):
@@ -802,14 +1051,25 @@ class ProjectInfoScreen(MDScreen):
                 )
         return out
 
+    def _all_done_checklist_rows(self, zr=None):
+        zr = zr or self.ids.get("zrobione_section")
+        if zr is None:
+            return []
+        rows = []
+        done_list = self._checklist_done_list()
+        if done_list is not None:
+            rows.extend(c for c in done_list.children if isinstance(c, ChecklistGoalRow))
+        rows.extend(getattr(zr, "_detached_done_rows", []))
+        return rows
+
     def _iter_checklist_rows(self):
-        lists = [self.ids.get("checklist_goals_list"), self._checklist_done_list()]
-        for cl in lists:
-            if cl is None:
-                continue
-            for c in reversed(cl.children):
+        active = self.ids.get("checklist_goals_list")
+        if active is not None:
+            for c in reversed(active.children):
                 if isinstance(c, ChecklistGoalRow):
                     yield c
+        for row in self._all_done_checklist_rows():
+            yield row
 
     def _serialize_checklist_goals(self):
         out = []
@@ -884,15 +1144,26 @@ class ProjectInfoScreen(MDScreen):
         if target is None:
             return
         target.add_widget(row)
+        row._sync_height()
+        self._refresh_checklist_goals_list_height()
         self._renumber_checklist_goals()
         self._refresh_zrobione_section()
         self.save_project_content()
+
+    def _refresh_checklist_goals_list_height(self, *_args):
+        cl = self.ids.get("checklist_goals_list")
+        if cl is not None:
+            cl.height = cl.minimum_height
 
     def remove_checklist_goal_row(self, row):
         parent = row.parent
         if parent is not None:
             parent.remove_widget(row)
+        zr = self.ids.get("zrobione_section")
+        if zr is not None and row in getattr(zr, "_detached_done_rows", []):
+            zr._detached_done_rows.remove(row)
         self._renumber_checklist_goals()
+        self._refresh_checklist_goals_list_height()
         self._refresh_zrobione_section()
         self.save_project_content()
 
@@ -918,16 +1189,15 @@ class ProjectInfoScreen(MDScreen):
         self.save_project_content()
 
     def _refresh_zrobione_section(self):
-        done_box = self._checklist_done_list()
         zr = self.ids.get("zrobione_section")
-        if done_box is None or zr is None:
+        if zr is None:
             return
-        n = sum(1 for c in done_box.children if isinstance(c, ChecklistGoalRow))
-        zr.done_count = n
-        for row in done_box.children:
-            if isinstance(row, ChecklistGoalRow):
-                row.index_label = ""
-                row.opacity = 0.72
+        rows = self._all_done_checklist_rows(zr)
+        zr.done_count = len(rows)
+        for row in rows:
+            row.index_label = ""
+            row.opacity = 0.72
+        zr._apply_expanded()
 
     def _renumber_checklist_goals(self):
         cl = self.ids.get("checklist_goals_list")
@@ -938,6 +1208,7 @@ class ProjectInfoScreen(MDScreen):
             row.index_label = f"{i}."
             row.opacity = 1.0
             row._sync_height()
+        self._refresh_checklist_goals_list_height()
 
     # --- Etapy ---
 
@@ -1215,9 +1486,22 @@ class ProjectInfoScreen(MDScreen):
             logged_seconds=max(0.0, float(logged_seconds)),
             reset_mode=reset_mode,
             period_key=period_key,
+            parent_screen=self,
         )
         row.apply_logged_to_ui()
         self.ids.goals_list.add_widget(row)
+
+    def remove_time_goal_row(self, row):
+        if isinstance(row, TimeGoalTrackRow):
+            row.stop_tracking()
+        goals = self.ids.get("goals_list")
+        if goals is None:
+            return
+        if row.parent is goals:
+            goals.remove_widget(row)
+        elif row.parent is not None:
+            row.parent.remove_widget(row)
+        self.save_project_content()
 
     # --- Timer ---
 
@@ -1403,7 +1687,7 @@ class _BottomSheetKeyboardMixin:
             pass
 
     def _sheet_input_focused(self):
-        for name in ("field", "title_field", "goal_field"):
+        for name in ("field", "title_field", "hours_field", "minutes_field", "goal_field"):
             w = getattr(self, name, None)
             if w is not None and getattr(w, "focus", False):
                 return True
@@ -1771,17 +2055,50 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         self._body.add_widget(self.title_field)
 
-        self.goal_field = RoundedSheetTextInput(
-            hint_text="Ile czasu (np. 3h, 15min)",
-            text="1h",
-            multiline=False,
+        time_row = MDBoxLayout(
+            orientation="horizontal",
+            spacing=dp(10),
             size_hint_y=None,
-            height=dp(44),
-            font_size=sp(15),
-            padding=[dp(12), dp(10), dp(12), dp(10)],
-            foreground_color=get_color_from_hex("#222222"),
+            height=dp(62),
         )
-        self._body.add_widget(self.goal_field)
+        for label_text, default_val, attr in (
+            ("Godziny", "1", "hours_field"),
+            ("Minuty", "0", "minutes_field"),
+        ):
+            col = MDBoxLayout(
+                orientation="vertical",
+                spacing=dp(4),
+                size_hint_x=0.5,
+                size_hint_y=None,
+                height=dp(62),
+            )
+            col.add_widget(
+                MDLabel(
+                    text=label_text,
+                    font_style="Caption",
+                    theme_text_color="Custom",
+                    text_color=(0.25, 0.25, 0.28, 1),
+                    size_hint_y=None,
+                    height=dp(16),
+                    valign="middle",
+                )
+            )
+            field = RoundedSheetTextInput(
+                text=default_val,
+                hint_text="0",
+                multiline=False,
+                input_filter="int",
+                size_hint_y=None,
+                height=dp(44),
+                font_size=sp(16),
+                padding=[dp(12), dp(10), dp(12), dp(10)],
+                foreground_color=get_color_from_hex("#222222"),
+                halign="center",
+            )
+            setattr(self, attr, field)
+            col.add_widget(field)
+            time_row.add_widget(col)
+        self._body.add_widget(time_row)
 
         self._body.add_widget(
             MDLabel(
@@ -1794,31 +2111,35 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
-        self._mode_by_label = {
-            "Codziennie": RESET_DAILY,
-            "Tygodniowo": RESET_WEEKLY,
-            "Bez resetu": RESET_NEVER,
-        }
-        self.freq_spinner = RoundedSheetSpinner(
-            text="Tygodniowo",
-            values=("Codziennie", "Tygodniowo", "Bez resetu"),
-            size_hint_x=1,
+        self._selected_reset_mode = RESET_WEEKLY
+        self._reset_chips = {}
+        chip_row = MDBoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
             size_hint_y=None,
-            height=dp(44),
-            fill_color=[0.95, 0.95, 0.97, 1],
-            color=(0.1, 0.1, 0.1, 1),
+            height=dp(40),
         )
-        self._body.add_widget(self.freq_spinner)
+        for label, mode in (
+            ("Codziennie", RESET_DAILY),
+            ("Tygodniowo", RESET_WEEKLY),
+            ("Bez resetu", RESET_NEVER),
+        ):
+            chip = ResetPeriodChip(text=label)
+            chip.bind(on_release=lambda _inst, m=mode: self._select_reset_mode(m))
+            self._reset_chips[mode] = chip
+            chip_row.add_widget(chip)
+        self._body.add_widget(chip_row)
+        self._select_reset_mode(RESET_WEEKLY)
 
         self._body.add_widget(
             MDLabel(
-                text="Codziennie / tygodniowo / bez resetu — krótszy cel = szybszy przejazd auta.",
+                text="Krótszy cel = szybszy przejazd auta na osi czasu.",
                 font_style="Caption",
                 theme_text_color="Custom",
                 text_color=(0.35, 0.35, 0.38, 1),
                 size_hint_x=1,
                 size_hint_y=None,
-                height=dp(32),
+                height=dp(24),
                 shorten=True,
                 shorten_from="right",
             )
@@ -1856,6 +2177,11 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.panel.add_widget(bar)
 
         self.add_widget(root)
+
+    def _select_reset_mode(self, mode):
+        self._selected_reset_mode = mode
+        for m, chip in self._reset_chips.items():
+            chip.selected = m == mode
 
     def _sync_goal_body_height(self):
         spacing = float(self._body.spacing)
@@ -1921,12 +2247,14 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     def _commit(self):
         title = (self.title_field.text or "").strip()
-        qty = (self.goal_field.text or "").strip() or "1h"
         if not title:
             self.dismiss()
             return
-        mode = self._mode_by_label.get(self.freq_spinner.text, RESET_WEEKLY)
-        quota = parse_goal_target_seconds(qty)
+        quota = parse_goal_hours_minutes(
+            self.hours_field.text,
+            self.minutes_field.text,
+        )
+        mode = self._selected_reset_mode
         summary = format_goal_summary(quota, mode)
         self.project_screen.add_time_goal(
             title=title,
@@ -1943,7 +2271,8 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self._closing = True
         self._sheet_unbind_keyboard()
         self.title_field.focus = False
-        self.goal_field.focus = False
+        self.hours_field.focus = False
+        self.minutes_field.focus = False
         h = max(self.panel.height, dp(1))
         anim = Animation(y=-h, d=0.22, t="in_cubic")
         anim.bind(on_complete=lambda *a: super(AddTimeGoalBottomSheet, self).dismiss())
@@ -2423,7 +2752,7 @@ class CarProgressButton(ButtonBehavior, Image):
 
 
 class TimeGoalTrackRow(MDBoxLayout):
-    """Time goal track: tap car to start/pause; optional daily/weekly reset of progress."""
+    """Time goal track: tap car to start/pause; × on the right deletes."""
 
     title_text = StringProperty("")
     goal_text = StringProperty("")
@@ -2431,23 +2760,49 @@ class TimeGoalTrackRow(MDBoxLayout):
     logged_seconds = NumericProperty(0.0)
     tracking_active = BooleanProperty(False)
     car_hint_x = NumericProperty(0.08)
+    car_scale_x = NumericProperty(1.0)
     percent_text = StringProperty("0%")
+    is_goal_complete = BooleanProperty(False)
+    percent_card_color = ListProperty(_GOAL_CARD_PURPLE)
+    crown_source = StringProperty(_CROWN_EMOJI_PATH)
     elapsed_text = StringProperty("")
     reset_mode = StringProperty(RESET_WEEKLY)
     period_key = StringProperty("")
     car_source_idle = StringProperty(_car_asset_path("CCcc 1.png"))
     car_source_active = StringProperty(_car_asset_path("ZZzz 1.png"))
+    parent_screen = ObjectProperty(None, allownone=True)
 
     _tick_ev = None
     _caption_scheduled = False
+    _has_reached_goal = False
+    _overflow_cx = None
+    _overflow_dir = -1
 
     def on_kv_post(self, base_widget):
         self.fbind("title_text", self._schedule_goal_caption_refresh)
         self.fbind("goal_text", self._schedule_goal_caption_refresh)
         self.fbind("width", self._schedule_goal_caption_refresh)
         self.fbind("width", lambda *a: self.apply_logged_to_ui())
+        track = self.ids.get("goal_track")
+        if track is not None:
+            track.fbind("width", lambda *a: self.apply_logged_to_ui())
+        if "delete_btn" in self.ids:
+            self.ids.delete_btn.bind(on_press=lambda *_a: self.request_delete())
         Clock.schedule_once(self._bind_caption_box_width, 0)
         Clock.schedule_once(self._refresh_goal_caption_layout, 0)
+
+    def request_delete(self, *_args):
+        self.stop_tracking()
+        scr = self.parent_screen
+        if scr is None:
+            w = self.parent
+            while w is not None:
+                if isinstance(w, ProjectInfoScreen):
+                    scr = w
+                    break
+                w = w.parent
+        if scr is not None:
+            scr.remove_time_goal_row(self)
 
     def _bind_caption_box_width(self, *args):
         box = self.ids.get("goal_caption_box")
@@ -2491,20 +2846,79 @@ class TimeGoalTrackRow(MDBoxLayout):
         if self.period_key != cur:
             self.logged_seconds = 0.0
             self.period_key = cur
+            self._has_reached_goal = False
+            self._overflow_cx = None
+            self._overflow_dir = -1
 
     def apply_logged_to_ui(self):
-        self._update_progress_from_time()
+        t = max(10.0, float(self.goal_target_seconds))
+        if float(self.logged_seconds) >= t:
+            self._has_reached_goal = True
+        self._update_progress_from_time(0)
 
-    def _update_progress_from_time(self):
+    def _track_width(self):
+        track = self.ids.get("goal_track")
+        if track is not None and track.width > 1:
+            return float(track.width)
+        return max(dp(160), float(self.width or 300) - dp(58))
+
+    def _road_bounds(self):
+        tw = self._track_width()
+        road_start = float(dp(8))
+        road_end = max(road_start + dp(96), tw - float(dp(8)))
+        car_w = float(dp(96))
+        half = car_w * 0.5
+        min_cx = road_start + half
+        max_cx = max(min_cx, road_end - half)
+        return tw, min_cx, max_cx
+
+    def _car_travel_speed(self, min_cx, max_cx):
+        """Same px/s as 0→100% progress: full road span per goal target duration."""
+        span = max(1.0, max_cx - min_cx)
+        duration = max(10.0, float(self.goal_target_seconds))
+        return span / duration
+
+    def _advance_overflow_car(self, min_cx, max_cx, dt):
+        """After 100%: drive the full road left ↔ right; flip at each end."""
+        if self._overflow_cx is None:
+            self._overflow_cx = max_cx
+            self._overflow_dir = -1
+        speed = self._car_travel_speed(min_cx, max_cx)
+        self._overflow_cx += self._overflow_dir * speed * max(float(dt), 0.0)
+        if self._overflow_cx >= max_cx:
+            self._overflow_cx = max_cx
+            self._overflow_dir = -1
+        elif self._overflow_cx <= min_cx:
+            self._overflow_cx = min_cx
+            self._overflow_dir = 1
+        self.car_scale_x = -1.0 if self._overflow_dir < 0 else 1.0
+        return self._overflow_cx
+
+    def _update_progress_from_time(self, dt=0):
         self._ensure_period()
         t = max(10.0, float(self.goal_target_seconds))
-        p = min(100.0, 100.0 * float(self.logged_seconds) / t)
-        w = max(200.0, float(self.width or 300))
-        px = 10.0 / w
-        start = 0.08 + px
-        span = max(0.2, 0.84 - px)
-        self.car_hint_x = min(0.93, start + (p / 100.0) * span)
-        self.percent_text = f"{int(round(p))}%"
+        p_raw = 100.0 * float(self.logged_seconds) / t
+        pct_int = int(round(p_raw))
+        self.percent_text = f"{pct_int}%"
+
+        if pct_int >= 100:
+            self._has_reached_goal = True
+        self.is_goal_complete = self._has_reached_goal
+        self.percent_card_color = _GOAL_CARD_GREEN if self._has_reached_goal else _GOAL_CARD_PURPLE
+
+        tw, min_cx, max_cx = self._road_bounds()
+
+        if self.tracking_active and self._has_reached_goal:
+            cx = self._advance_overflow_car(min_cx, max_cx, dt)
+        elif self._overflow_cx is not None:
+            cx = self._overflow_cx
+            self.car_scale_x = -1.0 if self._overflow_dir < 0 else 1.0
+        else:
+            self.car_scale_x = 1.0
+            p_track = min(100.0, p_raw)
+            cx = min_cx + (p_track / 100.0) * (max_cx - min_cx)
+
+        self.car_hint_x = cx / tw if tw > 0 else 0.5
         self.elapsed_text = format_goal_elapsed(self.logged_seconds) if self.logged_seconds >= 1 else ""
 
     def on_car_button_release(self, *args):
@@ -2524,11 +2938,12 @@ class TimeGoalTrackRow(MDBoxLayout):
             self._tick_ev.cancel()
             self._tick_ev = None
         self.tracking_active = False
+        self._update_progress_from_time(0)
 
     def _on_track_tick(self, dt):
         self._ensure_period()
         self.logged_seconds += float(dt)
-        self._update_progress_from_time()
+        self._update_progress_from_time(dt)
 
     def on_parent(self, *_args):
         if self.parent is None:

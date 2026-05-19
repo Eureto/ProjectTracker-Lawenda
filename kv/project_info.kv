@@ -1,6 +1,6 @@
 #:import utils kivy.utils
-#:import BoxLayout kivy.uix.boxlayout.BoxLayout
 #:import Label kivy.uix.label.Label
+#:import BoxLayout kivy.uix.boxlayout.BoxLayout
 #:import ProjectNoteRow screens.project_info.ProjectNoteRow
 #:import TimeGoalTrackRow screens.project_info.TimeGoalTrackRow
 #:import CarProgressButton screens.project_info.CarProgressButton
@@ -81,8 +81,8 @@
         size_hint_x: 1
         spacing: dp(4)
 
-        # Road + car + flag (elapsed drawn last so it stays above the car)
         RelativeLayout:
+            id: goal_track
             size_hint_y: None
             height: dp(110)
 
@@ -101,9 +101,16 @@
                 allow_stretch: True
                 keep_ratio: True
                 pos_hint: {"center_x": root.car_hint_x}
-                # Road line at y=16; lower y moves the car down (wheels toward the line).
                 y: -dp(9)
                 on_release: root.on_car_button_release()
+                canvas.before:
+                    PushMatrix
+                    Scale:
+                        x: root.car_scale_x
+                        y: 1
+                        origin: self.center
+                canvas.after:
+                    PopMatrix
 
             MDIcon:
                 icon: "flag-checkered"
@@ -111,7 +118,15 @@
                 text_color: 1, 1, 1, 1
                 icon_size: dp(22)
                 adaptive_size: True
-                pos_hint: {"right": 0.98, "top": 0.62}
+                pos_hint: {"right": 1, "top": 0.42}
+                canvas.before:
+                    PushMatrix
+                    Scale:
+                        x: -1
+                        y: 1
+                        origin: self.center
+                canvas.after:
+                    PopMatrix
 
             MDLabel:
                 text: root.elapsed_text
@@ -130,7 +145,6 @@
                 pos_hint: {"center_x": root.car_hint_x}
                 y: car_btn.top - self.height - dp(2)
 
-        # Goal name + period (plain Kivy widgets — avoids MD “black bar” / invisible MDLabel)
         BoxLayout:
             id: goal_caption_box
             orientation: "horizontal"
@@ -164,55 +178,118 @@
                 halign: "right"
                 valign: "middle"
 
-    AnchorLayout:
+    MDBoxLayout:
+        orientation: "vertical"
         size_hint_x: None
         width: dp(48)
-        anchor_x: "center"
-        anchor_y: "center"
+        spacing: dp(8)
+        padding: [0, dp(2), 0, 0]
 
-        MDCard:
-            size_hint: None, None
-            width: dp(46)
-            height: dp(40)
-            radius: [dp(8), dp(8), dp(8), dp(8)]
-            md_bg_color: utils.get_color_from_hex("#7e57c2")
-            elevation: 0
+        AnchorLayout:
+            size_hint_y: None
+            height: dp(52)
+            anchor_x: "center"
+            anchor_y: "top"
 
-            MDLabel:
-                text: root.percent_text
-                halign: "center"
-                valign: "middle"
-                theme_text_color: "Custom"
-                text_color: 1, 1, 1, 1
-                font_size: sp(13)
+            RelativeLayout:
+                size_hint: None, None
+                size: dp(46), dp(48)
+
+                MDCard:
+                    id: percent_card
+                    size_hint: None, None
+                    size: dp(46), dp(40)
+                    pos: 0, 0
+                    radius: [dp(8), dp(8), dp(8), dp(8)]
+                    md_bg_color: root.percent_card_color
+                    elevation: 0
+
+                    MDLabel:
+                        text: root.percent_text
+                        halign: "center"
+                        valign: "middle"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 1
+                        font_size: sp(13)
+                        bold: True
+
+                Image:
+                    source: root.crown_source
+                    opacity: 1 if root.is_goal_complete else 0
+                    size_hint: None, None
+                    size: dp(26), dp(26)
+                    allow_stretch: True
+                    keep_ratio: True
+                    pos_hint: {"center_x": 0.5}
+                    y: dp(30)
+                    nocache: True
+
+        AnchorLayout:
+            size_hint_y: None
+            height: dp(44)
+            anchor_x: "center"
+            anchor_y: "top"
+
+            Button:
+                id: delete_btn
+                size_hint: None, None
+                size: dp(40), dp(40)
+                text: "×"
+                color: 1, 1, 1, 1
+                font_size: sp(22)
                 bold: True
+                background_normal: ""
+                background_color: 0, 0, 0, 0
+                on_press: root.request_delete()
+                canvas.before:
+                    Color:
+                        rgba: utils.get_color_from_hex("#c62828")
+                    Ellipse:
+                        pos: self.pos
+                        size: self.size
+
+<SectionHeaderAction@MDIconButton>:
+    size_hint: None, None
+    width: dp(48)
+    height: dp(28)
+    theme_text_color: "Custom"
+    text_color: 1, 1, 1, 1
+    icon_size: dp(24)
+    md_bg_color: 0, 0, 0, 0
 
 <ZrobioneHeaderBar>:
+    size_hint_y: None
+    height: dp(28)
     MDLabel:
         id: zrobione_title
         text: "Zrobione"
-        font_size: sp(15)
+        font_size: sp(14)
         bold: True
         theme_text_color: "Custom"
         text_color: 1, 1, 1, 1
         halign: "left"
         valign: "middle"
+        text_size: self.size
+    Widget:
         size_hint_x: 1
-    MDIcon:
-        id: zrobione_chevron
-        icon: "chevron-down"
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        icon_size: dp(22)
+    AnchorLayout:
         size_hint_x: None
-        width: dp(28)
-        pos_hint: {"center_y": 0.5}
+        size_hint_y: 1
+        width: dp(48)
+        anchor_x: "center"
+        anchor_y: "center"
+        MDIcon:
+            id: zrobione_chevron
+            icon: "chevron-down"
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+            icon_size: dp(24)
+            size_hint: None, None
 
 <ZrobioneSection>:
     orientation: "vertical"
     spacing: dp(8)
     size_hint_y: None
-    height: self.minimum_height
 
     ZrobioneHeaderBar:
         id: zrobione_header
@@ -222,38 +299,45 @@
         orientation: "vertical"
         spacing: dp(14)
         size_hint_y: None
-        height: self.minimum_height
 
 <ChecklistGoalRow>:
-    padding: [0, dp(4)]
-    MDLabel:
-        id: index_lbl
-        text: root.index_label
+    size_hint_y: None
+    valign: "middle"
+    AnchorLayout:
+        id: index_anchor
         size_hint_x: None
+        size_hint_y: None
         width: dp(22) if root.index_label else 0
         opacity: 1 if root.index_label else 0
-        font_size: sp(14)
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        halign: "right"
-        valign: "middle"
-        text_size: self.width, None
-        size_hint_y: 1
+        anchor_x: "right"
+        anchor_y: "center"
+        Label:
+            id: index_lbl
+            text: root.index_label
+            size_hint: None, None
+            font_size: sp(14)
+            color: 1, 1, 1, 1
+            halign: "right"
+            valign: "middle"
+            shorten: False
     UnderlineTextBlock:
         id: underline_block
+        compact_rule: True
         size_hint_x: 1
         size_hint_y: None
         text: root.display_text
     AnchorLayout:
+        id: status_anchor
         size_hint_x: None
-        width: dp(30)
-        size_hint_y: 1
+        size_hint_y: None
+        width: dp(48)
         anchor_x: "center"
         anchor_y: "center"
         StatusCircleButton:
             id: status_btn
             show_crown: False
             white_style: True
+            size_hint: None, None
             size: dp(26), dp(26)
 
 <StageItemRow>:
@@ -300,7 +384,7 @@
         MDBoxLayout:
             orientation: "vertical"
             size_hint: 1, 1
-            padding: [dp(18), dp(28), dp(18), dp(100)]
+            padding: [dp(18), dp(28), dp(18), dp(67)]
 
             MDLabel:
                 text: root.project_title or "Projekt"
@@ -352,12 +436,8 @@
                                 text_size: self.size
                             Widget:
                                 size_hint_x: 1
-                            MDIconButton:
+                            SectionHeaderAction:
                                 icon: "plus"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                icon_size: dp(24)
-                                md_bg_color: 0, 0, 0, 0
                                 on_release: root.open_add_note_sheet()
 
                         MDBoxLayout:
@@ -448,12 +528,8 @@
                                 text_size: self.size
                             Widget:
                                 size_hint_x: 1
-                            MDIconButton:
+                            SectionHeaderAction:
                                 icon: "plus"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                icon_size: dp(24)
-                                md_bg_color: 0, 0, 0, 0
                                 on_release: root.on_goals_add_clicked()
 
                         MDBoxLayout:
@@ -469,6 +545,7 @@
 
                     # --- Lista celów ---
                     MDBoxLayout:
+                        id: lista_celow_box
                         orientation: "vertical"
                         spacing: dp(14)
                         size_hint_y: None
@@ -488,12 +565,8 @@
                                 text_size: self.size
                             Widget:
                                 size_hint_x: 1
-                            MDIconButton:
+                            SectionHeaderAction:
                                 icon: "plus"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                icon_size: dp(24)
-                                md_bg_color: 0, 0, 0, 0
                                 on_release: root.open_add_checklist_goal_sheet()
 
                         MDBoxLayout:
@@ -502,6 +575,7 @@
                             spacing: dp(14)
                             size_hint_y: None
                             height: self.minimum_height
+                            on_minimum_height: self.height = self.minimum_height
 
                         ZrobioneSection:
                             id: zrobione_section
@@ -532,12 +606,8 @@
                                 text_size: self.size
                             Widget:
                                 size_hint_x: 1
-                            MDIconButton:
+                            SectionHeaderAction:
                                 icon: "plus"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                icon_size: dp(24)
-                                md_bg_color: 0, 0, 0, 0
                                 on_release: root.open_add_etapy_sheet()
 
                         ScrollView:
@@ -567,13 +637,13 @@
         # Bottom navigation (same layout as home; middle action = project settings)
         MDFloatLayout:
             size_hint: 1, None
-            height: dp(90)
+            height: dp(60)
             pos_hint: {"center_x": 0.5, "y": 0}
 
             MDCard:
-                size_hint: 0.96, 0.75
-                pos_hint: {"center_x": 0.5, "y": 0.1}
-                radius: [dp(25), ]
+                size_hint: 1, 1
+                pos_hint: {"x": 0, "y": 0}
+                radius: [dp(25), dp(25), 0, 0]
                 elevation: 4
                 md_bg_color: 1, 1, 1, 1
 
@@ -583,7 +653,7 @@
                         anchor_y: "center"
                         MDIconButton:
                             icon: "home-outline"
-                            icon_size: dp(45)
+                            icon_size: dp(30)
                             on_release: root.go_home()
 
                     Widget:
@@ -593,13 +663,13 @@
                         anchor_y: "center"
                         MDIconButton:
                             icon: "chart-arc"
-                            icon_size: dp(45)
+                            icon_size: dp(30)
                             on_release: root.go_statistics()
 
             ClickableAnchorLayout:
                 size_hint: None, None
-                size: dp(140), dp(65)
-                pos_hint: {"center_x": 0.5, "center_y": 0.65}
+                size: dp(120), dp(56)
+                pos_hint: {"center_x": 0.5, "center_y": 0.67}
                 on_release: root.open_project_settings()
                 canvas.before:
                     Color:
@@ -607,11 +677,11 @@
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
-                        radius: [dp(20)]
+                        radius: [dp(18)]
 
                 MDIcon:
                     icon: "cog-outline"
                     theme_text_color: "Custom"
                     text_color: 1, 1, 1, 1
-                    icon_size: dp(55)
+                    icon_size: dp(48)
                     adaptive_size: True

@@ -8,6 +8,8 @@
         orientation: "horizontal"
         spacing: dp(8)
         size_hint_x: 1
+        padding: [dp(10), 0, 0, 0]
+
         MDIcon:
             icon: root.icon_name
             theme_text_color: "Custom"
@@ -15,6 +17,7 @@
             size_hint: None, None
             size: dp(28), dp(28)
             pos_hint: {"center_y": 0.5}
+            padding: [0,0,10,0]
         MDLabel:
             text: root.project_name
             theme_text_color: "Custom"
@@ -201,12 +204,12 @@
         # --- Bottom bar (same structure as home) ---
         MDFloatLayout:
             size_hint: 1, None
-            height: dp(90)
+            height: dp(60)
 
             MDCard:
-                size_hint: 0.96, 0.75
-                pos_hint: {'center_x': 0.5, 'y': 0.1}
-                radius: [dp(25), ]
+                size_hint: 1, 1
+                pos_hint: {'x': 0, 'y': 0}
+                radius: [dp(25), dp(25), 0, 0]
                 elevation: 4
                 md_bg_color: 1, 1, 1, 1
 
@@ -216,7 +219,7 @@
                         anchor_y: 'center'
                         MDIconButton:
                             icon: "home-outline"
-                            icon_size: dp(45)
+                            icon_size: dp(30)
                             on_release: app.root.current = "home"
 
                     Widget:
@@ -226,13 +229,13 @@
                         anchor_y: 'center'
                         MDIconButton:
                             icon: "chart-arc"
-                            icon_size: dp(45)
+                            icon_size: dp(30)
                             on_release: app.root.current = "statistics"
 
             ClickableAnchorLayout:
                 size_hint: None, None
-                size: dp(140), dp(65)
-                pos_hint: {'center_x': 0.5, 'center_y': 0.65}
+                size: dp(120), dp(56)
+                pos_hint: {'center_x': 0.5, 'center_y': 0.67}
                 on_release: app.root.current = "add_project"
                 canvas.before:
                     Color:
@@ -240,11 +243,14 @@
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
-                        radius: [dp(20)]
+                        radius: [dp(18)]
 
-                MDIcon:
-                    icon: "plus"
-                    theme_text_color: "Custom"
-                    text_color: 1, 1, 1, 1
-                    icon_size: dp(55)
-                    adaptive_size: True
+                Label:
+                    text: "+"
+                    bold: True
+                    font_size: dp(48)
+                    color: 1, 1, 1, 1
+                    halign: "center"
+                    valign: "middle"
+                    size_hint: None, None
+                    pos_hint: {"center_x": 0.5, "center_y": 0.5}

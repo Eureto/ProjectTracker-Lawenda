@@ -1,3 +1,4 @@
+import json
 import os
 
 from kivy.config import Config
@@ -9,6 +10,7 @@ from kivymd.app import MDApp
 from kivy.lang import Builder
 from kivy.core.window import Window
 from kivy.utils import platform
+from kivy.clock import Clock
 from kivy.properties import StringProperty, BooleanProperty
 from kivy.uix.screenmanager import ScreenManager, Screen
 from screens.home import HomeScreen
@@ -18,14 +20,15 @@ from screens.project_info import ProjectInfoScreen
 
 # Window size for testing on pc
 if platform in ('win', 'linux', 'macosx'):
-    Window.size = (360, 740)
+    Window.size = (450, 900)
 
 class TimeTrackerApp(MDApp):
     theme_bg = StringProperty('#8A2BE2')
     theme_card_bg = StringProperty('#B388FF')
     theme_session_bg = StringProperty('#5E35B1')
+    theme_session_header = StringProperty('#E8D5FC')
     theme_text_dark = StringProperty('#212121')
-    edit_mode = BooleanProperty(False)
+    grid_layout = BooleanProperty(False)
 
     def build(self):
         base_path = os.path.dirname(__file__)
@@ -50,14 +53,42 @@ class TimeTrackerApp(MDApp):
                 pass
         # Initialize the 3 samples once the app starts
         home_screen = self.screen_manager.get_screen('home')
+        self.load_layout_pref()
         home_screen.load_projects()
-        home_screen.restore_card_positions()
+        home_screen.schedule_initial_layout()
         home_screen.refresh_last_session()
         self.screen_manager.get_screen("statistics").refresh_statistics()
 
+    def _layout_pref_path(self):
+        return os.path.join(self.user_data_dir, "layout_pref.json")
+
+    def load_layout_pref(self):
+        path = self._layout_pref_path()
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self.grid_layout = bool(data.get("grid_layout", False))
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    def save_layout_pref(self):
+        path = self._layout_pref_path()
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump({"grid_layout": self.grid_layout}, f)
+        except OSError:
+            pass
 
     def toggle_layout_menu(self):
-        self.edit_mode = not self.edit_mode
+        self.grid_layout = not self.grid_layout
+        self.save_layout_pref()
+        home = self.screen_manager.get_screen("home")
+        if self.grid_layout:
+            home.apply_grid_layout()
+        else:
+            home.restore_card_positions()
 
 if __name__ == '__main__':
     #test()

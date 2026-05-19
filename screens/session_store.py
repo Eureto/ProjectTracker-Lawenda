@@ -232,7 +232,13 @@ def schedule_home_last_session_refresh():
 
 def get_last_session():
     sessions = load_sessions()
-    return sessions[0] if sessions else None
+    if not sessions:
+        return None
+    session = dict(sessions[0])
+    meta = find_project_meta(session.get("project_title", ""))
+    if meta.get("icon"):
+        session["emoji_source"] = meta["icon"]
+    return session
 
 
 def format_duration_hms(seconds):
