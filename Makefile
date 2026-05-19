@@ -17,6 +17,9 @@ RUN_ENV = $(ACTIVATE) &&
 # Staging dir buildozer clears with Python rmtree before each copy (fails on FUSE/NTFS).
 BUILDOZER_APP_DIR = .buildozer/android/app
 
+# Android application id (package.domain + package.name from buildozer.spec)
+ANDROID_PACKAGE = $(shell awk -F' = ' '/^package\.domain/ {d=$$2} /^package\.name/ {n=$$2} END {if (d && n) print d"."n}' buildozer.spec)
+
 # Set help as the default command when no arguments are passed
 .DEFAULT_GOAL := help
 
@@ -26,7 +29,7 @@ BUILDOZER_APP_DIR = .buildozer/android/app
 # 3. head -n 1: takes the first available device
 DEVICE_CONNECTED = $(shell adb devices 2>/dev/null | grep -v "List of devices" | grep -v "^$$" | head -n 1)
 
-.PHONY: help deploy debug test clean logcat prepare android-app-reset default
+.PHONY: help deploy debug test clean logcat prepare android-app-reset uninstall default
 
 # Detect if Java 17 is already the active version
 JAVA_VER_CHECK = $(shell java -version 2>&1 | grep -q "17\." && echo "1" || echo "0")
@@ -110,3 +113,15 @@ logcat: prepare ## Stream Android logs from the device
 	else \
 		buildozer android logcat; \
 	fi
+
+uninstall: ## Remove the app from connected Android device
+	@if [ -z "$(DEVICE_CONNECTED)" ]; then \
+		echo "[ERROR] No device connected. Cannot uninstall."; \
+		exit 1; \
+	fi
+	@if [ -z "$(ANDROID_PACKAGE)" ]; then \
+		echo "[ERROR] Could not read package id from buildozer.spec."; \
+		exit 1; \
+	fi
+	@echo "[INFO] Uninstalling $(ANDROID_PACKAGE) from device..."
+	@adb uninstall "$(ANDROID_PACKAGE)" && echo "[INFO] App removed." || echo "[WARN] Uninstall failed (app may not be installed)."
