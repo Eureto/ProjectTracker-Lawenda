@@ -248,26 +248,43 @@
                         pos: self.pos
                         size: self.size
 
+<SectionHeaderAction@MDIconButton>:
+    size_hint: None, None
+    width: dp(48)
+    height: dp(28)
+    theme_text_color: "Custom"
+    text_color: 1, 1, 1, 1
+    icon_size: dp(24)
+    md_bg_color: 0, 0, 0, 0
+
 <ZrobioneHeaderBar>:
+    size_hint_y: None
+    height: dp(28)
     MDLabel:
         id: zrobione_title
         text: "Zrobione"
-        font_size: sp(15)
+        font_size: sp(14)
         bold: True
         theme_text_color: "Custom"
         text_color: 1, 1, 1, 1
         halign: "left"
         valign: "middle"
+        text_size: self.size
+    Widget:
         size_hint_x: 1
-    MDIcon:
-        id: zrobione_chevron
-        icon: "chevron-down"
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        icon_size: dp(22)
+    AnchorLayout:
         size_hint_x: None
-        width: dp(28)
-        pos_hint: {"center_y": 0.5}
+        size_hint_y: 1
+        width: dp(48)
+        anchor_x: "center"
+        anchor_y: "center"
+        MDIcon:
+            id: zrobione_chevron
+            icon: "chevron-down"
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+            icon_size: dp(24)
+            size_hint: None, None
 
 <ZrobioneSection>:
     orientation: "vertical"
@@ -313,7 +330,7 @@
         id: status_anchor
         size_hint_x: None
         size_hint_y: None
-        width: dp(30)
+        width: dp(48)
         anchor_x: "center"
         anchor_y: "center"
         StatusCircleButton:
@@ -367,7 +384,7 @@
         MDBoxLayout:
             orientation: "vertical"
             size_hint: 1, 1
-            padding: [dp(18), dp(28), dp(18), dp(100)]
+            padding: [dp(18), dp(28), dp(18), dp(67)]
 
             MDLabel:
                 text: root.project_title or "Projekt"
@@ -419,12 +436,8 @@
                                 text_size: self.size
                             Widget:
                                 size_hint_x: 1
-                            MDIconButton:
+                            SectionHeaderAction:
                                 icon: "plus"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                icon_size: dp(24)
-                                md_bg_color: 0, 0, 0, 0
                                 on_release: root.open_add_note_sheet()
 
                         MDBoxLayout:
@@ -515,12 +528,8 @@
                                 text_size: self.size
                             Widget:
                                 size_hint_x: 1
-                            MDIconButton:
+                            SectionHeaderAction:
                                 icon: "plus"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                icon_size: dp(24)
-                                md_bg_color: 0, 0, 0, 0
                                 on_release: root.on_goals_add_clicked()
 
                         MDBoxLayout:
@@ -556,12 +565,8 @@
                                 text_size: self.size
                             Widget:
                                 size_hint_x: 1
-                            MDIconButton:
+                            SectionHeaderAction:
                                 icon: "plus"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                icon_size: dp(24)
-                                md_bg_color: 0, 0, 0, 0
                                 on_release: root.open_add_checklist_goal_sheet()
 
                         MDBoxLayout:
@@ -601,12 +606,8 @@
                                 text_size: self.size
                             Widget:
                                 size_hint_x: 1
-                            MDIconButton:
+                            SectionHeaderAction:
                                 icon: "plus"
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                icon_size: dp(24)
-                                md_bg_color: 0, 0, 0, 0
                                 on_release: root.open_add_etapy_sheet()
 
                         ScrollView:
@@ -636,7 +637,7 @@
         # Bottom navigation (same layout as home; middle action = project settings)
         MDFloatLayout:
             size_hint: 1, None
-            height: dp(90)
+            height: dp(60)
             pos_hint: {"center_x": 0.5, "y": 0}
 
             MDCard:
@@ -652,7 +653,7 @@
                         anchor_y: "center"
                         MDIconButton:
                             icon: "home-outline"
-                            icon_size: dp(45)
+                            icon_size: dp(30)
                             on_release: root.go_home()
 
                     Widget:
@@ -662,13 +663,13 @@
                         anchor_y: "center"
                         MDIconButton:
                             icon: "chart-arc"
-                            icon_size: dp(45)
+                            icon_size: dp(30)
                             on_release: root.go_statistics()
 
             ClickableAnchorLayout:
                 size_hint: None, None
-                size: dp(140), dp(65)
-                pos_hint: {"center_x": 0.5, "center_y": 0.65}
+                size: dp(120), dp(56)
+                pos_hint: {"center_x": 0.5, "center_y": 0.67}
                 on_release: root.open_project_settings()
                 canvas.before:
                     Color:
@@ -676,11 +677,11 @@
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
-                        radius: [dp(20)]
+                        radius: [dp(18)]
 
                 MDIcon:
                     icon: "cog-outline"
                     theme_text_color: "Custom"
                     text_color: 1, 1, 1, 1
-                    icon_size: dp(55)
+                    icon_size: dp(48)
                     adaptive_size: True

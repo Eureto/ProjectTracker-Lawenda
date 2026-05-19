@@ -243,7 +243,7 @@
     # Section: Bottom Navigation and Global Actions
     MDFloatLayout:
         size_hint: 1, None
-        height: dp(90)
+        height: dp(60)
         pos_hint: {'center_x': 0.5, 'y': 0}
         
         # Main Bottom Navbar — flush left/right/bottom; rounded top only
@@ -261,7 +261,7 @@
                     anchor_y: 'center'
                     MDIconButton:
                         icon: "home-outline"
-                        icon_size: dp(45)
+                        icon_size: dp(30)
 
                 # Middle slot: Empty to provide space for the Floating Action Button
                 Widget:
@@ -271,15 +271,15 @@
                     anchor_y: 'center'
                     MDIconButton:
                         icon: "chart-arc"
-                        icon_size: dp(45)
+                        icon_size: dp(30)
                         on_release: app.root.current = "statistics"
 
         # Section: Global Floating Action Button (Add Project/Session)
         # We use ClickableAnchorLayout to center the icon perfectly within the rectangle
         ClickableAnchorLayout:
             size_hint: None, None
-            size: dp(140), dp(65)
-            pos_hint: {'center_x': 0.5, 'center_y': 0.65}
+            size: dp(120), dp(56)
+            pos_hint: {'center_x': 0.5, 'center_y': 0.67}
             on_release: app.root.current = "add_project"
             canvas.before:
                 Color:
@@ -287,11 +287,14 @@
                 RoundedRectangle:
                     pos: self.pos
                     size: self.size
-                    radius: [dp(20)]
+                    radius: [dp(18)]
             
-            MDIcon:
-                icon: "plus"
-                theme_text_color: "Custom"
-                text_color: 1, 1, 1, 1
-                icon_size: dp(55)
-                adaptive_size: True
+            Label:
+                text: "+"
+                bold: True
+                font_size: dp(48)
+                color: 1, 1, 1, 1
+                halign: "center"
+                valign: "middle"
+                size_hint: None, None
+                pos_hint: {"center_x": 0.5, "center_y": 0.5}

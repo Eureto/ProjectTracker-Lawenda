@@ -47,6 +47,9 @@ RESET_NEVER = "never"
 RESET_DAILY = "daily"
 RESET_WEEKLY = "weekly"
 
+# Match MDIconButton width so + icons, Zrobione chevron, and status circles share one vertical line.
+_RIGHT_ACTION_WIDTH = dp(48)
+
 _SHEET_FIELD_RADIUS = dp(12)
 _SHEET_BTN_RADIUS = dp(12)
 
@@ -165,6 +168,44 @@ class RoundedSheetSpinner(_RoundedSheetBackground, Spinner):
         self._init_rounded_bg()
 
 
+class ResetPeriodChip(Button):
+    """Rounded reset-period choice for the time-goal sheet."""
+
+    selected = BooleanProperty(False)
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("background_normal", "")
+        kwargs.setdefault("background_down", "")
+        kwargs.setdefault("background_color", (0, 0, 0, 0))
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(40))
+        kwargs.setdefault("size_hint_x", 1)
+        kwargs.setdefault("font_size", sp(13))
+        super().__init__(**kwargs)
+        self.bind(
+            selected=self._apply_visual,
+            pos=self._apply_visual,
+            size=self._apply_visual,
+            state=self._apply_visual,
+        )
+        Clock.schedule_once(lambda _dt: self._apply_visual(), 0)
+
+    def _apply_visual(self, *_args):
+        r = float(_SHEET_BTN_RADIUS)
+        if self.selected:
+            fill = list(_PURPLE)
+            self.color = 1, 1, 1, 1
+        else:
+            fill = [0.93, 0.90, 0.98, 1]
+            self.color = list(_PURPLE[:3]) + [1]
+        if self.state == "down":
+            fill = [c * 0.92 for c in fill[:3]] + [fill[3]]
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*fill)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[r, r, r, r])
+
+
 class RoundedSheetButton(Button):
     """Rounded action button for bottom sheets (replaces flat MD buttons in sheets)."""
 
@@ -256,6 +297,20 @@ def parse_goal_target_seconds(goal_str):
     if m:
         return max(10.0, float(m.group(1)))
     return 3600.0
+
+
+def parse_goal_hours_minutes(hours_text, minutes_text):
+    """Build target duration from separate hour and minute fields."""
+    try:
+        hours = max(0, int((hours_text or "0").strip()))
+    except ValueError:
+        hours = 0
+    try:
+        minutes = max(0, int((minutes_text or "0").strip()))
+    except ValueError:
+        minutes = 0
+    total = hours * 3600 + minutes * 60
+    return float(max(60, total))
 
 
 def format_goal_elapsed(seconds):
@@ -461,7 +516,7 @@ class ChecklistGoalRow(MDBoxLayout):
         self._underline = underline
         self._status_btn = btn
         idx_w = dp(22) if self.index_label else 0
-        btn_w = dp(30)
+        btn_w = _RIGHT_ACTION_WIDTH
         btn_h = dp(26)
 
         underline.text = self.display_text
@@ -525,8 +580,8 @@ class ZrobioneHeaderBar(MDBoxLayout):
     def __init__(self, **kwargs):
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", dp(40))
-        kwargs.setdefault("padding", [dp(2), 0, dp(4), 0])
+        kwargs.setdefault("height", dp(28))
+        kwargs.setdefault("padding", [0, 0, 0, 0])
         kwargs.setdefault("spacing", dp(8))
         super().__init__(**kwargs)
 
@@ -786,6 +841,7 @@ class ProjectInfoScreen(MDScreen):
     _run_started_at = None
     _etapy_groups = []
     _etapy_selected_index = 0
+    _goal_period_ev = None
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -793,6 +849,7 @@ class ProjectInfoScreen(MDScreen):
         self._etapy_sheet = None
         self._add_note_sheet = None
         self._goal_sheet = None
+        self._goal_period_ev = None
         self.bind(project_title=self._on_project_title_changed)
 
     def _on_project_title_changed(self, *_args):
@@ -803,9 +860,16 @@ class ProjectInfoScreen(MDScreen):
     def on_enter(self):
         Window.bind(on_keyboard=self._on_keyboard)
         self.load_project_content()
+        self._refresh_time_goal_periods()
+        if self._goal_period_ev is not None:
+            self._goal_period_ev.cancel()
+        self._goal_period_ev = Clock.schedule_interval(self._refresh_time_goal_periods, 60)
 
     def on_leave(self):
         Window.unbind(on_keyboard=self._on_keyboard)
+        if self._goal_period_ev is not None:
+            self._goal_period_ev.cancel()
+            self._goal_period_ev = None
         if self.timer_running:
             self._finish_timer_run()
             self.timer_running = False
@@ -813,6 +877,23 @@ class ProjectInfoScreen(MDScreen):
         self._stop_timer_event()
         self._stop_all_goal_trackers()
         self.save_project_content()
+
+    def _refresh_time_goal_periods(self, *_args):
+        """Reset car-goal progress when the calendar day or ISO week rolls over."""
+        goals = self.ids.get("goals_list")
+        if goals is None:
+            return
+        changed = False
+        for row in list(goals.children):
+            if not isinstance(row, TimeGoalTrackRow):
+                continue
+            before_pk, before_log = row.period_key, row.logged_seconds
+            row._ensure_period()
+            if row.period_key != before_pk or row.logged_seconds != before_log:
+                row.apply_logged_to_ui()
+                changed = True
+        if changed:
+            self.save_project_content()
 
     def _stop_all_goal_trackers(self):
         for row in list(self.ids.goals_list.children):
@@ -1606,7 +1687,7 @@ class _BottomSheetKeyboardMixin:
             pass
 
     def _sheet_input_focused(self):
-        for name in ("field", "title_field", "goal_field"):
+        for name in ("field", "title_field", "hours_field", "minutes_field", "goal_field"):
             w = getattr(self, name, None)
             if w is not None and getattr(w, "focus", False):
                 return True
@@ -1974,17 +2055,50 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         self._body.add_widget(self.title_field)
 
-        self.goal_field = RoundedSheetTextInput(
-            hint_text="Ile czasu (np. 3h, 15min)",
-            text="1h",
-            multiline=False,
+        time_row = MDBoxLayout(
+            orientation="horizontal",
+            spacing=dp(10),
             size_hint_y=None,
-            height=dp(44),
-            font_size=sp(15),
-            padding=[dp(12), dp(10), dp(12), dp(10)],
-            foreground_color=get_color_from_hex("#222222"),
+            height=dp(62),
         )
-        self._body.add_widget(self.goal_field)
+        for label_text, default_val, attr in (
+            ("Godziny", "1", "hours_field"),
+            ("Minuty", "0", "minutes_field"),
+        ):
+            col = MDBoxLayout(
+                orientation="vertical",
+                spacing=dp(4),
+                size_hint_x=0.5,
+                size_hint_y=None,
+                height=dp(62),
+            )
+            col.add_widget(
+                MDLabel(
+                    text=label_text,
+                    font_style="Caption",
+                    theme_text_color="Custom",
+                    text_color=(0.25, 0.25, 0.28, 1),
+                    size_hint_y=None,
+                    height=dp(16),
+                    valign="middle",
+                )
+            )
+            field = RoundedSheetTextInput(
+                text=default_val,
+                hint_text="0",
+                multiline=False,
+                input_filter="int",
+                size_hint_y=None,
+                height=dp(44),
+                font_size=sp(16),
+                padding=[dp(12), dp(10), dp(12), dp(10)],
+                foreground_color=get_color_from_hex("#222222"),
+                halign="center",
+            )
+            setattr(self, attr, field)
+            col.add_widget(field)
+            time_row.add_widget(col)
+        self._body.add_widget(time_row)
 
         self._body.add_widget(
             MDLabel(
@@ -1997,31 +2111,35 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
-        self._mode_by_label = {
-            "Codziennie": RESET_DAILY,
-            "Tygodniowo": RESET_WEEKLY,
-            "Bez resetu": RESET_NEVER,
-        }
-        self.freq_spinner = RoundedSheetSpinner(
-            text="Tygodniowo",
-            values=("Codziennie", "Tygodniowo", "Bez resetu"),
-            size_hint_x=1,
+        self._selected_reset_mode = RESET_WEEKLY
+        self._reset_chips = {}
+        chip_row = MDBoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
             size_hint_y=None,
-            height=dp(44),
-            fill_color=[0.95, 0.95, 0.97, 1],
-            color=(0.1, 0.1, 0.1, 1),
+            height=dp(40),
         )
-        self._body.add_widget(self.freq_spinner)
+        for label, mode in (
+            ("Codziennie", RESET_DAILY),
+            ("Tygodniowo", RESET_WEEKLY),
+            ("Bez resetu", RESET_NEVER),
+        ):
+            chip = ResetPeriodChip(text=label)
+            chip.bind(on_release=lambda _inst, m=mode: self._select_reset_mode(m))
+            self._reset_chips[mode] = chip
+            chip_row.add_widget(chip)
+        self._body.add_widget(chip_row)
+        self._select_reset_mode(RESET_WEEKLY)
 
         self._body.add_widget(
             MDLabel(
-                text="Codziennie / tygodniowo / bez resetu — krótszy cel = szybszy przejazd auta.",
+                text="Krótszy cel = szybszy przejazd auta na osi czasu.",
                 font_style="Caption",
                 theme_text_color="Custom",
                 text_color=(0.35, 0.35, 0.38, 1),
                 size_hint_x=1,
                 size_hint_y=None,
-                height=dp(32),
+                height=dp(24),
                 shorten=True,
                 shorten_from="right",
             )
@@ -2059,6 +2177,11 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.panel.add_widget(bar)
 
         self.add_widget(root)
+
+    def _select_reset_mode(self, mode):
+        self._selected_reset_mode = mode
+        for m, chip in self._reset_chips.items():
+            chip.selected = m == mode
 
     def _sync_goal_body_height(self):
         spacing = float(self._body.spacing)
@@ -2124,12 +2247,14 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     def _commit(self):
         title = (self.title_field.text or "").strip()
-        qty = (self.goal_field.text or "").strip() or "1h"
         if not title:
             self.dismiss()
             return
-        mode = self._mode_by_label.get(self.freq_spinner.text, RESET_WEEKLY)
-        quota = parse_goal_target_seconds(qty)
+        quota = parse_goal_hours_minutes(
+            self.hours_field.text,
+            self.minutes_field.text,
+        )
+        mode = self._selected_reset_mode
         summary = format_goal_summary(quota, mode)
         self.project_screen.add_time_goal(
             title=title,
@@ -2146,7 +2271,8 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self._closing = True
         self._sheet_unbind_keyboard()
         self.title_field.focus = False
-        self.goal_field.focus = False
+        self.hours_field.focus = False
+        self.minutes_field.focus = False
         h = max(self.panel.height, dp(1))
         anim = Animation(y=-h, d=0.22, t="in_cubic")
         anim.bind(on_complete=lambda *a: super(AddTimeGoalBottomSheet, self).dismiss())
