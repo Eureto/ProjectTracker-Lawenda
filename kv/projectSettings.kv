@@ -1,0 +1,178 @@
+#:import utils kivy.utils
+#:import ProjectCard screens.home.ProjectCard
+
+<ProjectSettingsScreen>:
+    canvas.before:
+        Color:
+            rgba: utils.get_color_from_hex("#8A4BF4")
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    MDBoxLayout:
+        orientation: "vertical"
+        padding: dp(24), dp(44), dp(24), dp(0)
+        spacing: dp(0)
+
+        # ── Header ──
+        BoxLayout:
+            size_hint_y: None
+            height: dp(60)
+            spacing: dp(0)
+
+            ClickableAnchorLayout:
+                size_hint_x: None
+                width: dp(56)
+                anchor_x: "left"
+                on_release: root.cancel()
+                MDIcon:
+                    icon: "chevron-left"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+                    font_size: sp(50)
+                    adaptive_size: True
+
+            Label:
+                text: "Ustawienia projektu"
+                font_size: sp(20)
+                bold: True
+                color: 1, 1, 1, 1
+                halign: "center"
+                valign: "middle"
+                text_size: self.size
+
+            Widget:
+                size_hint_x: None
+                width: dp(56)
+
+        # ── Scrollable body ──
+        ScrollView:
+            do_scroll_x: False
+            size_hint_y: 1
+            bar_width: 0
+
+            MDBoxLayout:
+                orientation: "vertical"
+                adaptive_height: True
+                spacing: dp(18)
+                padding: [0, dp(24), 0, dp(120)]
+
+                # ── Preview card (live mirror of pending edits) ──
+                BoxLayout:
+                    orientation: "vertical"
+                    size_hint_y: None
+                    height: dp(290)
+                    spacing: dp(8)
+                    padding: [0, dp(30), 0, 0]
+
+                    AnchorLayout:
+                        size_hint_y: None
+                        height: dp(230)
+                        anchor_x: "center"
+                        anchor_y: "center"
+
+                        ProjectCard:
+                            id: preview_card
+                            interactive: False
+                            size_hint: None, None
+                            width: dp(200)
+                            height: dp(220)
+                            height_multiplier: 1
+                            title: name_input.text if name_input.text else "Tytuł Projektu"
+                            image_source: root.selected_image_path
+                            emoji_source: root.selected_icon
+                            card_color: root.selected_color
+                            title_font_style: "H6"
+                            emoji_size: dp(45)
+                            emoji_right_hint: 1.25
+                            emoji_right_hint_png: 1.05
+
+                    Label:
+                        text: "Podgląd"
+                        font_size: sp(14)
+                        color: utils.get_color_from_hex("#DDD0FF")
+                        size_hint_y: None
+                        height: dp(22)
+                        halign: "center"
+                        valign: "middle"
+                        text_size: self.size
+
+                # ── Project name input ──
+                ProjectTextInput:
+                    id: name_input
+                    hint_text: "Nazwa Projektu"
+                    icon_text: "pencil-outline"
+                    text: root.name_text
+                    on_text: root.on_name_input(self.text)
+
+                # ── Two tile rows: Zdjęcie / Kolor + Reset zdjęcia ──
+                BoxLayout:
+                    size_hint_y: None
+                    height: dp(80)
+                    spacing: dp(12)
+
+                    ProjectTileButton:
+                        label_text: "+ Zdjęcie"
+                        icon_text: "image-outline"
+                        on_release: root.select_photo()
+
+                    ProjectTileButton:
+                        label_text: "+ Kolor"
+                        icon_text: "palette-outline"
+                        on_release: root.select_color()
+
+                    ProjectTileButton:
+                        label_text: "Bez zdjęcia"
+                        icon_text: "image-off-outline"
+                        on_release: root.clear_photo()
+
+                # ── Delete project button ──
+                ClickableBoxLayout:
+                    size_hint_y: None
+                    height: dp(54)
+                    padding: dp(15), 0, dp(15), 0
+                    spacing: dp(10)
+                    on_release: root.delete_project()
+                    canvas.before:
+                        Color:
+                            rgba: utils.get_color_from_hex("#D94646")
+                        RoundedRectangle:
+                            pos: self.pos
+                            size: self.size
+                            radius: [dp(12)]
+
+                    MDIcon:
+                        icon: "trash-can-outline"
+                        theme_text_color: "Custom"
+                        text_color: 1, 1, 1, 1
+                        icon_size: sp(22)
+                        size_hint_x: None
+                        width: dp(28)
+
+                    Label:
+                        text: "Usuń projekt"
+                        color: 1, 1, 1, 1
+                        font_size: sp(16)
+                        bold: True
+                        halign: "left"
+                        valign: "middle"
+                        text_size: self.size
+
+    # ── Floating confirm (save) button ──
+    ClickableAnchorLayout:
+        size_hint: None, None
+        size: dp(68), dp(68)
+        pos_hint: {"center_x": 0.5, "y": 0.04}
+        on_release: root.save()
+        canvas.before:
+            Color:
+                rgba: utils.get_color_from_hex("#F3EAFF")
+            Ellipse:
+                pos: self.pos
+                size: self.size
+        MDIcon:
+            icon: "check"
+            icon_size: sp(34)
+            theme_text_color: "Custom"
+            text_color: utils.get_color_from_hex("#333333")
+            adaptive_size: True

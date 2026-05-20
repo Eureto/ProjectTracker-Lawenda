@@ -17,6 +17,7 @@ from screens.home import HomeScreen
 from screens.add_project import AddProjectScreen
 from screens.statistics import StatisticsScreen
 from screens.project_info import ProjectInfoScreen, ensure_android_timer_service
+from screens.project_settings import ProjectSettingsScreen
 from screens import active_timer
 from screens.emoji_assets import ensure_emoji_assets
 
@@ -34,17 +35,21 @@ class TimeTrackerApp(MDApp):
 
     def build(self):
         base_path = os.path.dirname(__file__)
-        # Load all KV files
+        # Load all KV files. projectSettings.kv depends on ProjectTextInput /
+        # ProjectTileButton / ClickableAnchorLayout / ClickableBoxLayout
+        # declared inside addProject.kv, so it must load after.
         Builder.load_file("kv/home.kv")
         Builder.load_file("kv/addProject.kv")
         Builder.load_file("kv/statistics.kv")
         Builder.load_file("kv/project_info.kv")
+        Builder.load_file("kv/projectSettings.kv")
 
         self.screen_manager = ScreenManager()
         self.screen_manager.add_widget(HomeScreen(name='home'))
         self.screen_manager.add_widget(AddProjectScreen(name='add_project'))
         self.screen_manager.add_widget(StatisticsScreen(name='statistics'))
         self.screen_manager.add_widget(ProjectInfoScreen(name='project_info'))
+        self.screen_manager.add_widget(ProjectSettingsScreen(name='project_settings'))
         return self.screen_manager
 
     def on_start(self):

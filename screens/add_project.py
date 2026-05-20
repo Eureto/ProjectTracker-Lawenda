@@ -3,8 +3,8 @@ import json
 import unicodedata
 from kivy.properties import StringProperty, ColorProperty, NumericProperty, ObjectProperty, ListProperty
 from kivy.uix.screenmanager import Screen
-from kivymd.uix.pickers import MDColorPicker
 from kivymd.uix.dialog import MDDialog
+from screens.color_palette import open_palette_picker
 from kivymd.uix.gridlayout import MDGridLayout
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.textfield import MDTextField
@@ -385,27 +385,14 @@ class AddProjectScreen(Screen):
         app.root.current = "home"
 
     def select_color(self):
-        # Reverting to the full MDColorPicker which includes the color wheel
-        color_picker = MDColorPicker(
-            size_hint=(0.8, 0.85),
-            default_color=self.selected_color,
-            text_button_ok="WYBIERZ",
-            text_button_cancel="ANULUJ",
-            type_color="HEX",
-            # Smaller values create a much smoother, longer gradient without hitting "white" too fast.
-            # These values provide a subtle but modern shift in hue.
-            adjacent_color_constants=[0.15, 0.3, 0.25],
-            # Makes the color bars and selection elements rounded and modern.
-            radius_color_scale=dp(15)
+        """Pick a project color from the curated swatch palette."""
+        open_palette_picker(
+            default_color=tuple(self.selected_color),
+            on_pick=self._apply_picked_color,
         )
-        color_picker.open()
-        # The on_release event is fired only when the "SELECT" button is clicked
-        color_picker.bind(on_release=self._confirm_color)
 
-    def _confirm_color(self, instance, type_color, color):
-        # Update property when the SELECT button is clicked
+    def _apply_picked_color(self, color):
         self.selected_color = color
-        instance.dismiss()
 
     def _populate_emoji_grid(self, emoji_list):
         """Populate grid with emoji buttons."""

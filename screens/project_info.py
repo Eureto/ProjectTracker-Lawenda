@@ -23,9 +23,7 @@ from kivy.uix.scrollview import ScrollView
 from kivymd.app import MDApp
 from kivy.uix.boxlayout import BoxLayout
 from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.card import MDCard
-from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 
@@ -440,6 +438,7 @@ class UnderlineTextBlock(BoxLayout):
     font_size = NumericProperty(sp(14))
     compact_rule = BooleanProperty(False)
     line_box_height = NumericProperty(0)
+    show_rule = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         kwargs.setdefault("orientation", "vertical")
@@ -466,11 +465,14 @@ class UnderlineTextBlock(BoxLayout):
             text_color=self._relayout,
             compact_rule=self._relayout,
             line_box_height=self._relayout,
+            show_rule=self._draw_rule,
         )
         Clock.schedule_once(lambda _dt: self._relayout(), 0)
 
     def _draw_rule(self, *_args):
         self._rule.canvas.clear()
+        if not self.show_rule:
+            return
         w, h = self._rule.size
         if w < 1 or h < 1:
             return
@@ -934,22 +936,26 @@ class TimelineSpine(Widget):
         node_cy = self.center_y
         with self.canvas:
             # Always draw the connecting line so the timeline spine reads as
-            # one chain even through Podkroki (was previously skipped for
-            # is_sub which broke the visual continuity with the parent Krok).
+            # one continuous chain — even through Podkroki and behind the
+            # arrow head.
             Color(*_GREY_NODE)
             Line(points=[cx, self.top, cx, self.y], width=dp(1.5))
             Color(*(_PURPLE if self.done else _GREY_NODE))
             if self.is_sub:
-                # Right-pointing arrow head ( > ) at the spine node, in
-                # place of the dot, to denote a Podkrok.
-                a = dp(4)
+                # Right-pointing arrow head ( > ) drawn to the RIGHT of the
+                # spine line so the line itself stays uninterrupted. The
+                # arrow's left tip starts ~dp(4) past the line so there's a
+                # clear visual gap between line and arrow.
+                gap = dp(4)
+                tip_x = cx + gap
+                a = dp(5)
                 Line(
                     points=[
-                        cx - a, node_cy + a,
-                        cx + a, node_cy,
-                        cx - a, node_cy - a,
+                        tip_x, node_cy + a,
+                        tip_x + a, node_cy,
+                        tip_x, node_cy - a,
                     ],
-                    width=dp(1.6),
+                    width=dp(1.8),
                 )
             else:
                 node_r = dp(6)
@@ -971,13 +977,23 @@ class EtapyPlusSpine(Widget):
 
     Width matches TimelineSpine (dp(22)) so the plus node lines up exactly with
     the dots above it in the timeline.
+
+    ``connect_top`` controls whether the upward line is drawn — set to False
+    when the row is the only timeline entry so the '+' button doesn't appear
+    to be connected to nothing.
     """
+
+    connect_top = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         kwargs.setdefault("size_hint_x", None)
         kwargs.setdefault("width", dp(22))
         super().__init__(**kwargs)
-        self.bind(pos=self._redraw, size=self._redraw)
+        self.bind(
+            pos=self._redraw,
+            size=self._redraw,
+            connect_top=self._redraw,
+        )
         Clock.schedule_once(lambda _dt: self._redraw(), 0)
 
     def _redraw(self, *_args):
@@ -988,8 +1004,9 @@ class EtapyPlusSpine(Widget):
         cy = self.center_y
         node_r = dp(10)
         with self.canvas:
-            Color(*_GREY_NODE)
-            Line(points=[cx, self.top, cx, cy], width=dp(1.5))
+            if self.connect_top:
+                Color(*_GREY_NODE)
+                Line(points=[cx, self.top, cx, cy], width=dp(1.5))
             Color(*_PURPLE)
             Ellipse(pos=(cx - node_r, cy - node_r), size=(2 * node_r, 2 * node_r))
             Color(1, 1, 1, 1)
@@ -1004,9 +1021,14 @@ class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
     Visually continues the timeline spine and ends in a purple '+' node.
     The whole row is tappable; tapping opens the EditEtapyKrokBottomSheet in
     new-krok mode against the currently selected group.
+
+    ``connect_top`` controls whether the upward line on the spine is drawn.
+    When the row is the only timeline entry it should be False so the '+'
+    button isn't trailed by an orphaned vertical line.
     """
 
     parent_screen = ObjectProperty(None, allownone=True)
+    connect_top = BooleanProperty(True)
 
     def __init__(self, parent_screen=None, **kwargs):
         kwargs.setdefault("orientation", "horizontal")
@@ -1616,31 +1638,42 @@ class ProjectInfoScreen(MDScreen):
             return
         items = group.get("items") or []
         gi = self._etapy_selected_index
+        # Pre-compute (item_index, child_index) of the visually last row so
+        # we can mark it `is_last` and suppress its trailing underline.
+        last_ii = -1
+        last_ci = -1
+        if items:
+            last_ii = len(items) - 1
+            last_children = items[last_ii].get("children") or []
+            last_ci = len(last_children) - 1 if last_children else -1
         seq = 0
         for ii, item in enumerate(items):
             seq += 1
+            is_last_row = (ii == last_ii and last_ci == -1)
             timeline.add_widget(
                 StageItemRow(
                     display_text=item.get("text", ""),
                     done=bool(item.get("done", False)),
                     is_sub=False,
                     is_first=(seq == 1),
-                    is_last=False,
+                    is_last=is_last_row,
                     parent_screen=self,
                     group_index=gi,
                     item_index=ii,
                     child_index=-1,
                 )
             )
-            for ci, child in enumerate(item.get("children") or []):
+            children = item.get("children") or []
+            for ci, child in enumerate(children):
                 seq += 1
+                is_last_row = (ii == last_ii and ci == last_ci)
                 timeline.add_widget(
                     StageItemRow(
                         display_text=child.get("text", ""),
                         done=bool(child.get("done", False)),
                         is_sub=True,
                         is_first=False,
-                        is_last=False,
+                        is_last=is_last_row,
                         parent_screen=self,
                         group_index=gi,
                         item_index=ii,
@@ -1648,7 +1681,12 @@ class ProjectInfoScreen(MDScreen):
                     )
                 )
         # Persistent in-timeline '+' node — only when a group is selected.
-        timeline.add_widget(EtapyPlusRow(parent_screen=self))
+        # The spine's upward line is only drawn when there's at least one
+        # Krok above, so an empty group doesn't show an orphan vertical line
+        # trailing from the top of the screen down to the '+' button.
+        timeline.add_widget(
+            EtapyPlusRow(parent_screen=self, connect_top=bool(items))
+        )
 
     # --- Notes ---
 
@@ -1874,18 +1912,17 @@ class ProjectInfoScreen(MDScreen):
         MDApp.get_running_app().root.current = "statistics"
 
     def open_project_settings(self):
-        dlg = MDDialog(
-            title="Ustawienia projektu",
-            text=f"Projekt: {self.project_title or '—'}\n\nTu pojawią się opcje projektu.",
-        )
-        btn = MDFlatButton(
-            text="OK",
-            theme_text_color="Custom",
-            text_color=(0.2, 0.2, 0.2, 1),
-        )
-        btn.bind(on_release=lambda *a: dlg.dismiss())
-        dlg.buttons = [btn]
-        dlg.open()
+        """Persist current state, then route to the dedicated settings screen."""
+        if not self.project_title:
+            return
+        self._stop_all_goal_trackers(update_active=False)
+        self.save_project_content()
+        app = MDApp.get_running_app()
+        if not app or not getattr(app, "root", None):
+            return
+        settings = app.root.get_screen("project_settings")
+        settings.project_title = self.project_title
+        app.root.current = "project_settings"
 
 
 class _BottomSheetKeyboardMixin:
