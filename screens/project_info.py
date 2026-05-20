@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import re
+import uuid
 from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -17,7 +18,7 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
-from kivy.utils import get_color_from_hex
+from kivy.utils import get_color_from_hex, platform
 from kivy.uix.scrollview import ScrollView
 from kivymd.app import MDApp
 from kivy.uix.boxlayout import BoxLayout
@@ -29,6 +30,7 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 
 from screens.keyboard_inset import keyboard_inset
+from screens import active_timer
 from screens.session_store import record_session, schedule_home_last_session_refresh
 
 # Project root = parent of `screens/` (works on device and desktop).
@@ -61,10 +63,116 @@ _CROWN_GOLD = get_color_from_hex("#ffc107")
 _GOAL_CARD_PURPLE = list(get_color_from_hex("#7e57c2"))
 _GOAL_CARD_GREEN = list(get_color_from_hex("#43a047"))
 _CROWN_EMOJI_PATH = _emoji_asset_path("u1F451.png")
+_ANDROID_PACKAGE = "org.stokrotka.stokrotka"
+_ANDROID_SERVICE_CLASS = f"{_ANDROID_PACKAGE}.ServiceTimerservice"
 
 ETAPY_ADD_GROUP = "Grupa etapów"
 ETAPY_ADD_STEP = "Krok etapu"
 ETAPY_ADD_SUB = "Podkrok"
+
+
+def _android_log(message):
+    """Print Kivy logger + Android logcat (tag: ProjectTrackerSvc)."""
+    try:
+        from kivy.logger import Logger
+
+        Logger.info("ProjectTrackerSvc: %s", message)
+    except Exception:
+        pass
+    if platform != "android":
+        return
+    try:
+        from jnius import autoclass
+
+        autoclass("android.util.Log").i("ProjectTrackerSvc", str(message))
+    except Exception:
+        pass
+
+
+def _manifest_service_class_names(activity):
+    """Return every service class declared in our app's AndroidManifest."""
+    try:
+        from jnius import autoclass
+
+        PackageManager = autoclass("android.content.pm.PackageManager")
+        package_name = activity.getPackageName()
+        info = activity.getPackageManager().getPackageInfo(
+            package_name, PackageManager.GET_SERVICES
+        )
+        services = info.services
+        if services is None:
+            return []
+        out = []
+        for i in range(len(services)):
+            name = services[i].name
+            if name:
+                out.append(name)
+        return out
+    except Exception as exc:
+        _android_log(f"manifest service enumeration failed: {exc!r}")
+        return []
+
+
+def _start_service_via_intent(autoclass, activity, class_name):
+    Intent = autoclass("android.content.Intent")
+    VERSION = autoclass("android.os.Build$VERSION")
+    context = activity.getApplicationContext()
+    intent = Intent()
+    intent.setClassName(context.getPackageName(), class_name)
+    if VERSION.SDK_INT >= 26:
+        context.startForegroundService(intent)
+    else:
+        context.startService(intent)
+
+
+def ensure_android_timer_service():
+    """Start the foreground service that owns the running-timer notifications."""
+    if platform != "android":
+        return
+    try:
+        from jnius import autoclass
+    except Exception as exc:
+        _android_log(f"pyjnius unavailable: {exc!r}")
+        return
+
+    try:
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+    except Exception as exc:
+        _android_log(f"PythonActivity lookup failed: {exc!r}")
+        return
+
+    candidates = []
+    for name in _manifest_service_class_names(activity):
+        _android_log(f"manifest service available: {name}")
+        if name not in candidates:
+            candidates.append(name)
+    if _ANDROID_SERVICE_CLASS not in candidates:
+        candidates.append(_ANDROID_SERVICE_CLASS)
+
+    last_error = None
+    for class_name in candidates:
+        try:
+            service_cls = autoclass(class_name)
+            service_cls.start(activity, "")
+            _android_log(f"started service via {class_name}.start()")
+            return
+        except Exception as exc:
+            last_error = (class_name, exc)
+
+        try:
+            _start_service_via_intent(autoclass, activity, class_name)
+            _android_log(f"started service via Intent to {class_name}")
+            return
+        except Exception as exc:
+            last_error = (class_name, exc)
+
+    if last_error:
+        _android_log(
+            f"failed to start any service. Tried {candidates}. "
+            f"Last error on {last_error[0]}: {last_error[1]!r}"
+        )
+    else:
+        _android_log("no service classes found in manifest")
 
 
 class _RoundedSheetBackground:
@@ -850,16 +958,19 @@ class ProjectInfoScreen(MDScreen):
         self._add_note_sheet = None
         self._goal_sheet = None
         self._goal_period_ev = None
+        self._loading_project_content = False
         self.bind(project_title=self._on_project_title_changed)
 
     def _on_project_title_changed(self, *_args):
         mgr = self.manager
         if mgr is not None and mgr.current == self.name:
             self.load_project_content()
+            self._restore_active_runtime()
 
     def on_enter(self):
         Window.bind(on_keyboard=self._on_keyboard)
         self.load_project_content()
+        self._restore_active_runtime()
         self._refresh_time_goal_periods()
         if self._goal_period_ev is not None:
             self._goal_period_ev.cancel()
@@ -870,12 +981,9 @@ class ProjectInfoScreen(MDScreen):
         if self._goal_period_ev is not None:
             self._goal_period_ev.cancel()
             self._goal_period_ev = None
-        if self.timer_running:
-            self._finish_timer_run()
-            self.timer_running = False
-            self.timer_button_caption = "start"
+        self._sync_active_timer_elapsed()
         self._stop_timer_event()
-        self._stop_all_goal_trackers()
+        self._stop_all_goal_trackers(update_active=False)
         self.save_project_content()
 
     def _refresh_time_goal_periods(self, *_args):
@@ -895,10 +1003,10 @@ class ProjectInfoScreen(MDScreen):
         if changed:
             self.save_project_content()
 
-    def _stop_all_goal_trackers(self):
+    def _stop_all_goal_trackers(self, update_active=True):
         for row in list(self.ids.goals_list.children):
             if isinstance(row, TimeGoalTrackRow):
-                row.stop_tracking()
+                row.stop_tracking(update_active=update_active)
 
     def _on_keyboard(self, window, key, scancode, codepoint, modifier):
         if key == 27:
@@ -941,68 +1049,72 @@ class ProjectInfoScreen(MDScreen):
 
     def load_project_content(self):
         if self.timer_running:
-            self._finish_timer_run()
             self.timer_running = False
             self.timer_button_caption = "start"
             self._stop_timer_event()
         self._run_started_at = None
-        self._clear_dynamic_widgets()
-        key = self.project_title or "_"
-        blob = self._read_all_states().get(key)
-        if blob:
-            self._timer_elapsed_seconds = int(blob.get("timer_elapsed", 0))
-            self._refresh_timer_label()
-            for n in blob.get("notes") or []:
-                t = (n.get("text") or "").strip()
-                if not t:
-                    continue
-                self.add_note(text=n.get("text", ""), tall=bool(n.get("tall", False)))
-            for g in blob.get("goals") or []:
-                goal = g.get("goal", "1h/tydzień")
-                tgt = g.get("goal_target_seconds")
-                if tgt is None:
-                    tgt = parse_goal_target_seconds(goal)
-                logged = float(g.get("logged_seconds", 0))
-                if logged <= 0 and "percent" in g:
-                    try:
-                        p = float(g.get("percent", 0))
-                        logged = max(0.0, (p / 100.0) * float(tgt))
-                    except (TypeError, ValueError):
+        self._loading_project_content = True
+        try:
+            self._clear_dynamic_widgets()
+            key = self.project_title or "_"
+            blob = self._read_all_states().get(key)
+            if blob:
+                self._timer_elapsed_seconds = int(blob.get("timer_elapsed", 0))
+                self._refresh_timer_label()
+                for n in blob.get("notes") or []:
+                    t = (n.get("text") or "").strip()
+                    if not t:
+                        continue
+                    self.add_note(text=n.get("text", ""), tall=bool(n.get("tall", False)))
+                for g in blob.get("goals") or []:
+                    goal = g.get("goal", "1h/tydzień")
+                    tgt = g.get("goal_target_seconds")
+                    if tgt is None:
+                        tgt = parse_goal_target_seconds(goal)
+                    logged = float(g.get("logged_seconds", 0))
+                    if logged <= 0 and "percent" in g:
+                        try:
+                            p = float(g.get("percent", 0))
+                            logged = max(0.0, (p / 100.0) * float(tgt))
+                        except (TypeError, ValueError):
+                            logged = 0.0
+                    rm = parse_reset_mode(g.get("reset_mode", ""))
+                    saved_pk = g.get("period_key")
+                    cur = current_period_key(rm)
+                    if rm != RESET_NEVER and saved_pk is not None and saved_pk != cur:
                         logged = 0.0
-                rm = parse_reset_mode(g.get("reset_mode", ""))
-                saved_pk = g.get("period_key")
-                cur = current_period_key(rm)
-                if rm != RESET_NEVER and saved_pk is not None and saved_pk != cur:
-                    logged = 0.0
-                    pk = cur
-                elif saved_pk is None:
-                    pk = cur
-                else:
-                    pk = saved_pk
-                self.add_time_goal(
-                    title=g.get("title", ""),
-                    goal=goal,
-                    goal_target_seconds=float(tgt),
-                    logged_seconds=logged,
-                    reset_mode=rm,
-                    period_key=pk,
-                )
-            for cg in blob.get("checklist_goals") or []:
-                t = (cg.get("text") or "").strip()
-                if t:
-                    self.add_checklist_goal(text=t, done=bool(cg.get("done", False)))
-            et = blob.get("etapy") or {}
-            self._etapy_groups = et.get("groups") or []
-            self._etapy_selected_index = int(et.get("selected_index", 0))
-        else:
-            self._timer_elapsed_seconds = 0
-            self._refresh_timer_label()
-            self._etapy_groups = []
-            self._etapy_selected_index = 0
-        self._run_base_elapsed = self._timer_elapsed_seconds
-        self._clamp_etapy_selection()
-        self._rebuild_etapy_chips()
-        self._rebuild_etapy_timeline()
+                        pk = cur
+                    elif saved_pk is None:
+                        pk = cur
+                    else:
+                        pk = saved_pk
+                    self.add_time_goal(
+                        title=g.get("title", ""),
+                        goal=goal,
+                        goal_target_seconds=float(tgt),
+                        logged_seconds=logged,
+                        reset_mode=rm,
+                        period_key=pk,
+                        uid=g.get("uid") or "",
+                    )
+                for cg in blob.get("checklist_goals") or []:
+                    t = (cg.get("text") or "").strip()
+                    if t:
+                        self.add_checklist_goal(text=t, done=bool(cg.get("done", False)))
+                et = blob.get("etapy") or {}
+                self._etapy_groups = et.get("groups") or []
+                self._etapy_selected_index = int(et.get("selected_index", 0))
+            else:
+                self._timer_elapsed_seconds = 0
+                self._refresh_timer_label()
+                self._etapy_groups = []
+                self._etapy_selected_index = 0
+            self._run_base_elapsed = self._timer_elapsed_seconds
+            self._clamp_etapy_selection()
+            self._rebuild_etapy_chips()
+            self._rebuild_etapy_timeline()
+        finally:
+            self._loading_project_content = False
 
     def _clear_dynamic_widgets(self):
         for c in list(self.ids.notes_list.children):
@@ -1047,6 +1159,7 @@ class ProjectInfoScreen(MDScreen):
                         "logged_seconds": row.logged_seconds,
                         "reset_mode": row.reset_mode,
                         "period_key": row.period_key,
+                        "uid": row.active_uid,
                     }
                 )
         return out
@@ -1473,6 +1586,7 @@ class ProjectInfoScreen(MDScreen):
         logged_seconds=0.0,
         reset_mode=RESET_WEEKLY,
         period_key=None,
+        uid="",
     ):
         tgt = float(goal_target_seconds) if goal_target_seconds is not None else parse_goal_target_seconds(goal)
         tgt = max(10.0, tgt)
@@ -1486,6 +1600,7 @@ class ProjectInfoScreen(MDScreen):
             logged_seconds=max(0.0, float(logged_seconds)),
             reset_mode=reset_mode,
             period_key=period_key,
+            active_uid=uid or f"goal-{uuid.uuid4().hex}",
             parent_screen=self,
         )
         row.apply_logged_to_ui()
@@ -1494,6 +1609,8 @@ class ProjectInfoScreen(MDScreen):
     def remove_time_goal_row(self, row):
         if isinstance(row, TimeGoalTrackRow):
             row.stop_tracking()
+            if row.active_uid:
+                active_timer.remove_goal(row.active_uid)
         goals = self.ids.get("goals_list")
         if goals is None:
             return
@@ -1503,7 +1620,47 @@ class ProjectInfoScreen(MDScreen):
             row.parent.remove_widget(row)
         self.save_project_content()
 
+    def _active_goal_rows_by_uid(self):
+        rows = {}
+        goals = self.ids.get("goals_list")
+        if goals is None:
+            return rows
+        for row in goals.children:
+            if isinstance(row, TimeGoalTrackRow) and row.active_uid:
+                rows[row.active_uid] = row
+        return rows
+
+    def _restore_active_runtime(self):
+        timer_state = active_timer.read_project_timer()
+        if timer_state.get("project_title") == self.project_title:
+            started = timer_state.get("started_at")
+            try:
+                self._run_started_at = datetime.datetime.fromisoformat(started)
+            except (TypeError, ValueError):
+                self._run_started_at = datetime.datetime.now()
+            self._run_base_elapsed = int(timer_state.get("base_elapsed_seconds", 0) or 0)
+            self._timer_elapsed_seconds = active_timer.elapsed_from_state(timer_state)
+            self._refresh_timer_label()
+            self._stop_timer_event()
+            self._timer_ev = Clock.schedule_interval(self._on_timer_tick, 1.0)
+            self.timer_running = True
+            self.timer_button_caption = "stop"
+
+        rows_by_uid = self._active_goal_rows_by_uid()
+        for goal_state in active_timer.read_goals():
+            if goal_state.get("project_title") != self.project_title:
+                continue
+            row = rows_by_uid.get(goal_state.get("uid"))
+            if row is not None:
+                row.restore_tracking_from_state(goal_state)
+
     # --- Timer ---
+
+    def _sync_active_timer_elapsed(self):
+        state = active_timer.read_project_timer()
+        if state.get("project_title") == self.project_title:
+            self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
+            self._refresh_timer_label()
 
     def _refresh_timer_label(self):
         s = self._timer_elapsed_seconds
@@ -1530,11 +1687,20 @@ class ProjectInfoScreen(MDScreen):
             self._finish_timer_run()
             self.timer_running = False
             self.timer_button_caption = "start"
+            active_timer.clear_project_timer()
             self.save_project_content()
+            schedule_home_last_session_refresh()
         else:
             self._stop_timer_event()
             self._run_base_elapsed = self._timer_elapsed_seconds
             self._run_started_at = datetime.datetime.now()
+            active_timer.start_project_timer(
+                self.project_title,
+                base_elapsed_seconds=self._run_base_elapsed,
+                started_at=self._run_started_at,
+            )
+            self.save_project_content()
+            ensure_android_timer_service()
             self._timer_ev = Clock.schedule_interval(self._on_timer_tick, 1.0)
             self.timer_running = True
             self.timer_button_caption = "stop"
@@ -1545,17 +1711,25 @@ class ProjectInfoScreen(MDScreen):
             self._timer_ev = None
 
     def _on_timer_tick(self, _dt):
-        self._timer_elapsed_seconds += 1
+        state = active_timer.read_project_timer()
+        if state.get("project_title") == self.project_title:
+            self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
+        elif self.timer_running:
+            self._stop_timer_event()
+            self.timer_running = False
+            self.timer_button_caption = "start"
+            self.load_project_content()
+            self._restore_active_runtime()
+            return
+        else:
+            self._timer_elapsed_seconds += 1
         self._refresh_timer_label()
 
     # --- Bottom bar / settings ---
 
     def _finalize_and_go_home(self):
-        if self.timer_running:
-            self._finish_timer_run()
-            self.timer_running = False
-            self.timer_button_caption = "start"
-            self._stop_timer_event()
+        self._stop_timer_event()
+        self._stop_all_goal_trackers(update_active=False)
         self.save_project_content()
         MDApp.get_running_app().root.current = "home"
         schedule_home_last_session_refresh()
@@ -2768,6 +2942,7 @@ class TimeGoalTrackRow(MDBoxLayout):
     elapsed_text = StringProperty("")
     reset_mode = StringProperty(RESET_WEEKLY)
     period_key = StringProperty("")
+    active_uid = StringProperty("")
     car_source_idle = StringProperty(_car_asset_path("CCcc 1.png"))
     car_source_active = StringProperty(_car_asset_path("ZZzz 1.png"))
     parent_screen = ObjectProperty(None, allownone=True)
@@ -2849,6 +3024,18 @@ class TimeGoalTrackRow(MDBoxLayout):
             self._has_reached_goal = False
             self._overflow_cx = None
             self._overflow_dir = -1
+            if self.tracking_active and self.active_uid:
+                project_title = self.parent_screen.project_title if self.parent_screen else ""
+                active_timer.start_goal(
+                    self.active_uid,
+                    project_title,
+                    self.title_text,
+                    self.goal_text,
+                    self.goal_target_seconds,
+                    base_logged_seconds=0.0,
+                    reset_mode=self.reset_mode,
+                    period_key=self.period_key,
+                )
 
     def apply_logged_to_ui(self):
         t = max(10.0, float(self.goal_target_seconds))
@@ -2930,21 +3117,77 @@ class TimeGoalTrackRow(MDBoxLayout):
     def start_tracking(self):
         if self._tick_ev is not None:
             return
+        if not self.active_uid:
+            self.active_uid = f"goal-{uuid.uuid4().hex}"
+        self._ensure_period()
+        project_title = self.parent_screen.project_title if self.parent_screen else ""
+        active_timer.start_goal(
+            self.active_uid,
+            project_title,
+            self.title_text,
+            self.goal_text,
+            self.goal_target_seconds,
+            base_logged_seconds=self.logged_seconds,
+            reset_mode=self.reset_mode,
+            period_key=self.period_key,
+        )
+        if self.parent_screen:
+            self.parent_screen.save_project_content()
+        ensure_android_timer_service()
         self.tracking_active = True
         self._tick_ev = Clock.schedule_interval(self._on_track_tick, 0.05)
 
-    def stop_tracking(self):
+    def stop_tracking(self, update_active=True):
+        state = active_timer.read_goal(self.active_uid) if self.active_uid else {}
+        if state:
+            self.logged_seconds = float(state.get("base_logged_seconds", 0.0)) + float(
+                active_timer.running_seconds(state)
+            )
         if self._tick_ev is not None:
             self._tick_ev.cancel()
             self._tick_ev = None
         self.tracking_active = False
         self._update_progress_from_time(0)
+        if update_active and self.active_uid:
+            active_timer.remove_goal(self.active_uid)
+            if self.parent_screen:
+                self.parent_screen.save_project_content()
+
+    def restore_tracking_from_state(self, goal_state):
+        if not goal_state:
+            return
+        self.active_uid = goal_state.get("uid", self.active_uid)
+        self.logged_seconds = float(goal_state.get("base_logged_seconds", 0.0)) + float(
+            active_timer.running_seconds(goal_state)
+        )
+        self._ensure_period()
+        self.tracking_active = True
+        if self._tick_ev is not None:
+            self._tick_ev.cancel()
+        self._tick_ev = Clock.schedule_interval(self._on_track_tick, 0.05)
+        self._update_progress_from_time(0)
 
     def _on_track_tick(self, dt):
+        state = active_timer.read_goal(self.active_uid) if self.active_uid else {}
+        if state:
+            self.logged_seconds = float(state.get("base_logged_seconds", 0.0)) + float(
+                active_timer.running_seconds(state)
+            )
+        elif self.tracking_active:
+            self.tracking_active = False
+            if self._tick_ev is not None:
+                self._tick_ev.cancel()
+                self._tick_ev = None
+            if self.parent_screen:
+                self.parent_screen.load_project_content()
+                self.parent_screen._restore_active_runtime()
+            return
+        else:
+            self.logged_seconds += float(dt)
         self._ensure_period()
-        self.logged_seconds += float(dt)
         self._update_progress_from_time(dt)
 
     def on_parent(self, *_args):
         if self.parent is None:
-            self.stop_tracking()
+            loading = bool(self.parent_screen and getattr(self.parent_screen, "_loading_project_content", False))
+            self.stop_tracking(update_active=not loading)

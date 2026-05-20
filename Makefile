@@ -17,6 +17,10 @@ RUN_ENV = $(ACTIVATE) &&
 # Staging dir buildozer clears with Python rmtree before each copy (fails on FUSE/NTFS).
 BUILDOZER_APP_DIR = .buildozer/android/app
 
+# Buildozer internal paths that we sometimes nudge to force a partial rebuild.
+BUILDOZER_DISTS_DIR = .buildozer/android/platform
+ANDROID_GRADLE_BUILD_DIRS = $(BUILDOZER_DISTS_DIR)/build-*/dists/*/build
+
 # Android application id (package.domain + package.name from buildozer.spec)
 ANDROID_PACKAGE = $(shell awk -F' = ' '/^package\.domain/ {d=$$2} /^package\.name/ {n=$$2} END {if (d && n) print d"."n}' buildozer.spec)
 
@@ -29,7 +33,8 @@ ANDROID_PACKAGE = $(shell awk -F' = ' '/^package\.domain/ {d=$$2} /^package\.nam
 # 3. head -n 1: takes the first available device
 DEVICE_CONNECTED = $(shell adb devices 2>/dev/null | grep -v "List of devices" | grep -v "^$$" | head -n 1)
 
-.PHONY: help deploy debug test clean logcat prepare android-app-reset uninstall default
+.PHONY: help deploy debug test clean deep-clean logcat prepare android-app-reset \
+        rebuild-android quick uninstall default
 
 # Detect if Java 17 is already the active version
 JAVA_VER_CHECK = $(shell java -version 2>&1 | grep -q "17\." && echo "1" || echo "0")
@@ -83,6 +88,29 @@ deploy: prepare android-app-reset ## Auto-deploy: Android (if connected) or PC (
 		python3 $(ENTRY_POINT); \
 	fi
 
+quick: prepare ## Fastest Android rebuild (skip staging reset; Python/.kv edits only)
+	@if [ -z "$(DEVICE_CONNECTED)" ]; then \
+		echo "[ERROR] No Android device detected. Use 'make deploy' on desktop."; \
+		exit 1; \
+	fi
+	@echo "[INFO] Quick rebuild (no staging reset; keeps p4a dist + gradle cache)..."
+	@$(RUN_ENV) buildozer android debug deploy run
+
+rebuild-android: prepare android-app-reset ## After buildozer.spec changes (services, permissions, Java); keeps p4a dist
+	@echo "[INFO] Forcing Android project regen (Java/manifest re-emit; keeps p4a dist)..."
+	@for d in $(ANDROID_GRADLE_BUILD_DIRS); do \
+		if [ -d "$$d" ]; then \
+			echo "[INFO]   removing $$d"; \
+			rm -rf "$$d"; \
+		fi; \
+	done
+	@if [ -z "$(DEVICE_CONNECTED)" ]; then \
+		echo "[WARN] No Android device detected. Skipping deploy/run."; \
+		$(RUN_ENV) buildozer android debug; \
+	else \
+		$(RUN_ENV) buildozer android debug deploy run; \
+	fi
+
 debug: prepare android-app-reset ## Build & Run with logs: Android (logcat) or PC (debug level)
 	@$(RUN_ENV) if [ -n "$(DEVICE_CONNECTED)" ]; then \
 		echo "[INFO] Starting Android Debug Cycle..."; \
@@ -100,8 +128,14 @@ test: prepare ## Run project tests using pytest
 		echo "[ERROR] Test directory '$(TEST_DIR)' not found."; \
 	fi
 
-clean: ## Remove build artifacts and temporary cache
-	@echo "[INFO] Cleaning build environment..."
+clean: ## Light clean (bin/, staging, __pycache__); keeps p4a dist so next build is fast
+	@echo "[INFO] Light clean (keeps p4a dist; use 'make deep-clean' for full reset)..."
+	@$(MAKE) android-app-reset
+	rm -rf bin/
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+
+deep-clean: ## FULL reset incl. p4a dist + native deps; next build is 30-40 minutes
+	@echo "[WARN] Deep clean: next build will recompile python-for-android distribution (slow)."
 	@$(MAKE) android-app-reset
 	@$(RUN_ENV) buildozer appclean
 	rm -rf bin/

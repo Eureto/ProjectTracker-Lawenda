@@ -16,7 +16,8 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from screens.home import HomeScreen
 from screens.add_project import AddProjectScreen
 from screens.statistics import StatisticsScreen
-from screens.project_info import ProjectInfoScreen
+from screens.project_info import ProjectInfoScreen, ensure_android_timer_service
+from screens import active_timer
 
 # Window size for testing on pc
 if platform in ('win', 'linux', 'macosx'):
@@ -51,6 +52,7 @@ class TimeTrackerApp(MDApp):
                 Window.softinput_mode = "resize"
             except Exception:
                 pass
+            self._request_android_notification_permission()
         # Initialize the 3 samples once the app starts
         home_screen = self.screen_manager.get_screen('home')
         self.load_layout_pref()
@@ -58,6 +60,54 @@ class TimeTrackerApp(MDApp):
         home_screen.schedule_initial_layout()
         home_screen.refresh_last_session()
         self.screen_manager.get_screen("statistics").refresh_statistics()
+        if active_timer.has_active_items():
+            ensure_android_timer_service()
+        Clock.schedule_once(lambda _dt: self._open_project_from_android_intent_or_active(), 0)
+
+    def on_resume(self):
+        Clock.schedule_once(lambda _dt: self._open_project_from_android_intent_or_active(prefer_active=False), 0)
+        return True
+
+    def _request_android_notification_permission(self):
+        try:
+            from jnius import autoclass
+
+            version = autoclass("android.os.Build$VERSION")
+            if int(version.SDK_INT) < 33:
+                return
+            from android.permissions import request_permissions
+
+            request_permissions(["android.permission.POST_NOTIFICATIONS"])
+        except Exception:
+            pass
+
+    def _android_intent_project(self):
+        if platform != "android":
+            return ""
+        try:
+            from jnius import autoclass
+
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            intent = activity.getIntent()
+            project = intent.getStringExtra("project") or ""
+            if project:
+                intent.removeExtra("project")
+            return project
+        except Exception:
+            return ""
+
+    def _open_project_from_android_intent_or_active(self, prefer_active=True):
+        project = self._android_intent_project()
+        if not project and prefer_active:
+            timer_state = active_timer.read_project_timer()
+            project = timer_state.get("project_title", "")
+            if not project:
+                goals = active_timer.read_goals()
+                project = goals[0].get("project_title", "") if goals else ""
+        if project:
+            info = self.screen_manager.get_screen("project_info")
+            info.project_title = project
+            self.screen_manager.current = "project_info"
 
     def _layout_pref_path(self):
         return os.path.join(self.user_data_dir, "layout_pref.json")
