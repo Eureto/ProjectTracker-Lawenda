@@ -4,3 +4,5 @@ bin
 .buildozer
 .sys_deps_installed
 .vscode
+assets/Emoji_PNG.zip
+assets/.Emoji_PNG.*.zip

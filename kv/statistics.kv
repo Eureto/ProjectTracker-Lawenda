@@ -72,7 +72,7 @@
                     size_hint_x: 1
                     size_hint_y: None
                     height: dp(136)
-                    radius: [dp(12), ]
+                    radius: [dp(25), ]
                     md_bg_color: 0.8, 0.8, 0.8, 0.5
                     padding: dp(4)
                     elevation: 0
@@ -150,7 +150,7 @@
                     height: root.stats_card_height
                     radius: [dp(20)]
                     md_bg_color: 0.65, 0.45, 0.9, 1
-                    padding: dp(14)
+                    padding: dp(20), dp(24), dp(20), dp(14)
                     spacing: dp(10)
                     orientation: 'vertical'
                     elevation: 0
@@ -158,12 +158,12 @@
                     MDBoxLayout:
                         orientation: 'horizontal'
                         size_hint_y: None
-                        height: dp(26)
+                        height: dp(42)
                         spacing: dp(6)
 
                         MDLabel:
                             text: "Projekt"
-                            font_style: "Caption"
+                            font_size: sp(24)
                             bold: True
                             theme_text_color: "Custom"
                             text_color: 1, 1, 1, 0.85
@@ -175,7 +175,7 @@
                             size_hint_x: 1
                         MDLabel:
                             text: "Czas"
-                            font_style: "Caption"
+                            font_size: sp(24)
                             bold: True
                             theme_text_color: "Custom"
                             text_color: 1, 1, 1, 0.85

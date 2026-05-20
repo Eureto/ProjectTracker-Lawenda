@@ -31,6 +31,7 @@ from kivymd.uix.screen import MDScreen
 
 from screens.keyboard_inset import keyboard_inset
 from screens import active_timer
+from screens.emoji_assets import emoji_path
 from screens.session_store import record_session, schedule_home_last_session_refresh
 
 # Project root = parent of `screens/` (works on device and desktop).
@@ -42,7 +43,7 @@ def _car_asset_path(filename):
 
 
 def _emoji_asset_path(filename):
-    return os.path.join(_PKG_ROOT, "assets", "Emoji_PNG", filename)
+    return emoji_path(filename)
 
 
 RESET_NEVER = "never"
@@ -67,8 +68,6 @@ _ANDROID_PACKAGE = "org.stokrotka.stokrotka"
 _ANDROID_SERVICE_CLASS = f"{_ANDROID_PACKAGE}.ServiceTimerservice"
 
 ETAPY_ADD_GROUP = "Grupa etapów"
-ETAPY_ADD_STEP = "Krok etapu"
-ETAPY_ADD_SUB = "Podkrok"
 
 
 def _android_log(message):
@@ -856,13 +855,18 @@ class StageItemRow(MDBoxLayout):
         self._underline = self.ids.underline_block
         self._status_btn = self.ids.status_btn
         self._status_btn.bind(on_release=self._toggle_done)
-        self.ids.sub_arrow.opacity = 1 if self.is_sub else 0
+        # `sub_arrow` is now just a horizontal spacer for Podkroki — the
+        # spine itself draws the visual arrow head, so we keep this widget
+        # invisible and use it only to indent the text.
+        self.ids.sub_arrow.opacity = 0
         self.ids.sub_arrow.width = dp(16) if self.is_sub else 0
         self._spine.is_sub = self.is_sub
         self._spine.is_first = self.is_first
         self._spine.is_last = self.is_last
-        if self.is_sub:
-            self.padding = [dp(18), 0, 0, 0]
+        # NOTE: we intentionally do NOT shift the row's left padding for
+        # subs. Indenting the whole row would also shift the spine, which
+        # would break the vertical line continuity with the parent Krok.
+        # The dp(16) spacer above provides the text-only indent instead.
         self._apply_done_to_ui()
         Clock.schedule_once(self._sync_height, 0)
 
@@ -881,6 +885,17 @@ class StageItemRow(MDBoxLayout):
                 self.group_index, self.item_index, self.child_index, self.done
             )
 
+    def _open_editor(self, *_args):
+        """Open the edit-krok bottom sheet for this row's owning krok.
+
+        Tapping a Podkrok opens the parent Krok's editor so the user can
+        rename, add, or delete sibling Podkroki from one place.
+        """
+        screen = self.parent_screen
+        if screen is None:
+            return
+        screen.open_edit_etapy_krok_sheet(int(self.group_index), int(self.item_index))
+
     def _sync_height(self, *_args):
         underline = self._underline or self.ids.get("underline_block")
         if underline is None:
@@ -888,7 +903,10 @@ class StageItemRow(MDBoxLayout):
         self._underline = underline
         underline.text = self.display_text
         if self.width > 1:
-            pad = dp(50) if self.is_sub else dp(34)
+            # Approximate width consumed by the fixed-width siblings:
+            #   spine(22) + sub_arrow_spacer(16 or 0) + status_btn(26)
+            #   + 3 spacings(8 each)
+            pad = dp(88) if self.is_sub else dp(72)
             underline.width = max(sp(40), self.width - pad)
         underline._relayout()
         self.height = max(dp(40), underline.height + dp(4))
@@ -913,26 +931,96 @@ class TimelineSpine(Widget):
         if self.height < 1:
             return
         cx = self.center_x
-        node_r = dp(5) if self.is_sub else dp(6)
         node_cy = self.center_y
         with self.canvas:
-            if not self.is_sub:
-                Color(*_GREY_NODE)
-                Line(points=[cx, self.top, cx, self.y], width=dp(1.5))
+            # Always draw the connecting line so the timeline spine reads as
+            # one chain even through Podkroki (was previously skipped for
+            # is_sub which broke the visual continuity with the parent Krok).
+            Color(*_GREY_NODE)
+            Line(points=[cx, self.top, cx, self.y], width=dp(1.5))
             Color(*(_PURPLE if self.done else _GREY_NODE))
-            Ellipse(
-                pos=(cx - node_r, node_cy - node_r),
-                size=(2 * node_r, 2 * node_r),
-            )
+            if self.is_sub:
+                # Right-pointing arrow head ( > ) at the spine node, in
+                # place of the dot, to denote a Podkrok.
+                a = dp(4)
+                Line(
+                    points=[
+                        cx - a, node_cy + a,
+                        cx + a, node_cy,
+                        cx - a, node_cy - a,
+                    ],
+                    width=dp(1.6),
+                )
+            else:
+                node_r = dp(6)
+                Ellipse(
+                    pos=(cx - node_r, node_cy - node_r),
+                    size=(2 * node_r, 2 * node_r),
+                )
 
 
-class EtapyFinishRow(MDBoxLayout):
+class StageTextTap(ButtonBehavior, BoxLayout):
+    """ButtonBehavior wrapper around the StageItemRow text area: tap = edit krok."""
+
+    pass
+
+
+class EtapyPlusSpine(Widget):
+    """Spine column for the EtapyPlusRow: line from the top of the row to the
+    centre, then a filled purple circle with a white plus glyph at the centre.
+
+    Width matches TimelineSpine (dp(22)) so the plus node lines up exactly with
+    the dots above it in the timeline.
+    """
+
     def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint_x", None)
+        kwargs.setdefault("width", dp(22))
+        super().__init__(**kwargs)
+        self.bind(pos=self._redraw, size=self._redraw)
+        Clock.schedule_once(lambda _dt: self._redraw(), 0)
+
+    def _redraw(self, *_args):
+        self.canvas.clear()
+        if self.height < 1 or self.width < 1:
+            return
+        cx = self.center_x
+        cy = self.center_y
+        node_r = dp(10)
+        with self.canvas:
+            Color(*_GREY_NODE)
+            Line(points=[cx, self.top, cx, cy], width=dp(1.5))
+            Color(*_PURPLE)
+            Ellipse(pos=(cx - node_r, cy - node_r), size=(2 * node_r, 2 * node_r))
+            Color(1, 1, 1, 1)
+            arm = node_r * 0.55
+            Line(points=[cx - arm, cy, cx + arm, cy], width=dp(2.2))
+            Line(points=[cx, cy - arm, cx, cy + arm], width=dp(2.2))
+
+
+class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
+    """Persistent 'add krok' row at the bottom of the etapy timeline.
+
+    Visually continues the timeline spine and ends in a purple '+' node.
+    The whole row is tappable; tapping opens the EditEtapyKrokBottomSheet in
+    new-krok mode against the currently selected group.
+    """
+
+    parent_screen = ObjectProperty(None, allownone=True)
+
+    def __init__(self, parent_screen=None, **kwargs):
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", dp(44))
+        kwargs.setdefault("height", dp(48))
         kwargs.setdefault("spacing", dp(8))
         super().__init__(**kwargs)
+        self.parent_screen = parent_screen
+        self.bind(on_release=self._on_release)
+
+    def _on_release(self, *_args):
+        screen = self.parent_screen
+        if screen is not None:
+            screen.open_new_etapy_krok_sheet()
 
 
 class ProjectInfoScreen(MDScreen):
@@ -1326,11 +1414,13 @@ class ProjectInfoScreen(MDScreen):
     # --- Etapy ---
 
     _etapy_sheet = None
+    _etapy_krok_sheet = None
 
-    def open_add_etapy_sheet(self):
+    def open_add_etapy_group_sheet(self):
+        """Header '+' → create a new Grupa etapów (only that)."""
         if self._etapy_sheet is not None:
             return
-        sheet = AddEtapyBottomSheet(self)
+        sheet = AddEtapyGroupBottomSheet(self)
 
         def _cleared(*_a):
             self._etapy_sheet = None
@@ -1338,6 +1428,34 @@ class ProjectInfoScreen(MDScreen):
         sheet.bind(on_dismiss=_cleared)
         self._etapy_sheet = sheet
         sheet.open()
+
+    def _open_etapy_krok_sheet(self, group_index, item_index):
+        """Internal: open the full Krok editor (new or edit)."""
+        if self._etapy_krok_sheet is not None:
+            return
+        sheet = EditEtapyKrokBottomSheet(self, group_index, item_index)
+
+        def _cleared(*_a):
+            self._etapy_krok_sheet = None
+
+        sheet.bind(on_dismiss=_cleared)
+        self._etapy_krok_sheet = sheet
+        sheet.open()
+
+    def open_new_etapy_krok_sheet(self):
+        """In-timeline '+' → create a new Krok in the selected group."""
+        if not self._etapy_groups:
+            return
+        self._clamp_etapy_selection()
+        self._open_etapy_krok_sheet(self._etapy_selected_index, None)
+
+    def open_edit_etapy_krok_sheet(self, group_index, item_index):
+        """Tap on a Krok/Podkrok row → edit the owning Krok."""
+        try:
+            _ = self._etapy_groups[int(group_index)]["items"][int(item_index)]
+        except (IndexError, KeyError, TypeError):
+            return
+        self._open_etapy_krok_sheet(int(group_index), int(item_index))
 
     def _clamp_etapy_selection(self):
         if not self._etapy_groups:
@@ -1379,22 +1497,49 @@ class ProjectInfoScreen(MDScreen):
         self._rebuild_etapy_timeline()
         self.save_project_content()
 
-    def add_etapy_step(self, text, parent_item_index=None):
+    def create_etapy_step(self, group_index, text, children=None):
+        """Append a new Krok with its Podkroki (called by the krok editor)."""
         text = (text or "").strip()
         if not text:
             return
-        group = self._selected_etapy_group()
-        if group is None:
-            self.add_etapy_group("Ogólne")
-            group = self._selected_etapy_group()
-        if parent_item_index is None:
-            group["items"].append({"text": text, "done": False, "children": []})
-        else:
-            try:
-                children = group["items"][parent_item_index].setdefault("children", [])
-                children.append({"text": text, "done": False})
-            except (IndexError, KeyError):
-                group["items"].append({"text": text, "done": False, "children": []})
+        try:
+            group = self._etapy_groups[int(group_index)]
+        except (IndexError, TypeError):
+            return
+        normalized_children = [
+            {"text": (c.get("text") or "").strip(), "done": bool(c.get("done", False))}
+            for c in (children or [])
+            if (c.get("text") or "").strip()
+        ]
+        group.setdefault("items", []).append(
+            {"text": text, "done": False, "children": normalized_children}
+        )
+        self._rebuild_etapy_timeline()
+        self.save_project_content()
+
+    def update_etapy_step(self, group_index, item_index, text, children=None):
+        """Replace the Krok name + its Podkroki list in one save (krok editor)."""
+        text = (text or "").strip() or "Krok"
+        try:
+            item = self._etapy_groups[int(group_index)]["items"][int(item_index)]
+        except (IndexError, KeyError, TypeError):
+            return
+        item["text"] = text
+        item["children"] = [
+            {"text": (c.get("text") or "").strip(), "done": bool(c.get("done", False))}
+            for c in (children or [])
+            if (c.get("text") or "").strip()
+        ]
+        self._rebuild_etapy_timeline()
+        self.save_project_content()
+
+    def delete_etapy_step(self, group_index, item_index):
+        """Remove a Krok (and all its Podkroki) from the selected group."""
+        try:
+            items = self._etapy_groups[int(group_index)]["items"]
+            del items[int(item_index)]
+        except (IndexError, KeyError, TypeError):
+            return
         self._rebuild_etapy_timeline()
         self.save_project_content()
 
@@ -1456,6 +1601,8 @@ class ProjectInfoScreen(MDScreen):
         timeline.clear_widgets()
         group = self._selected_etapy_group()
         if group is None:
+            # No group → no in-timeline '+'. The header '+' is the only path
+            # for creating the first group.
             timeline.add_widget(
                 MDLabel(
                     text="Dodaj grupę etapów przyciskiem +",
@@ -1468,54 +1615,40 @@ class ProjectInfoScreen(MDScreen):
             )
             return
         items = group.get("items") or []
-        flat_count = sum(1 + len(it.get("children") or []) for it in items)
-        if flat_count == 0:
-            empty = MDLabel(
-                text="Brak kroków — dodaj krok etapu przyciskiem +",
-                font_size=sp(13),
-                theme_text_color="Custom",
-                text_color=(1, 1, 1, 0.65),
-                size_hint_y=None,
-                height=dp(36),
+        gi = self._etapy_selected_index
+        seq = 0
+        for ii, item in enumerate(items):
+            seq += 1
+            timeline.add_widget(
+                StageItemRow(
+                    display_text=item.get("text", ""),
+                    done=bool(item.get("done", False)),
+                    is_sub=False,
+                    is_first=(seq == 1),
+                    is_last=False,
+                    parent_screen=self,
+                    group_index=gi,
+                    item_index=ii,
+                    child_index=-1,
+                )
             )
-            timeline.add_widget(empty)
-        else:
-            gi = self._etapy_selected_index
-            seq = 0
-            for ii, item in enumerate(items):
+            for ci, child in enumerate(item.get("children") or []):
                 seq += 1
                 timeline.add_widget(
                     StageItemRow(
-                        display_text=item.get("text", ""),
-                        done=bool(item.get("done", False)),
-                        is_sub=False,
-                        is_first=(seq == 1),
+                        display_text=child.get("text", ""),
+                        done=bool(child.get("done", False)),
+                        is_sub=True,
+                        is_first=False,
                         is_last=False,
                         parent_screen=self,
                         group_index=gi,
                         item_index=ii,
-                        child_index=-1,
+                        child_index=ci,
                     )
                 )
-                for ci, child in enumerate(item.get("children") or []):
-                    seq += 1
-                    timeline.add_widget(
-                        StageItemRow(
-                            display_text=child.get("text", ""),
-                            done=bool(child.get("done", False)),
-                            is_sub=True,
-                            is_first=False,
-                            is_last=False,
-                            parent_screen=self,
-                            group_index=gi,
-                            item_index=ii,
-                            child_index=ci,
-                        )
-                    )
-            children = timeline.children
-            if children and isinstance(children[0], StageItemRow):
-                children[0].is_last = False
-        timeline.add_widget(EtapyFinishRow())
+        # Persistent in-timeline '+' node — only when a group is selected.
+        timeline.add_widget(EtapyPlusRow(parent_screen=self))
 
     # --- Notes ---
 
@@ -2619,8 +2752,12 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         anim.start(self.panel)
 
 
-class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
-    """Add etapy group, main step, or sub-step."""
+class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
+    """Minimal sheet for the Etapy header '+': asks only for a Grupa etapów name.
+
+    After the redesign, the only way to create a new group is here. Kroki and
+    Podkroki live inside EditEtapyKrokBottomSheet (opened from the timeline).
+    """
 
     def __init__(self, project_screen, **kwargs):
         super().__init__(**kwargs)
@@ -2654,7 +2791,7 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
         self.panel.add_widget(
             MDLabel(
-                text="Dodaj do etapów",
+                text="Nowa grupa etapów",
                 font_style="Subtitle1",
                 bold=True,
                 theme_text_color="Custom",
@@ -2664,29 +2801,8 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
-        self.type_spinner = RoundedSheetSpinner(
-            text=ETAPY_ADD_STEP,
-            values=[ETAPY_ADD_GROUP, ETAPY_ADD_STEP, ETAPY_ADD_SUB],
-            size_hint_y=None,
-            height=dp(44),
-            font_size=sp(15),
-        )
-        self.type_spinner.bind(text=self._on_type_changed)
-        self.panel.add_widget(self.type_spinner)
-
-        self.parent_spinner = RoundedSheetSpinner(
-            text="",
-            values=[""],
-            size_hint_y=None,
-            height=dp(44),
-            font_size=sp(15),
-            opacity=0,
-            disabled=True,
-        )
-        self.panel.add_widget(self.parent_spinner)
-
         self.field = RoundedSheetTextInput(
-            hint_text="Nazwa…",
+            hint_text="Nazwa grupy (np. Salto)…",
             multiline=False,
             size_hint_y=None,
             height=dp(48),
@@ -2719,7 +2835,6 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         bar.add_widget(btn_add)
         self.panel.add_widget(bar)
         self.add_widget(root)
-        self._refresh_parent_spinner()
 
     def _apply_sheet_layout(self, animate=False):
         self._sync_modal_height()
@@ -2739,33 +2854,6 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     def _relayout_for_keyboard(self, animate=False):
         self._apply_sheet_layout(animate)
-
-    def _on_type_changed(self, _spinner, value):
-        sub = value == ETAPY_ADD_SUB
-        self.parent_spinner.opacity = 1 if sub else 0
-        self.parent_spinner.disabled = not sub
-        self.parent_spinner.height = dp(44) if sub else 0
-        if sub:
-            self._refresh_parent_spinner()
-        if value == ETAPY_ADD_GROUP:
-            self.field.hint_text = "Nazwa grupy (np. Salto)…"
-        elif value == ETAPY_ADD_SUB:
-            self.field.hint_text = "Nazwa podkroku…"
-        else:
-            self.field.hint_text = "Nazwa kroku…"
-        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(True), 0)
-
-    def _refresh_parent_spinner(self):
-        group = self.project_screen._selected_etapy_group()
-        labels = []
-        if group:
-            for i, it in enumerate(group.get("items") or []):
-                t = (it.get("text") or f"Krok {i + 1}").strip()
-                labels.append(f"{i + 1}. {t[:40]}")
-        if not labels:
-            labels = ["(najpierw dodaj krok)"]
-        self.parent_spinner.values = labels
-        self.parent_spinner.text = labels[0]
 
     def on_open(self):
         self._sheet_kb_bound = False
@@ -2792,25 +2880,11 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             self._schedule_keyboard_relayout(False)
 
     def _commit_and_close(self):
-        kind = self.type_spinner.text
         text = (self.field.text or "").strip()
         if not text:
             self.dismiss()
             return
-        if kind == ETAPY_ADD_GROUP:
-            self.project_screen.add_etapy_group(text)
-        elif kind == ETAPY_ADD_SUB:
-            parent_txt = self.parent_spinner.text or ""
-            if parent_txt.startswith("("):
-                self.dismiss()
-                return
-            try:
-                idx = int(parent_txt.split(".", 1)[0]) - 1
-            except ValueError:
-                idx = 0
-            self.project_screen.add_etapy_step(text, parent_item_index=idx)
-        else:
-            self.project_screen.add_etapy_step(text)
+        self.project_screen.add_etapy_group(text)
         self.dismiss()
 
     def dismiss(self, *largs):
@@ -2821,7 +2895,379 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.field.focus = False
         h = max(self.panel.height, dp(1))
         anim = Animation(y=-h, d=0.22, t="in_cubic")
-        anim.bind(on_complete=lambda *a: super(AddEtapyBottomSheet, self).dismiss())
+        anim.bind(on_complete=lambda *a: super(AddEtapyGroupBottomSheet, self).dismiss())
+        anim.start(self.panel)
+
+
+class _PodkrokEditorRow(MDBoxLayout):
+    """One inline editor row inside EditEtapyKrokBottomSheet's Podkroki list.
+
+    Renders a bullet, an editable text field, and a red × delete button. Stores
+    the original ``done`` flag so reorders/edits preserve completion state.
+    """
+
+    def __init__(self, sheet, text="", done=False, **kwargs):
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("spacing", dp(6))
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(44))
+        super().__init__(**kwargs)
+        self.sheet = sheet
+        self.done_state = bool(done)
+
+        self.add_widget(
+            MDLabel(
+                text="•",
+                size_hint_x=None,
+                width=dp(14),
+                font_size=sp(22),
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#7e57c2"),
+                halign="center",
+                valign="middle",
+                bold=True,
+            )
+        )
+
+        self.field = RoundedSheetTextInput(
+            hint_text="Nazwa podkroku…",
+            text=text or "",
+            multiline=False,
+            size_hint_y=None,
+            height=dp(40),
+            font_size=sp(15),
+            padding=[dp(10), dp(10), dp(10), dp(10)],
+            foreground_color=get_color_from_hex("#222222"),
+            cursor_color=get_color_from_hex("#7e57c2"),
+        )
+        self.add_widget(self.field)
+
+        del_btn = Button(
+            text="×",
+            size_hint=(None, None),
+            size=(dp(36), dp(36)),
+            background_normal="",
+            background_down="",
+            background_color=(0, 0, 0, 0),
+            color=get_color_from_hex("#e53935"),
+            font_size=sp(22),
+            bold=True,
+        )
+        del_btn.bind(on_release=lambda *_: self.sheet._remove_podkrok_row(self))
+        self.add_widget(del_btn)
+
+
+class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
+    """Slides-up editor for one Krok and its Podkroki.
+
+    Modes:
+      * item_index=None → new Krok against ``group_index`` (no delete button).
+      * item_index=int  → edit existing Krok; bottom-left 'Usuń' deletes it.
+
+    Podkroki are fully manageable: rename inline, delete with × on each row,
+    'Dodaj podkrok' appends an empty row. All changes commit on 'Zapisz'.
+    """
+
+    def __init__(self, project_screen, group_index, item_index=None, **kwargs):
+        super().__init__(**kwargs)
+        self.project_screen = project_screen
+        self.group_index = int(group_index)
+        self.item_index = item_index
+        self._closing = False
+        self.size_hint = (1, 1)
+        self.auto_dismiss = False
+        self.background_color = (0, 0, 0, 0)
+        self.background = ""
+
+        # Snapshot initial state so cancel actually discards.
+        self._initial_text = ""
+        self._initial_children = []
+        if item_index is not None:
+            try:
+                src = project_screen._etapy_groups[self.group_index]["items"][item_index]
+                self._initial_text = src.get("text", "")
+                self._initial_children = [
+                    {
+                        "text": c.get("text", ""),
+                        "done": bool(c.get("done", False)),
+                    }
+                    for c in (src.get("children") or [])
+                ]
+            except (IndexError, KeyError, TypeError):
+                pass
+
+        root = FloatLayout()
+        self._fl = root
+        dim = Button(
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+            background_normal="",
+            background_color=(0, 0, 0, 0.45),
+        )
+        dim.bind(on_release=lambda *a: self.dismiss())
+        root.add_widget(dim)
+
+        self.panel = MDCard(
+            orientation="vertical",
+            padding=[dp(14), dp(10), dp(14), 0],
+            spacing=dp(8),
+            size_hint=(1, None),
+            height=dp(420),
+            radius=[dp(22), dp(22), 0, 0],
+            md_bg_color=(1, 1, 1, 1),
+            elevation=16,
+        )
+        root.add_widget(self.panel)
+
+        title = "Edytuj krok" if item_index is not None else "Nowy krok"
+        self.panel.add_widget(
+            MDLabel(
+                text=title,
+                font_style="Subtitle1",
+                bold=True,
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#222222"),
+                size_hint_y=None,
+                height=dp(24),
+                valign="middle",
+            )
+        )
+
+        self.name_field = RoundedSheetTextInput(
+            hint_text="Nazwa kroku…",
+            text=self._initial_text,
+            multiline=False,
+            size_hint_y=None,
+            height=dp(48),
+            font_size=sp(16),
+            padding=[dp(12), dp(12), dp(12), dp(12)],
+            foreground_color=get_color_from_hex("#222222"),
+            cursor_color=get_color_from_hex("#7e57c2"),
+        )
+        self.panel.add_widget(self.name_field)
+
+        self.panel.add_widget(
+            MDLabel(
+                text="Podkroki",
+                font_size=sp(13),
+                bold=True,
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#666666"),
+                size_hint_y=None,
+                height=dp(20),
+                valign="middle",
+            )
+        )
+
+        self._podkrok_scroll = ScrollView(
+            size_hint_y=None,
+            height=dp(150),
+            do_scroll_x=False,
+            bar_width=dp(4),
+        )
+        self._podkrok_box = MDBoxLayout(
+            orientation="vertical",
+            spacing=dp(6),
+            size_hint_y=None,
+            height=dp(0),
+        )
+        self._podkrok_box.bind(minimum_height=self._sync_podkrok_box_height)
+        self._podkrok_scroll.add_widget(self._podkrok_box)
+        self.panel.add_widget(self._podkrok_scroll)
+
+        app = MDApp.get_running_app()
+        add_pod_btn = RoundedSheetButton(
+            text="+ Dodaj podkrok",
+            size_hint_y=None,
+            height=dp(40),
+            bg_color=[0.94, 0.92, 1.0, 1],
+            text_rgb=list(get_color_from_hex("#5e35b1")),
+        )
+        add_pod_btn.bind(on_release=lambda *_: self._add_podkrok_row())
+        self.panel.add_widget(add_pod_btn)
+
+        for child in self._initial_children:
+            self._add_podkrok_row(child.get("text", ""), child.get("done", False))
+
+        bar = MDBoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(48),
+            spacing=dp(12),
+        )
+        if item_index is not None:
+            btn_delete = RoundedSheetButton(
+                text="Usuń",
+                size_hint_x=None,
+                width=dp(96),
+                bg_color=list(get_color_from_hex("#e53935")),
+            )
+            btn_delete.bind(on_release=lambda *a: self._delete_and_close())
+            bar.add_widget(btn_delete)
+        bar.add_widget(Widget(size_hint_x=1))
+        btn_cancel = RoundedSheetButton(
+            text="Anuluj",
+            size_hint_x=None,
+            width=dp(96),
+            bg_color=[0.94, 0.94, 0.96, 1],
+            text_rgb=list(get_color_from_hex("#444444")),
+        )
+        btn_cancel.bind(on_release=lambda *a: self.dismiss())
+        save_label = "Zapisz" if item_index is not None else "Dodaj"
+        btn_save = RoundedSheetButton(
+            text=save_label,
+            size_hint_x=None,
+            width=dp(104),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+        )
+        btn_save.bind(on_release=lambda *a: self._commit_and_close())
+        bar.add_widget(btn_cancel)
+        bar.add_widget(btn_save)
+        self.panel.add_widget(bar)
+        self.add_widget(root)
+
+    # --- Podkrok list management ---
+
+    def _add_podkrok_row(self, text="", done=False):
+        row = _PodkrokEditorRow(self, text=text, done=done)
+        self._podkrok_box.add_widget(row)
+        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(True), 0)
+
+    def _remove_podkrok_row(self, row):
+        if row.parent is self._podkrok_box:
+            self._podkrok_box.remove_widget(row)
+        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(True), 0)
+
+    def _sync_podkrok_box_height(self, *_):
+        self._podkrok_box.height = self._podkrok_box.minimum_height
+        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(False), 0)
+
+    # --- Layout (mirrors AddTimeGoalBottomSheet pattern) ---
+
+    def _apply_sheet_layout(self, animate=False):
+        self._sync_modal_height()
+        body_h = float(self._podkrok_box.minimum_height)
+        self._podkrok_scroll.height = max(dp(60), min(body_h, dp(220)))
+        self.panel.height = self._panel_height_for_content(
+            self.panel, self._podkrok_scroll.height, body_scroll=self._podkrok_scroll
+        )
+        self.panel.width = self.width or Window.width
+        self.panel.x = 0
+        self.panel.pos_hint = {}
+        win_h = float(self.height or Window.height or 640)
+        target_y = self._sheet_bottom_y(win_h)
+        max_h = win_h - target_y
+        if self.panel.height > max_h:
+            chrome = self._measure_panel_chrome(
+                self.panel, exclude=(self._podkrok_scroll,)
+            )
+            self._podkrok_scroll.height = max(dp(60), max_h - chrome)
+            self.panel.height = self._panel_height_for_content(
+                self.panel,
+                self._podkrok_scroll.height,
+                body_scroll=self._podkrok_scroll,
+            )
+        if animate:
+            Animation(y=target_y, d=0.12, t="out_cubic").start(self.panel)
+        else:
+            self.panel.y = target_y
+
+    def _relayout_for_keyboard(self, animate=False):
+        self._apply_sheet_layout(animate)
+
+    def on_open(self):
+        self._sheet_kb_bound = False
+        self._sheet_bind_keyboard()
+        self._enable_resize_softinput()
+        self.panel.y = -dp(500)
+        Clock.schedule_once(self._open_start, 0)
+
+    def _open_start(self, _dt):
+        self._apply_sheet_layout(False)
+        target_y = self.panel.y
+        self.panel.y = -self.panel.height
+        Animation(y=target_y, d=0.28, t="out_cubic").start(self.panel)
+        Clock.schedule_once(self._request_focus, 0.35)
+
+    def on_size(self, *_):
+        if self.panel is not None and self.parent is not None:
+            self.panel.width = self.width
+            self._sync_modal_height()
+            self._schedule_keyboard_relayout(False)
+
+    def _request_focus(self, _dt):
+        self.name_field.focus = True
+        self._schedule_keyboard_relayout(True)
+        if self.name_field.text:
+            self.name_field.cursor = (len(self.name_field.text), 0)
+
+    def _sheet_input_focused(self):
+        """Override mixin: the base class only checks hard-coded attribute names.
+
+        We also have name_field plus a dynamic list of _PodkrokEditorRow widgets,
+        each with its own .field. If any of them is focused, the sheet should
+        lift above the keyboard.
+        """
+        if getattr(self, "name_field", None) is not None and self.name_field.focus:
+            return True
+        box = getattr(self, "_podkrok_box", None)
+        if box is not None:
+            for row in box.children:
+                field = getattr(row, "field", None)
+                if field is not None and getattr(field, "focus", False):
+                    return True
+        return False
+
+    # --- Commit / delete ---
+
+    def _collect_children(self):
+        out = []
+        rows = [
+            w for w in reversed(self._podkrok_box.children)
+            if isinstance(w, _PodkrokEditorRow)
+        ]
+        for row in rows:
+            text = (row.field.text or "").strip()
+            if not text:
+                continue
+            out.append({"text": text, "done": bool(row.done_state)})
+        return out
+
+    def _commit_and_close(self):
+        name = (self.name_field.text or "").strip()
+        children = self._collect_children()
+        if not name:
+            if self.item_index is None:
+                self.dismiss()
+                return
+            name = "Krok"
+        if self.item_index is None:
+            self.project_screen.create_etapy_step(
+                self.group_index, name, children
+            )
+        else:
+            self.project_screen.update_etapy_step(
+                self.group_index, self.item_index, name, children
+            )
+        self.dismiss()
+
+    def _delete_and_close(self):
+        if self.item_index is not None:
+            self.project_screen.delete_etapy_step(self.group_index, self.item_index)
+        self.dismiss()
+
+    def dismiss(self, *largs):
+        if self._closing:
+            return
+        self._closing = True
+        self._sheet_unbind_keyboard()
+        self.name_field.focus = False
+        for row in list(self._podkrok_box.children):
+            if isinstance(row, _PodkrokEditorRow):
+                row.field.focus = False
+        h = max(self.panel.height, dp(1))
+        anim = Animation(y=-h, d=0.22, t="in_cubic")
+        anim.bind(on_complete=lambda *a: super(EditEtapyKrokBottomSheet, self).dismiss())
         anim.start(self.panel)
 
 
@@ -2943,8 +3389,8 @@ class TimeGoalTrackRow(MDBoxLayout):
     reset_mode = StringProperty(RESET_WEEKLY)
     period_key = StringProperty("")
     active_uid = StringProperty("")
-    car_source_idle = StringProperty(_car_asset_path("CCcc 1.png"))
-    car_source_active = StringProperty(_car_asset_path("ZZzz 1.png"))
+    car_source_idle = StringProperty(_car_asset_path("ZZzz 1.png"))
+    car_source_active = StringProperty(_car_asset_path("CCcc 1.png"))
     parent_screen = ObjectProperty(None, allownone=True)
 
     _tick_ev = None

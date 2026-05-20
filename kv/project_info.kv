@@ -6,10 +6,12 @@
 #:import CarProgressButton screens.project_info.CarProgressButton
 #:import ChecklistGoalRow screens.project_info.ChecklistGoalRow
 #:import StageItemRow screens.project_info.StageItemRow
+#:import StageTextTap screens.project_info.StageTextTap
 #:import UnderlineTextBlock screens.project_info.UnderlineTextBlock
 #:import TimelineSpine screens.project_info.TimelineSpine
 #:import StatusCircleButton screens.project_info.StatusCircleButton
-#:import EtapyFinishRow screens.project_info.EtapyFinishRow
+#:import EtapyPlusRow screens.project_info.EtapyPlusRow
+#:import EtapyPlusSpine screens.project_info.EtapyPlusSpine
 #:import ZrobioneSection screens.project_info.ZrobioneSection
 #:import ZrobioneHeaderBar screens.project_info.ZrobioneHeaderBar
 
@@ -343,39 +345,42 @@
 <StageItemRow>:
     TimelineSpine:
         id: spine
-    MDLabel:
+    Widget:
+        # Invisible spacer used to indent Podkrok text. The arrow itself is
+        # drawn inside `TimelineSpine` so the indent doesn't move the spine.
         id: sub_arrow
-        text: "→"
         size_hint_x: None
         width: 0
         opacity: 0
-        font_size: sp(14)
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 0.9
-        valign: "middle"
-    UnderlineTextBlock:
-        id: underline_block
+    StageTextTap:
+        id: tap_area
         size_hint_x: 1
-        text: root.display_text
+        on_release: root._open_editor()
+        UnderlineTextBlock:
+            id: underline_block
+            size_hint_x: 1
+            text: root.display_text
     StatusCircleButton:
         id: status_btn
-        show_crown: True
+        # Match the highly-visible white style used in Lista celów (the
+        # previous purple ring blended into the section background).
+        show_crown: False
+        white_style: True
 
-<EtapyFinishRow>:
-    TimelineSpine:
-        is_last: True
+<EtapyPlusRow>:
+    EtapyPlusSpine:
         size_hint_x: None
         width: dp(22)
-    Widget:
-        size_hint_x: 1
-    MDIcon:
-        icon: "flag-checkered"
+    MDLabel:
+        text: "Dodaj krok"
+        font_size: sp(13)
+        bold: True
         theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        icon_size: dp(26)
-        size_hint_x: None
-        width: dp(40)
-        pos_hint: {"center_y": 0.5}
+        text_color: 1, 1, 1, 0.8
+        valign: "middle"
+        halign: "left"
+        size_hint_x: 1
+        text_size: self.size
 
 <ProjectInfoScreen>:
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
@@ -608,7 +613,7 @@
                                 size_hint_x: 1
                             SectionHeaderAction:
                                 icon: "plus"
-                                on_release: root.open_add_etapy_sheet()
+                                on_release: root.open_add_etapy_group_sheet()
 
                         ScrollView:
                             size_hint_y: None

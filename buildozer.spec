@@ -13,20 +13,20 @@ package.domain = org.stokrotka
 source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,kv,atlas,json
+source.include_exts = py,png,jpg,kv,atlas,json,zip
 
 # (list) List of inclusions using pattern matching
-source.include_patterns = assets/*
+source.include_patterns = assets/Emoji_PNG.zip,assets/Progress_Car/*
 
 # (list) Source files to exclude (let empty to not exclude anything)
 #source.exclude_exts = spec
 
 # (list) List of directory to exclude (let empty to not exclude anything)
-source.exclude_dirs = tests, bin, venv
+source.exclude_dirs = tests, bin, venv, assets/Emoji_PNG
 
 # (list) List of exclusions using pattern matching
 # Do not prefix with './'
-#source.exclude_patterns = license,images/*/*.jpg
+source.exclude_patterns = assets/Emoji_PNG/*,Makefile,setup_dependencies.sh,*.md,.gitignore,.vscode/*,scripts/*
 
 # (str) Application versioning (method 1)
 version = 0.1
@@ -405,7 +405,8 @@ ios.codesign.allowed = false
 [buildozer]
 
 # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
-log_level = 2
+# 1 = info: ~1-2s faster per build (less stdout); switch back to 2 to diagnose build issues.
+log_level = 1
 
 # (int) Display warning if buildozer is run as root (0 = False, 1 = True)
 warn_on_root = 1

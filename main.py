@@ -18,6 +18,7 @@ from screens.add_project import AddProjectScreen
 from screens.statistics import StatisticsScreen
 from screens.project_info import ProjectInfoScreen, ensure_android_timer_service
 from screens import active_timer
+from screens.emoji_assets import ensure_emoji_assets
 
 # Window size for testing on pc
 if platform in ('win', 'linux', 'macosx'):
@@ -55,6 +56,7 @@ class TimeTrackerApp(MDApp):
             self._request_android_notification_permission()
         # Initialize the 3 samples once the app starts
         home_screen = self.screen_manager.get_screen('home')
+        ensure_emoji_assets()
         self.load_layout_pref()
         home_screen.load_projects()
         home_screen.schedule_initial_layout()

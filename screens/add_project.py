@@ -20,6 +20,7 @@ from kivy.clock import Clock
 from plyer import filechooser
 
 from screens.image_utils import prepare_project_image
+from screens.emoji_assets import ensure_emoji_assets, resolve_emoji_source
 from kivymd.app import MDApp
 from kivymd.uix.behaviors import RectangularRippleBehavior
 from kivy.uix.behaviors import ButtonBehavior
@@ -162,8 +163,7 @@ class AddProjectScreen(Screen):
 
         # Build emoji index once
         if not self._emoji_index:
-            app = MDApp.get_running_app()
-            emoji_dir = os.path.join(app.directory, "assets", "Emoji_PNG")
+            emoji_dir = ensure_emoji_assets()
             self._emoji_index = EmojiMetadata.build_emoji_index(emoji_dir)
             print(f"[EmojiPicker] Built index with {len(self._emoji_index)} emojis")
 
@@ -266,7 +266,7 @@ class AddProjectScreen(Screen):
         print(f"[EmojiPicker] Filtered to {len(filtered)} emojis")
     
     def _on_emoji_selected(self, emoji_val):
-        self.selected_icon = emoji_val
+        self.selected_icon = resolve_emoji_source(emoji_val)
         if hasattr(self, 'emoji_dialog'):
             self.emoji_dialog.dismiss()
         # Clear search for next time

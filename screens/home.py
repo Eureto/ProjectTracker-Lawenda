@@ -7,10 +7,11 @@ from screens.session_store import (
     get_last_session,
     schedule_home_last_session_refresh,
 )
+from screens.emoji_assets import resolve_emoji_source
 
 from kivy.core.text import Label as CoreLabel
 from kivy.uix.widget import Widget
-from kivy.properties import StringProperty, NumericProperty, BooleanProperty, ColorProperty
+from kivy.properties import StringProperty, NumericProperty, BooleanProperty, ColorProperty, AliasProperty
 from kivy.metrics import dp
 from kivy.clock import Clock
 from kivy.animation import Animation
@@ -122,6 +123,21 @@ class ProjectCard(MDCard):
     height_multiplier = NumericProperty(1.0)
     title_font_style = StringProperty("Subtitle2")
     emoji_size = NumericProperty(dp(40))
+    emoji_right_hint = NumericProperty(1.05)
+    emoji_right_hint_png = NumericProperty(1.05)
+
+    def _get_effective_emoji_right_hint(self):
+        src = (self.emoji_source or "").lower()
+        if src.endswith(".png"):
+            return self.emoji_right_hint_png
+        return self.emoji_right_hint
+
+    effective_emoji_right_hint = AliasProperty(
+        _get_effective_emoji_right_hint,
+        None,
+        bind=("emoji_source", "emoji_right_hint", "emoji_right_hint_png"),
+    )
+
     interactive = BooleanProperty(True)
 
     def __init__(self, **kwargs):
@@ -293,7 +309,7 @@ class SessionCard(MDCard):
             return
         self.has_session = True
         self.project_name = session.get("project_title", "")
-        icon = session.get("emoji_source") or "folder-outline"
+        icon = resolve_emoji_source(session.get("emoji_source") or "folder-outline")
         self.emoji_source = icon if icon else "folder-outline"
         self.when_label = format_when_label(session.get("ended_at"))
         self.duration_text = f"Czas:  {format_duration_hms(session.get('duration_seconds', 0))}"
@@ -434,7 +450,7 @@ class HomeScreen(MDScreen):
                     projects = json.load(f)
                 for p in projects:
                     self.add_project_card(
-                        p['title'], p['image'], p['icon'], p['color'],
+                        p['title'], p['image'], resolve_emoji_source(p['icon']), p['color'],
                         0.1, 0.9 # Default pos, restore_card_positions will fix this
                     )
             except (IOError, json.JSONDecodeError) as e:
@@ -474,7 +490,7 @@ class HomeScreen(MDScreen):
     def add_project_card(self, title, image, emoji, color, x_pos, y_top):
         container = self.ids.projects_container
         new_card = ProjectCard(
-            title=title, image_source=image, emoji_source=emoji,
+            title=title, image_source=image, emoji_source=resolve_emoji_source(emoji),
             card_color=color,
             pos_hint={'x': x_pos, 'top': y_top}
         )

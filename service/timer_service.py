@@ -25,6 +25,16 @@ TAG = "ProjectTrackerSvc"
 IDLE_GRACE_SECONDS = 6
 
 
+def _argb(a, r, g, b):
+    val = (a << 24) | (r << 16) | (g << 8) | b
+    if val >= 0x80000000:
+        val -= 0x100000000
+    return val
+
+
+ACCENT_COLOR = _argb(0xFF, 0x8A, 0x2B, 0xE2)
+
+
 def _logcat(message):
     print(f"{TAG}: {message}", flush=True)
     try:
@@ -46,11 +56,16 @@ def _goal_notification_id(uid):
     return GOAL_NOTIFICATION_BASE_ID + (zlib.crc32(uid.encode("utf-8")) % 8000)
 
 
-def _goal_text(goal):
+def _goal_progress(goal):
     logged = float(goal.get("base_logged_seconds", 0.0)) + active_timer.running_seconds(goal)
     target = max(1.0, float(goal.get("target_seconds", 1.0)))
     pct = int(round(100.0 * logged / target))
     label = goal.get("goal_text") or goal.get("title") or "Cel"
+    return label, pct, int(logged), int(target)
+
+
+def _goal_text(goal):
+    label, pct, logged, _ = _goal_progress(goal)
     return f"{label} - {pct}% ({_format_seconds(logged)})"
 
 
@@ -68,6 +83,11 @@ class TimerNotificationService:
         self.NotificationBuilder = autoclass("android.app.Notification$Builder")
         self.NotificationChannel = autoclass("android.app.NotificationChannel")
         self.NotificationManagerClass = autoclass("android.app.NotificationManager")
+        self.BigTextStyle = autoclass("android.app.Notification$BigTextStyle")
+        try:
+            self.BitmapFactory = autoclass("android.graphics.BitmapFactory")
+        except Exception:
+            self.BitmapFactory = None
         try:
             self.ServiceInfo = autoclass("android.content.pm.ServiceInfo")
         except Exception:
@@ -84,6 +104,7 @@ class TimerNotificationService:
         self._last_goal_ids = set()
         self._idle_since = None
         self._seen_active = False
+        self._large_icon = self._load_large_icon()
 
         try:
             base_dir = self.service.getFilesDir().getAbsolutePath()
@@ -98,6 +119,17 @@ class TimerNotificationService:
 
     def _jstr(self, value):
         return self.JavaString(str(value or ""))
+
+    def _load_large_icon(self):
+        if self.BitmapFactory is None:
+            return None
+        try:
+            return self.BitmapFactory.decodeResource(
+                self.context.getResources(), self.icon
+            )
+        except Exception as exc:
+            _logcat(f"large icon load failed: {exc!r}")
+            return None
 
     def _create_channel(self):
         if self.sdk_int < 26:
@@ -129,10 +161,10 @@ class TimerNotificationService:
         return intent
 
     def _stop_intent(self, action, uid=""):
-        intent = self.Intent(action)
-        intent.setPackage(self.package_name)
+        intent = self.Intent(self._jstr(action))
+        intent.setPackage(self._jstr(self.package_name))
         if uid:
-            intent.putExtra("uid", uid)
+            intent.putExtra(self._jstr("uid"), self._jstr(uid))
         return intent
 
     def _builder(self):
@@ -140,7 +172,25 @@ class TimerNotificationService:
             return self.NotificationBuilder(self.context, CHANNEL_ID)
         return self.NotificationBuilder(self.context)
 
-    def _notification_builder(self, title, text, project_title, stop_intent, request_code):
+    def _apply_style(self, builder, title, expanded_text):
+        try:
+            style = self.BigTextStyle()
+            style.setBigContentTitle(self._jstr(title))
+            style.bigText(self._jstr(expanded_text))
+            builder.setStyle(style)
+        except Exception as exc:
+            _logcat(f"BigTextStyle failed: {exc!r}")
+
+    def _notification_builder(
+        self,
+        title,
+        text,
+        project_title,
+        stop_intent,
+        request_code,
+        expanded_text=None,
+        sub_text=None,
+    ):
         builder = self._builder()
         tap = self.PendingIntent.getActivity(
             self.context,
@@ -155,18 +205,52 @@ class TimerNotificationService:
             self._pending_flags(),
         )
         builder.setSmallIcon(self.icon)
+        if self._large_icon is not None:
+            try:
+                builder.setLargeIcon(self._large_icon)
+            except Exception:
+                pass
+        try:
+            builder.setColor(ACCENT_COLOR)
+        except Exception:
+            pass
+        try:
+            builder.setColorized(True)
+        except Exception:
+            pass
+        if self.sdk_int >= 21:
+            try:
+                builder.setVisibility(1)
+            except Exception:
+                pass
         builder.setContentTitle(self._jstr(title))
         builder.setContentText(self._jstr(text))
+        if sub_text:
+            try:
+                builder.setSubText(self._jstr(sub_text))
+            except Exception:
+                pass
         builder.setContentIntent(tap)
         builder.setOngoing(True)
         builder.setOnlyAlertOnce(True)
         builder.setShowWhen(False)
-        builder.addAction(self.icon, self._jstr("Stop"), stop)
+        builder.addAction(self.icon, self._jstr("Zatrzymaj"), stop)
+        if expanded_text:
+            self._apply_style(builder, title, expanded_text)
         return builder
 
     def _placeholder_notification(self):
         builder = self._builder()
         builder.setSmallIcon(self.icon)
+        if self._large_icon is not None:
+            try:
+                builder.setLargeIcon(self._large_icon)
+            except Exception:
+                pass
+        try:
+            builder.setColor(ACCENT_COLOR)
+        except Exception:
+            pass
         builder.setContentTitle(self._jstr("Lawenda"))
         builder.setContentText(self._jstr("Trwa uruchamianie stopera..."))
         builder.setOngoing(True)
@@ -175,25 +259,48 @@ class TimerNotificationService:
         return builder.build()
 
     def _timer_notification(self, state):
-        project = state.get("project_title", "")
-        text = _format_seconds(active_timer.elapsed_from_state(state))
+        project = state.get("project_title", "") or "Projekt"
+        elapsed = active_timer.elapsed_from_state(state)
+        elapsed_text = _format_seconds(elapsed)
+        expanded = (
+            f"Projekt: {project}\n"
+            f"Stoper: {elapsed_text}"
+        )
         return self._notification_builder(
             f"Stoper - {project}",
-            text,
+            elapsed_text,
             project,
             self._stop_intent(ACTION_STOP_TIMER),
             TIMER_NOTIFICATION_ID,
+            expanded_text=expanded,
+            sub_text="Lawenda",
         ).build()
 
     def _goal_notification(self, goal):
-        uid = goal.get("uid", "")
-        project = goal.get("project_title", "")
+        uid = str(goal.get("uid", "") or "")
+        project = goal.get("project_title", "") or "Projekt"
+        goal_name = (goal.get("title") or "").strip()
+        label, pct, logged, _ = _goal_progress(goal)
+        collapsed = f"{label} - {pct}% ({_format_seconds(logged)})"
+
+        title_parts = ["Cel", project]
+        if goal_name and goal_name.lower() != "cel":
+            title_parts.append(goal_name)
+        title = " - ".join(title_parts)
+
+        header = project
+        if goal_name and goal_name.lower() != "cel":
+            header = f"{project} - {goal_name}"
+        expanded = f"{header}\n{label} - {pct}% - {_format_seconds(logged)}"
+
         return self._notification_builder(
-            f"Cel - {project}",
-            _goal_text(goal),
+            title,
+            collapsed,
             project,
             self._stop_intent(ACTION_STOP_GOAL, uid),
             _goal_notification_id(uid),
+            expanded_text=expanded,
+            sub_text="Lawenda",
         ).build()
 
     def _start_foreground(self, notification_id, notification):
@@ -238,17 +345,22 @@ class TimerNotificationService:
             return
 
         def _on_receive(context, intent):
-            action = intent.getAction()
+            action = str(intent.getAction() or "")
             _logcat(f"received {action}")
             try:
                 if action == ACTION_STOP_TIMER:
                     active_timer.finalize_project_timer()
                     self.manager.cancel(TIMER_NOTIFICATION_ID)
                 elif action == ACTION_STOP_GOAL:
-                    uid = intent.getStringExtra("uid") or ""
+                    raw_uid = intent.getStringExtra(self._jstr("uid"))
+                    uid = str(raw_uid) if raw_uid is not None else ""
+                    _logcat(f"STOP_GOAL uid={uid!r}")
                     if uid:
-                        active_timer.finalize_goal(uid)
+                        result = active_timer.finalize_goal(uid)
+                        _logcat(f"finalize_goal({uid!r}) -> {result!r}")
                         self.manager.cancel(_goal_notification_id(uid))
+                    else:
+                        _logcat("STOP_GOAL received without uid extra")
             except Exception:
                 _logcat(traceback.format_exc())
 
