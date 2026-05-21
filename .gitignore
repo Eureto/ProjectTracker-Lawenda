@@ -6,3 +6,4 @@ bin
 .vscode
 assets/Emoji_PNG.zip
 assets/.Emoji_PNG.*.zip
+cache
