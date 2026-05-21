@@ -26,7 +26,7 @@ source.exclude_dirs = tests, bin, venv, assets/Emoji_PNG
 
 # (list) List of exclusions using pattern matching
 # Do not prefix with './'
-source.exclude_patterns = assets/Emoji_PNG/*,Makefile,setup_dependencies.sh,*.md,.gitignore,.vscode/*,scripts/*
+source.exclude_patterns = assets/Emoji_PNG/*,assets/icon/source.png,Makefile,setup_dependencies.sh,*.md,.gitignore,.vscode/*,scripts/*
 
 # (str) Application versioning (method 1)
 version = 0.1
@@ -37,17 +37,17 @@ version = 0.1
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3,kivy,kivymd,plyer,pillow,emoji,pyjnius
+requirements = python3,kivy,kivymd,plyer,pillow,emoji,pyjnius,requests,kivy_garden.mapview
 
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes
 # requirements.source.kivy = ../../kivy
 
 # (str) Presplash of the application
-#presplash.filename = %(source.dir)s/data/presplash.png
+presplash.filename = %(source.dir)s/assets/icon/presplash.png
 
 # (str) Icon of the application
-#icon.filename = %(source.dir)s/data/icon.png
+icon.filename = %(source.dir)s/assets/icon/icon.png
 
 # (list) Supported orientations
 # Valid options are: landscape, portrait, portrait-reverse or landscape-reverse
@@ -84,7 +84,8 @@ android.window_softinput_mode = adjustResize
 # red, blue, green, black, white, gray, cyan, magenta, yellow, lightgray,
 # darkgray, grey, lightgrey, darkgrey, aqua, fuchsia, lime, maroon, navy,
 # olive, purple, silver, teal.
-#android.presplash_color = #FFFFFF
+# Matches the app's MDApp.theme_bg so the splash → first screen is seamless.
+android.presplash_color = #8A2BE2
 
 # (string) Presplash animation using Lottie format.
 # see https://lottiefiles.com/ for examples and https://airbnb.design/lottie/
@@ -93,12 +94,12 @@ android.window_softinput_mode = adjustResize
 #android.presplash_lottie = "path/to/lottie/file.json"
 
 # (str) Adaptive icon of the application (used if Android API level is 26+ at runtime)
-#icon.adaptive_foreground.filename = %(source.dir)s/data/icon_fg.png
-#icon.adaptive_background.filename = %(source.dir)s/data/icon_bg.png
+icon.adaptive_foreground.filename = %(source.dir)s/assets/icon/icon_adaptive_fg.png
+icon.adaptive_background.filename = %(source.dir)s/assets/icon/icon_adaptive_bg.png
 
 # (list) Permissions
 # (See https://python-for-android.readthedocs.io/en/latest/buildoptions/#build-options-1 for all the supported syntaxes and properties)
-android.permissions = INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_MEDIA_IMAGES, FOREGROUND_SERVICE, POST_NOTIFICATIONS, WAKE_LOCK
+android.permissions = INTERNET, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, READ_MEDIA_IMAGES, FOREGROUND_SERVICE, POST_NOTIFICATIONS, WAKE_LOCK, ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, ACCESS_BACKGROUND_LOCATION
 
 # (list) features (adds uses-feature -tags to manifest)
 #android.features = android.hardware.usb.host

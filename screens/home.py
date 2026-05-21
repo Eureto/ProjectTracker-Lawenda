@@ -114,6 +114,7 @@ class DotProgressBar(Widget):
                 )
 
 class ProjectCard(MDCard):
+    uid = StringProperty("")
     title = StringProperty("")
     image_source = StringProperty("")
     emoji_source = StringProperty("")
@@ -227,6 +228,9 @@ class ProjectCard(MDCard):
     def open_project_info(self):
         app = MDApp.get_running_app()
         info = app.root.get_screen("project_info")
+        # ``project_uid`` is the lookup key for all per-project state. Set it
+        # BEFORE the title so the title-change handler sees the new uid.
+        info.project_uid = self.uid or ""
         info.project_title = self.title
         app.root.current = "project_info"
 
@@ -248,12 +252,16 @@ class ProjectCard(MDCard):
                 except (IOError, json.JSONDecodeError):
                     pass
 
-            data[self.title] = {'x': rel_x, 'top': rel_y}
+            # Card positions are keyed by uid so duplicate-titled projects no
+            # longer overwrite each other. Legacy title keys migrate during
+            # active_timer.migrate_legacy_state_to_uids on startup.
+            key = self.uid or self.title
+            data[key] = {'x': rel_x, 'top': rel_y}
 
             with open(storage_path, 'w') as f:
                 json.dump(data, f)
 
-            print(f"Position saved for {self.title}: x={rel_x:.2f}, top={rel_y:.2f}")
+            print(f"Position saved for {self.title} ({key}): x={rel_x:.2f}, top={rel_y:.2f}")
 
 class SessionCard(MDCard):
     has_session = BooleanProperty(False)
@@ -451,7 +459,8 @@ class HomeScreen(MDScreen):
                 for p in projects:
                     self.add_project_card(
                         p['title'], p['image'], resolve_emoji_source(p['icon']), p['color'],
-                        0.1, 0.9 # Default pos, restore_card_positions will fix this
+                        0.1, 0.9,
+                        uid=p.get('uid', ''),
                     )
             except (IOError, json.JSONDecodeError) as e:
                 print(f"Error loading projects: {e}")
@@ -476,8 +485,14 @@ class HomeScreen(MDScreen):
 
         for card in self._project_cards():
             card.stop_drag_animation()
-            if card.title in data:
+            # Prefer the uid key (new format); fall back to title for unmigrated
+            # installs the first time the new code runs.
+            pos = None
+            if card.uid and card.uid in data:
+                pos = data[card.uid]
+            elif card.title in data:
                 pos = data[card.title]
+            if pos is not None:
                 card.pos_hint = {
                     "x": float(pos.get("x", 0.1)),
                     "top": float(pos.get("top", 0.9)),
@@ -487,9 +502,10 @@ class HomeScreen(MDScreen):
 
         self.update_container_height()
 
-    def add_project_card(self, title, image, emoji, color, x_pos, y_top):
+    def add_project_card(self, title, image, emoji, color, x_pos, y_top, uid=""):
         container = self.ids.projects_container
         new_card = ProjectCard(
+            uid=uid or "",
             title=title, image_source=image, emoji_source=resolve_emoji_source(emoji),
             card_color=color,
             pos_hint={'x': x_pos, 'top': y_top}

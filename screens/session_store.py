@@ -53,7 +53,13 @@ def find_project_meta(project_title):
     return {}
 
 
-def record_session(project_title, duration_seconds, started_at=None, ended_at=None):
+def record_session(
+    project_title,
+    duration_seconds,
+    started_at=None,
+    ended_at=None,
+    project_uid="",
+):
     """Append a completed tracking session (newest first)."""
     if not project_title or duration_seconds < 1:
         return None
@@ -67,6 +73,7 @@ def record_session(project_title, duration_seconds, started_at=None, ended_at=No
 
     meta = find_project_meta(project_title)
     entry = {
+        "project_uid": project_uid or meta.get("uid", ""),
         "project_title": project_title,
         "emoji_source": resolve_emoji_source(meta.get("icon", "emoticon-happy-outline")),
         "image": meta.get("image", ""),

@@ -1048,6 +1048,12 @@ class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
 class ProjectInfoScreen(MDScreen):
     """Project detail panel: dynamic notes & goals, timer, bottom nav like home."""
 
+    # ``project_uid`` is the canonical lookup key for every per-project file
+    # (project_details, active_timer, active_goals). ``project_title`` is the
+    # display name only — two projects can legitimately share it. When the uid
+    # is empty (legacy / fresh install with no migration yet) the title is used
+    # as a fallback key so we still find the right blob.
+    project_uid = StringProperty("")
     project_title = StringProperty("")
     timer_display = StringProperty("00:00:00")
     timer_running = BooleanProperty(False)
@@ -1069,17 +1075,34 @@ class ProjectInfoScreen(MDScreen):
         self._goal_sheet = None
         self._goal_period_ev = None
         self._loading_project_content = False
-        self.bind(project_title=self._on_project_title_changed)
+        # When project_uid changes we always need to swap content; when only
+        # project_title changes (rename in place) we just refresh metadata.
+        self.bind(project_uid=self._on_project_identity_changed)
+        self.bind(project_title=self._on_project_identity_changed)
 
-    def _on_project_title_changed(self, *_args):
+    def _state_key(self):
+        """Storage key for this project's per-project blob."""
+        return self.project_uid or self.project_title or "_"
+
+    def _on_project_identity_changed(self, *_args):
         mgr = self.manager
         if mgr is not None and mgr.current == self.name:
             self.load_project_content()
             self._restore_active_runtime()
 
+    def on_pre_enter(self):
+        # Render the new project's content BEFORE the transition completes so
+        # the user never sees a frame of the previous project's UI bleeding
+        # through. on_enter still re-runs runtime restore once the screen is
+        # actually visible.
+        self.load_project_content()
+        self._restore_active_runtime()
+
     def on_enter(self):
         Window.bind(on_keyboard=self._on_keyboard)
-        self.load_project_content()
+        # on_pre_enter has already populated the UI; we only need the runtime
+        # re-sync (e.g. timer drift while the transition animated) and the
+        # period refresh scheduler here.
         self._restore_active_runtime()
         self._refresh_time_goal_periods()
         if self._goal_period_ev is not None:
@@ -1146,7 +1169,9 @@ class ProjectInfoScreen(MDScreen):
             json.dump(data, f, indent=2)
 
     def save_project_content(self):
-        key = self.project_title or "_"
+        if not (self.project_uid or self.project_title):
+            return
+        key = self._state_key()
         data = self._read_all_states()
         data[key] = {
             "timer_elapsed": self._timer_elapsed_seconds,
@@ -1166,7 +1191,7 @@ class ProjectInfoScreen(MDScreen):
         self._loading_project_content = True
         try:
             self._clear_dynamic_widgets()
-            key = self.project_title or "_"
+            key = self._state_key()
             blob = self._read_all_states().get(key)
             if blob:
                 self._timer_elapsed_seconds = int(blob.get("timer_elapsed", 0))
@@ -1206,6 +1231,7 @@ class ProjectInfoScreen(MDScreen):
                         reset_mode=rm,
                         period_key=pk,
                         uid=g.get("uid") or "",
+                        geofence=g.get("geofence") or None,
                     )
                 for cg in blob.get("checklist_goals") or []:
                     t = (cg.get("text") or "").strip()
@@ -1261,17 +1287,19 @@ class ProjectInfoScreen(MDScreen):
         out = []
         for row in self.ids.goals_list.children:
             if isinstance(row, TimeGoalTrackRow):
-                out.append(
-                    {
-                        "title": row.title_text,
-                        "goal": row.goal_text,
-                        "goal_target_seconds": row.goal_target_seconds,
-                        "logged_seconds": row.logged_seconds,
-                        "reset_mode": row.reset_mode,
-                        "period_key": row.period_key,
-                        "uid": row.active_uid,
-                    }
-                )
+                entry = {
+                    "title": row.title_text,
+                    "goal": row.goal_text,
+                    "goal_target_seconds": row.goal_target_seconds,
+                    "logged_seconds": row.logged_seconds,
+                    "reset_mode": row.reset_mode,
+                    "period_key": row.period_key,
+                    "uid": row.active_uid,
+                }
+                geofence = dict(row.geofence or {})
+                if geofence:
+                    entry["geofence"] = geofence
+                out.append(entry)
         return out
 
     def _all_done_checklist_rows(self, zr=None):
@@ -1571,17 +1599,6 @@ class ProjectInfoScreen(MDScreen):
             return
         box.clear_widgets()
         if not self._etapy_groups:
-            hint = MDLabel(
-                text="Dodaj grupę etapów przyciskiem +",
-                font_size=sp(13),
-                theme_text_color="Custom",
-                text_color=(1, 1, 1, 0.65),
-                size_hint=(None, None),
-                height=dp(32),
-            )
-            hint.texture_update()
-            hint.width = hint.texture_size[0] + dp(16)
-            box.add_widget(hint)
             return
         for idx, group in enumerate(self._etapy_groups):
             active = idx == self._etapy_selected_index
@@ -1625,16 +1642,6 @@ class ProjectInfoScreen(MDScreen):
         if group is None:
             # No group → no in-timeline '+'. The header '+' is the only path
             # for creating the first group.
-            timeline.add_widget(
-                MDLabel(
-                    text="Dodaj grupę etapów przyciskiem +",
-                    font_size=sp(13),
-                    theme_text_color="Custom",
-                    text_color=(1, 1, 1, 0.65),
-                    size_hint_y=None,
-                    height=dp(36),
-                )
-            )
             return
         items = group.get("items") or []
         gi = self._etapy_selected_index
@@ -1737,10 +1744,10 @@ class ProjectInfoScreen(MDScreen):
     def on_goals_add_clicked(self):
         self.open_add_goal_sheet()
 
-    def open_add_goal_sheet(self):
+    def open_add_goal_sheet(self, draft=None):
         if self._goal_sheet is not None:
             return
-        sheet = AddTimeGoalBottomSheet(self)
+        sheet = AddTimeGoalBottomSheet(self, draft=draft)
 
         def _cleared(*_a):
             self._goal_sheet = None
@@ -1748,6 +1755,46 @@ class ProjectInfoScreen(MDScreen):
         sheet.bind(on_dismiss=_cleared)
         self._goal_sheet = sheet
         sheet.open()
+
+    def open_geofence_picker_for_goal_draft(self, draft):
+        """Open the map picker, preserving the in-progress goal draft.
+
+        ``draft`` must be a mutable dict with the current form values; we mutate
+        its ``geofence`` slot and re-open the goal sheet on return.
+        """
+        if not isinstance(draft, dict):
+            draft = {}
+        existing = draft.get("geofence") or {}
+
+        def _on_done(result):
+            action = (result or {}).get("action", "cancel")
+            if action == "save":
+                draft["geofence"] = result.get("geofence") or {}
+            elif action == "clear":
+                draft["geofence"] = {}
+            Clock.schedule_once(
+                lambda _dt: self.open_add_goal_sheet(draft=draft), 0
+            )
+
+        app = MDApp.get_running_app()
+        if app is None or app.root is None:
+            return
+        try:
+            picker = app.root.get_screen("geofence_picker")
+        except Exception:
+            picker = None
+        if picker is None:
+            self.open_add_goal_sheet(draft=draft)
+            return
+        picker.configure(
+            initial_lat=existing.get("lat"),
+            initial_lon=existing.get("lon"),
+            initial_radius_m=existing.get("radius_m"),
+            initial_zoom=existing.get("zoom"),
+            return_screen="project_info",
+            on_done=_on_done,
+        )
+        app.root.current = "geofence_picker"
 
     def add_time_goal(
         self,
@@ -1758,6 +1805,7 @@ class ProjectInfoScreen(MDScreen):
         reset_mode=RESET_WEEKLY,
         period_key=None,
         uid="",
+        geofence=None,
     ):
         tgt = float(goal_target_seconds) if goal_target_seconds is not None else parse_goal_target_seconds(goal)
         tgt = max(10.0, tgt)
@@ -1773,6 +1821,7 @@ class ProjectInfoScreen(MDScreen):
             period_key=period_key,
             active_uid=uid or f"goal-{uuid.uuid4().hex}",
             parent_screen=self,
+            geofence=dict(geofence) if isinstance(geofence, dict) else {},
         )
         row.apply_logged_to_ui()
         self.ids.goals_list.add_widget(row)
@@ -1801,9 +1850,26 @@ class ProjectInfoScreen(MDScreen):
                 rows[row.active_uid] = row
         return rows
 
+    def _state_matches_project(self, state):
+        """True when ``state`` (timer / goal) belongs to the current project.
+
+        Prefer uid comparison; fall back to title comparison only when neither
+        side has a uid (e.g. partially migrated installs).
+        """
+        if not isinstance(state, dict):
+            return False
+        state_uid = state.get("project_uid")
+        if self.project_uid and state_uid:
+            return state_uid == self.project_uid
+        if state_uid or self.project_uid:
+            # One side has a uid and the other doesn't → assume mismatch to
+            # avoid falsely binding a renamed-but-shared-name project.
+            return False
+        return state.get("project_title") == self.project_title
+
     def _restore_active_runtime(self):
         timer_state = active_timer.read_project_timer()
-        if timer_state.get("project_title") == self.project_title:
+        if self._state_matches_project(timer_state):
             started = timer_state.get("started_at")
             try:
                 self._run_started_at = datetime.datetime.fromisoformat(started)
@@ -1819,7 +1885,7 @@ class ProjectInfoScreen(MDScreen):
 
         rows_by_uid = self._active_goal_rows_by_uid()
         for goal_state in active_timer.read_goals():
-            if goal_state.get("project_title") != self.project_title:
+            if not self._state_matches_project(goal_state):
                 continue
             row = rows_by_uid.get(goal_state.get("uid"))
             if row is not None:
@@ -1829,7 +1895,7 @@ class ProjectInfoScreen(MDScreen):
 
     def _sync_active_timer_elapsed(self):
         state = active_timer.read_project_timer()
-        if state.get("project_title") == self.project_title:
+        if self._state_matches_project(state):
             self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
             self._refresh_timer_label()
 
@@ -1848,6 +1914,7 @@ class ProjectInfoScreen(MDScreen):
                 self.project_title,
                 duration,
                 started_at=self._run_started_at,
+                project_uid=self.project_uid,
             )
         self._run_started_at = None
         self._run_base_elapsed = self._timer_elapsed_seconds
@@ -1869,6 +1936,7 @@ class ProjectInfoScreen(MDScreen):
                 self.project_title,
                 base_elapsed_seconds=self._run_base_elapsed,
                 started_at=self._run_started_at,
+                project_uid=self.project_uid,
             )
             self.save_project_content()
             ensure_android_timer_service()
@@ -1883,7 +1951,7 @@ class ProjectInfoScreen(MDScreen):
 
     def _on_timer_tick(self, _dt):
         state = active_timer.read_project_timer()
-        if state.get("project_title") == self.project_title:
+        if self._state_matches_project(state):
             self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
         elif self.timer_running:
             self._stop_timer_event()
@@ -1913,7 +1981,7 @@ class ProjectInfoScreen(MDScreen):
 
     def open_project_settings(self):
         """Persist current state, then route to the dedicated settings screen."""
-        if not self.project_title:
+        if not (self.project_uid or self.project_title):
             return
         self._stop_all_goal_trackers(update_active=False)
         self.save_project_content()
@@ -1921,6 +1989,7 @@ class ProjectInfoScreen(MDScreen):
         if not app or not getattr(app, "root", None):
             return
         settings = app.root.get_screen("project_settings")
+        settings.project_uid = self.project_uid
         settings.project_title = self.project_title
         app.root.current = "project_settings"
 
@@ -2331,10 +2400,12 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
     """Bottom sheet: title + goal string (e.g. 1h/1d); target duration parsed for the car progress."""
 
-    def __init__(self, project_screen, **kwargs):
+    def __init__(self, project_screen, draft=None, **kwargs):
         super().__init__(**kwargs)
         self.project_screen = project_screen
         self._closing = False
+        self._draft = dict(draft) if isinstance(draft, dict) else {}
+        self._geofence = dict(self._draft.get("geofence") or {})
         self.size_hint = (1, 1)
         self.auto_dismiss = False
         self.background_color = (0, 0, 0, 0)
@@ -2390,6 +2461,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
         self.title_field = RoundedSheetTextInput(
             hint_text="Nazwa celu",
+            text=str(self._draft.get("title", "")),
             multiline=False,
             size_hint_y=None,
             height=dp(44),
@@ -2406,8 +2478,8 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             height=dp(62),
         )
         for label_text, default_val, attr in (
-            ("Godziny", "1", "hours_field"),
-            ("Minuty", "0", "minutes_field"),
+            ("Godziny", str(self._draft.get("hours", "1")), "hours_field"),
+            ("Minuty", str(self._draft.get("minutes", "0")), "minutes_field"),
         ):
             col = MDBoxLayout(
                 orientation="vertical",
@@ -2473,7 +2545,9 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             self._reset_chips[mode] = chip
             chip_row.add_widget(chip)
         self._body.add_widget(chip_row)
-        self._select_reset_mode(RESET_WEEKLY)
+        self._select_reset_mode(
+            parse_reset_mode(self._draft.get("reset_mode")) if self._draft.get("reset_mode") else RESET_WEEKLY
+        )
 
         self._body.add_widget(
             MDLabel(
@@ -2488,6 +2562,8 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
                 shorten_from="right",
             )
         )
+
+        self._body.add_widget(self._build_geofence_section())
 
         self._body_scroll.add_widget(self._body)
         self.panel.add_widget(self._body_scroll)
@@ -2526,6 +2602,130 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self._selected_reset_mode = mode
         for m, chip in self._reset_chips.items():
             chip.selected = m == mode
+
+    def _geofence_summary_text(self):
+        gf = self._geofence or {}
+        if not gf:
+            return "Nie wybrano lokalizacji."
+        try:
+            lat = float(gf.get("lat"))
+            lon = float(gf.get("lon"))
+            radius = float(gf.get("radius_m"))
+        except (TypeError, ValueError):
+            return "Nie wybrano lokalizacji."
+        return f"Wybrano: {lat:.4f}, {lon:.4f}  |  {int(radius)} m"
+
+    def _build_geofence_section(self):
+        container = MDBoxLayout(
+            orientation="vertical",
+            spacing=dp(4),
+            size_hint_y=None,
+            height=dp(96),
+        )
+
+        app = MDApp.get_running_app()
+        button_row = MDBoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
+            size_hint_y=None,
+            height=dp(40),
+        )
+        btn_map = RoundedSheetButton(
+            text="Mapa",
+            size_hint_x=None,
+            width=dp(112),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+        )
+        btn_map.bind(on_release=lambda *_a: self._open_geofence_picker())
+        button_row.add_widget(btn_map)
+
+        if self._geofence:
+            btn_clear = RoundedSheetButton(
+                text="Usuń",
+                size_hint_x=None,
+                width=dp(80),
+                bg_color=[0.94, 0.94, 0.96, 1],
+                text_rgb=list(get_color_from_hex("#444444")),
+            )
+            btn_clear.bind(on_release=lambda *_a: self._clear_geofence())
+            button_row.add_widget(btn_clear)
+
+        button_row.add_widget(Widget(size_hint_x=1))
+        container.add_widget(button_row)
+
+        container.add_widget(
+            MDLabel(
+                text="Zaznacz miejsce gdzie chcesz mierzyć czas automatycznie po wejściu",
+                font_style="Caption",
+                theme_text_color="Custom",
+                text_color=(0.35, 0.35, 0.38, 1),
+                size_hint_y=None,
+                height=dp(28),
+                text_size=(None, None),
+                shorten=False,
+                halign="left",
+                valign="top",
+            )
+        )
+
+        self._geofence_summary_lbl = MDLabel(
+            text=self._geofence_summary_text(),
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0.20, 0.20, 0.22, 1) if self._geofence else (0.45, 0.45, 0.48, 1),
+            size_hint_y=None,
+            height=dp(20),
+            halign="left",
+            valign="middle",
+        )
+        container.add_widget(self._geofence_summary_lbl)
+
+        # The descriptive label needs proper text wrapping. Bind text_size to
+        # its own width so it can wrap when the panel is narrow.
+        def _bind_wrap(lbl):
+            def _sync(*_a):
+                lbl.text_size = (lbl.width, None)
+                lbl.texture_update()
+                lbl.height = max(dp(20), lbl.texture_size[1])
+
+            lbl.bind(width=_sync)
+            Clock.schedule_once(lambda _dt: _sync(), 0)
+
+        _bind_wrap(container.children[1])  # the descriptive MDLabel
+        return container
+
+    def _capture_form_into_draft(self):
+        self._draft.update(
+            {
+                "title": (self.title_field.text or "").strip(),
+                "hours": (self.hours_field.text or "").strip() or "0",
+                "minutes": (self.minutes_field.text or "").strip() or "0",
+                "reset_mode": self._selected_reset_mode,
+                "geofence": dict(self._geofence) if self._geofence else {},
+            }
+        )
+
+    def _open_geofence_picker(self):
+        self._capture_form_into_draft()
+        screen = self.project_screen
+        draft = self._draft
+        # Fast-dismiss the modal (no animation) so it doesn't overlay the map
+        # screen we're about to navigate to.
+        self._sheet_unbind_keyboard()
+        self.title_field.focus = False
+        self.hours_field.focus = False
+        self.minutes_field.focus = False
+        self._closing = True
+        super(AddTimeGoalBottomSheet, self).dismiss()
+        Clock.schedule_once(
+            lambda _dt: screen.open_geofence_picker_for_goal_draft(draft), 0
+        )
+
+    def _clear_geofence(self):
+        self._geofence = {}
+        if getattr(self, "_geofence_summary_lbl", None) is not None:
+            self._geofence_summary_lbl.text = self._geofence_summary_text()
+            self._geofence_summary_lbl.text_color = (0.45, 0.45, 0.48, 1)
 
     def _sync_goal_body_height(self):
         spacing = float(self._body.spacing)
@@ -2606,7 +2806,9 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             goal_target_seconds=quota,
             logged_seconds=0.0,
             reset_mode=mode,
+            geofence=dict(self._geofence) if self._geofence else None,
         )
+        self.project_screen.save_project_content()
         self.dismiss()
 
     def dismiss(self, *largs):
@@ -3429,6 +3631,7 @@ class TimeGoalTrackRow(MDBoxLayout):
     car_source_idle = StringProperty(_car_asset_path("ZZzz 1.png"))
     car_source_active = StringProperty(_car_asset_path("CCcc 1.png"))
     parent_screen = ObjectProperty(None, allownone=True)
+    geofence = ObjectProperty({})
 
     _tick_ev = None
     _caption_scheduled = False
@@ -3509,6 +3712,7 @@ class TimeGoalTrackRow(MDBoxLayout):
             self._overflow_dir = -1
             if self.tracking_active and self.active_uid:
                 project_title = self.parent_screen.project_title if self.parent_screen else ""
+                project_uid = self.parent_screen.project_uid if self.parent_screen else ""
                 active_timer.start_goal(
                     self.active_uid,
                     project_title,
@@ -3518,6 +3722,7 @@ class TimeGoalTrackRow(MDBoxLayout):
                     base_logged_seconds=0.0,
                     reset_mode=self.reset_mode,
                     period_key=self.period_key,
+                    project_uid=project_uid,
                 )
 
     def apply_logged_to_ui(self):
@@ -3604,6 +3809,7 @@ class TimeGoalTrackRow(MDBoxLayout):
             self.active_uid = f"goal-{uuid.uuid4().hex}"
         self._ensure_period()
         project_title = self.parent_screen.project_title if self.parent_screen else ""
+        project_uid = self.parent_screen.project_uid if self.parent_screen else ""
         active_timer.start_goal(
             self.active_uid,
             project_title,
@@ -3613,6 +3819,7 @@ class TimeGoalTrackRow(MDBoxLayout):
             base_logged_seconds=self.logged_seconds,
             reset_mode=self.reset_mode,
             period_key=self.period_key,
+            project_uid=project_uid,
         )
         if self.parent_screen:
             self.parent_screen.save_project_content()

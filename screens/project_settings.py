@@ -49,16 +49,25 @@ def _save_json(path, data):
 
 
 class ProjectSettingsScreen(Screen):
-    """Edit / delete a single project. ``project_title`` is the lookup key."""
+    """Edit / delete a single project. ``project_uid`` is the lookup key.
 
+    ``project_title`` is also tracked so we can still find legacy projects.json
+    entries that haven't been migrated yet, and so the form can prefill the
+    name field without an extra lookup.
+    """
+
+    project_uid = StringProperty("")
     project_title = StringProperty("")
     selected_color = ColorProperty([0.7, 0.5, 1, 1])
     selected_icon = StringProperty("emoticon-happy-outline")
     selected_image_path = StringProperty("")
     name_text = StringProperty("")
 
-    # Original key — kept so we can rewrite related JSON when the name changes.
+    # Original title — only needed to update the home card after a rename and
+    # to display in the delete-confirmation dialog. The persistent lookup key
+    # is now ``project_uid``.
     _original_title = ""
+    _original_uid = ""
 
     def on_pre_enter(self, *_args):
         self._load_project_meta()
@@ -71,8 +80,20 @@ class ProjectSettingsScreen(Screen):
                 [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
             )
 
+    def _find_project(self, projects):
+        if self._original_uid:
+            for p in projects:
+                if p.get("uid") == self._original_uid:
+                    return p
+        # Legacy fallback: pick by title only when no uid is known.
+        for p in projects:
+            if p.get("title") == self._original_title:
+                return p
+        return None
+
     def _load_project_meta(self):
         """Hydrate the form with the project's current persisted state."""
+        self._original_uid = self.project_uid or ""
         self._original_title = self.project_title or ""
         self.name_text = self._original_title
         name_input = self.ids.get("name_input")
@@ -80,10 +101,7 @@ class ProjectSettingsScreen(Screen):
             name_input.text = self._original_title
 
         projects = _load_json(_user_path("projects.json"), [])
-        proj = next(
-            (p for p in projects if p.get("title") == self._original_title),
-            None,
-        )
+        proj = self._find_project(projects)
         if proj is None:
             self.selected_color = [0.7, 0.5, 1, 1]
             self.selected_icon = resolve_emoji_source("emoticon-happy-outline")
@@ -147,34 +165,27 @@ class ProjectSettingsScreen(Screen):
             new_name = self._original_title
 
         original = self._original_title
-        rename = (new_name != original) and bool(original)
-
-        # Block renaming over an existing project with the same name.
-        if rename:
-            projects = _load_json(_user_path("projects.json"), [])
-            taken = any(
-                p.get("title") == new_name and p.get("title") != original
-                for p in projects
-            )
-            if taken:
-                self._warn(
-                    "Nazwa zajęta",
-                    f"Projekt „{new_name}” już istnieje.",
-                )
-                return
-
-        self._write_projects_json(original, new_name)
-        if rename:
-            self._rename_project_details(original, new_name)
-            self._rename_sessions(original, new_name)
-            self._rename_card_position(original, new_name)
+        original_uid = self._original_uid
+        # Renames no longer need to re-key state — every state file is keyed
+        # by uid now, so duplicate titles are explicitly OK.
+        self._write_projects_json(new_name)
+        self._rename_sessions_by_uid(new_name)
 
         self._refresh_home_cards()
-        self._return_to_project(new_name)
+        self._return_to_project(new_name, original_uid)
 
     # --- Delete with confirmation ---
 
     def delete_project(self):
+        # MDDialog computes its layout (and the action-button row) at
+        # construction time; assigning ``dlg.buttons`` after the fact leaves
+        # the dialog buttonless. Always pass them via the constructor.
+        cancel_btn = MDFlatButton(text="ANULUJ")
+        confirm_btn = MDFlatButton(
+            text="USUŃ NA ZAWSZE",
+            theme_text_color="Custom",
+            text_color=(0.85, 0.18, 0.18, 1),
+        )
         dlg = MDDialog(
             title="Usunąć projekt?",
             text=(
@@ -182,103 +193,108 @@ class ProjectSettingsScreen(Screen):
                 f"notatki i etapy projektu „{self._original_title}” "
                 f"zostaną trwale usunięte."
             ),
+            buttons=[cancel_btn, confirm_btn],
         )
-        cancel_btn = MDFlatButton(text="ANULUJ")
-        confirm_btn = MDFlatButton(text="USUŃ NA ZAWSZE")
-        confirm_btn.theme_text_color = "Custom"
-        confirm_btn.text_color = (0.85, 0.18, 0.18, 1)
         cancel_btn.bind(on_release=lambda *_a: dlg.dismiss())
-        confirm_btn.bind(
-            on_release=lambda *_a: self._confirm_delete(dlg)
-        )
-        dlg.buttons = [cancel_btn, confirm_btn]
+        confirm_btn.bind(on_release=lambda *_a: self._confirm_delete(dlg))
         dlg.open()
 
     def _confirm_delete(self, dlg):
         dlg.dismiss()
+        uid = self._original_uid
         title = self._original_title
-        if not title:
+        if not uid and not title:
             return
 
-        # 1. Remove the project metadata entry.
-        projects = [
-            p for p in _load_json(_user_path("projects.json"), [])
-            if p.get("title") != title
-        ]
+        projects = _load_json(_user_path("projects.json"), [])
+        if uid:
+            projects = [p for p in projects if p.get("uid") != uid]
+        else:
+            # Legacy fallback: drop every duplicate-titled entry. After the
+            # uid migration runs this branch shouldn't fire, but it's a safe
+            # default for unmigrated installs.
+            projects = [p for p in projects if p.get("title") != title]
         _save_json(_user_path("projects.json"), projects)
 
-        # 2. Drop the per-project content blob.
         details = _load_json(_user_path("project_details.json"), {})
-        if title in details:
-            details.pop(title)
-            _save_json(_user_path("project_details.json"), details)
+        for key in (uid, title):
+            if key and key in details:
+                details.pop(key)
+        _save_json(_user_path("project_details.json"), details)
 
-        # 3. Strip recorded sessions for the project.
         sessions = _load_json(_user_path("sessions.json"), [])
-        sessions = [
-            s for s in sessions if s.get("project_title") != title
-        ]
+        if uid:
+            sessions = [s for s in sessions if s.get("project_uid") != uid]
+        else:
+            sessions = [s for s in sessions if s.get("project_title") != title]
         _save_json(_user_path("sessions.json"), sessions)
 
-        # 4. Forget the saved card position.
         positions = _load_json(_user_path("card_positions.json"), {})
-        if title in positions:
-            positions.pop(title)
-            _save_json(_user_path("card_positions.json"), positions)
+        for key in (uid, title):
+            if key and key in positions:
+                positions.pop(key)
+        _save_json(_user_path("card_positions.json"), positions)
 
         self._refresh_home_cards()
         self._go_home_after_delete()
 
     # --- Persistence helpers ---
 
-    def _write_projects_json(self, original, new_name):
+    def _write_projects_json(self, new_name):
+        """Update the project's projects.json row in place (by uid when known)."""
+        import uuid as _uuid
+
         path = _user_path("projects.json")
         projects = _load_json(path, [])
         updated = False
         for p in projects:
-            if p.get("title") == original:
+            match = (
+                (self._original_uid and p.get("uid") == self._original_uid)
+                or (not self._original_uid and p.get("title") == self._original_title)
+            )
+            if match:
                 p["title"] = new_name
                 p["color"] = list(self.selected_color)
                 p["icon"] = self.selected_icon
                 p["image"] = self.selected_image_path
+                if not p.get("uid"):
+                    p["uid"] = self._original_uid or f"proj-{_uuid.uuid4().hex}"
+                self._original_uid = p["uid"]
+                self.project_uid = p["uid"]
                 updated = True
                 break
         if not updated:
-            # First time we're persisting metadata for this project.
+            new_uid = self._original_uid or f"proj-{_uuid.uuid4().hex}"
             projects.append(
                 {
+                    "uid": new_uid,
                     "title": new_name,
                     "color": list(self.selected_color),
                     "icon": self.selected_icon,
                     "image": self.selected_image_path,
                 }
             )
+            self._original_uid = new_uid
+            self.project_uid = new_uid
         _save_json(path, projects)
 
-    def _rename_project_details(self, original, new_name):
-        path = _user_path("project_details.json")
-        data = _load_json(path, {})
-        if original in data:
-            data[new_name] = data.pop(original)
-            _save_json(path, data)
+    def _rename_sessions_by_uid(self, new_name):
+        """Keep historical session ``project_title`` in sync with the rename.
 
-    def _rename_sessions(self, original, new_name):
+        Sessions stay project_title-keyed for display, so when the name
+        changes we update every session row that belongs to this uid.
+        """
+        if not self._original_uid:
+            return
         path = _user_path("sessions.json")
         sessions = _load_json(path, [])
         changed = False
         for s in sessions:
-            if s.get("project_title") == original:
+            if s.get("project_uid") == self._original_uid and s.get("project_title") != new_name:
                 s["project_title"] = new_name
                 changed = True
         if changed:
             _save_json(path, sessions)
-
-    def _rename_card_position(self, original, new_name):
-        path = _user_path("card_positions.json")
-        data = _load_json(path, {})
-        if original in data:
-            data[new_name] = data.pop(original)
-            _save_json(path, data)
 
     # --- Navigation ---
 
@@ -306,11 +322,12 @@ class ProjectSettingsScreen(Screen):
         Clock.schedule_once(lambda _dt: home.restore_card_positions(), 0)
         home.refresh_last_session()
 
-    def _return_to_project(self, title):
+    def _return_to_project(self, title, uid=""):
         app = MDApp.get_running_app()
         if not app or not getattr(app, "root", None):
             return
         info = app.root.get_screen("project_info")
+        info.project_uid = uid or self._original_uid or info.project_uid
         info.project_title = title
         app.root.current = "project_info"
 
@@ -323,10 +340,9 @@ class ProjectSettingsScreen(Screen):
     # --- Misc ---
 
     def _warn(self, title, text):
-        dlg = MDDialog(title=title, text=text)
         ok = MDFlatButton(text="OK")
+        dlg = MDDialog(title=title, text=text, buttons=[ok])
         ok.bind(on_release=lambda *_a: dlg.dismiss())
-        dlg.buttons = [ok]
         dlg.open()
 
     def on_name_input(self, value):

@@ -141,13 +141,21 @@
                             size: self.size
                             radius: [dp(12)]
 
-                    MDIcon:
-                        icon: "trash-can-outline"
-                        theme_text_color: "Custom"
-                        text_color: 1, 1, 1, 1
-                        icon_size: sp(22)
+                    # Wrap the icon in an AnchorLayout so its glyph is
+                    # vertically centered within the 54dp row regardless of
+                    # the MDLabel's intrinsic baseline.
+                    AnchorLayout:
                         size_hint_x: None
                         width: dp(28)
+                        anchor_x: "center"
+                        anchor_y: "center"
+
+                        MDIcon:
+                            icon: "trash-can-outline"
+                            theme_text_color: "Custom"
+                            text_color: 1, 1, 1, 1
+                            font_size: sp(22)
+                            adaptive_size: True
 
                     Label:
                         text: "Usuń projekt"

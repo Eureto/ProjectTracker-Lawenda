@@ -12,6 +12,7 @@ dialog auto-dismisses.
 from kivy.graphics import Color, Ellipse, Line
 from kivy.metrics import dp
 from kivy.properties import BooleanProperty, ListProperty
+from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
@@ -22,8 +23,8 @@ from kivymd.uix.gridlayout import MDGridLayout
 from kivymd.uix.label import MDLabel
 
 
-# Five 10-color palettes. Laid out so each row of the 5-column grid contains
-# 5 colors from one palette — i.e. each palette occupies 2 rows.
+# Five 10-color palettes. Laid out so each palette occupies one column of the
+# 5-column grid — i.e. column 0 is Pastele, column 1 is Ciepłe, etc.
 PALETTES = (
     ("Pastele", (
         "#F3E8FF", "#E0F2FE", "#DCFCE7", "#FEF9C3", "#FCE7F3",
@@ -108,13 +109,31 @@ def open_palette_picker(default_color, on_pick, title="Wybierz kolor"):
     )
     content.bind(minimum_height=content.setter("height"))
 
+    swatch_size = dp(40)
+    grid_spacing = dp(12)
+    grid_padding = dp(4)
+    grid_cols = len(PALETTES)
+    grid_width = (
+        grid_cols * swatch_size
+        + max(0, grid_cols - 1) * grid_spacing
+        + 2 * grid_padding
+    )
+
     grid = MDGridLayout(
-        cols=5,
-        spacing=dp(12),
-        size_hint_y=None,
-        padding=(dp(4), dp(4), dp(4), dp(4)),
+        cols=grid_cols,
+        spacing=grid_spacing,
+        size_hint=(None, None),
+        width=grid_width,
+        padding=(grid_padding, grid_padding, grid_padding, grid_padding),
     )
     grid.bind(minimum_height=grid.setter("height"))
+
+    grid_wrapper = AnchorLayout(
+        anchor_x="center",
+        anchor_y="top",
+        size_hint_y=None,
+    )
+    grid.bind(height=grid_wrapper.setter("height"))
 
     dialog = MDDialog(
         title=title,
@@ -122,6 +141,10 @@ def open_palette_picker(default_color, on_pick, title="Wybierz kolor"):
         content_cls=content,
         size_hint_x=0.9,
     )
+
+    title_lbl = dialog.ids.get("title") if hasattr(dialog, "ids") else None
+    if title_lbl is not None:
+        title_lbl.halign = "center"
 
     swatches = []
 
@@ -134,14 +157,20 @@ def open_palette_picker(default_color, on_pick, title="Wybierz kolor"):
         dialog.dismiss()
         on_pick(rgba)
 
-    for _name, hexes in PALETTES:
-        for hx in hexes:
-            color = list(get_color_from_hex(hx))
-            btn = PaletteSwatchButton(swatch_color=color)
-            btn.selected = _colors_match(default_rgba, color)
-            btn.bind(on_release=lambda b, c=color: select(b, c))
-            grid.add_widget(btn)
-            swatches.append(btn)
+    max_rows = max(len(hexes) for _name, hexes in PALETTES)
+    for row in range(max_rows):
+        for _name, hexes in PALETTES:
+            if row < len(hexes):
+                color = list(get_color_from_hex(hexes[row]))
+                btn = PaletteSwatchButton(swatch_color=color)
+                btn.selected = _colors_match(default_rgba, color)
+                btn.bind(on_release=lambda b, c=color: select(b, c))
+                grid.add_widget(btn)
+                swatches.append(btn)
+            else:
+                grid.add_widget(
+                    Widget(size_hint=(None, None), size=(swatch_size, swatch_size))
+                )
 
     hint = MDLabel(
         text="Dotknij koła, aby wybrać kolor.",
@@ -153,7 +182,8 @@ def open_palette_picker(default_color, on_pick, title="Wybierz kolor"):
     )
     hint.bind(size=lambda lbl, *_: setattr(lbl, "text_size", lbl.size))
 
-    content.add_widget(grid)
+    grid_wrapper.add_widget(grid)
+    content.add_widget(grid_wrapper)
     content.add_widget(hint)
 
     cancel = MDFlatButton(text="ANULUJ")

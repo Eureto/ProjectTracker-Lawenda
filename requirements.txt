@@ -7,3 +7,5 @@ cython==0.29.34
 plyer
 Pillow
 emoji
+kivy_garden.mapview
+requests

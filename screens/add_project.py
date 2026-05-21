@@ -1,6 +1,7 @@
 import os
 import json
 import unicodedata
+import uuid
 from kivy.properties import StringProperty, ColorProperty, NumericProperty, ObjectProperty, ListProperty
 from kivy.uix.screenmanager import Screen
 from kivymd.uix.dialog import MDDialog
@@ -353,13 +354,16 @@ class AddProjectScreen(Screen):
             return # Could add a Toast here for "Name required"
 
         project_data = {
+            # Stable per-project ID used to key all timer/goal/details state.
+            # New in the post-uid refactor — projects.json entries without a
+            # ``uid`` are migrated on startup by active_timer.ensure_project_uids.
+            "uid": f"proj-{uuid.uuid4().hex}",
             "title": project_name,
             "color": list(self.selected_color),
             "icon": self.selected_icon,
             "image": self.selected_image_path
         }
 
-        # 1. Persistent storage of project metadata
         storage_path = os.path.join(app.user_data_dir, 'projects.json')
         projects = []
         if os.path.exists(storage_path):
@@ -368,16 +372,16 @@ class AddProjectScreen(Screen):
                     projects = json.load(f)
             except (IOError, json.JSONDecodeError):
                 pass
-        
+
         projects.append(project_data)
         with open(storage_path, 'w') as f:
             json.dump(projects, f)
 
-        # 2. Add to active HomeScreen UI
         home_screen = app.root.get_screen('home')
         home_screen.add_project_card(
-            project_name, self.selected_image_path, self.selected_icon, 
-            self.selected_color, 0.1, 0.9
+            project_name, self.selected_image_path, self.selected_icon,
+            self.selected_color, 0.1, 0.9,
+            uid=project_data["uid"],
         )
 
         # 3. Cleanup and Navigation
