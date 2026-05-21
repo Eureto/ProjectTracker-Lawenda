@@ -1,10 +1,11 @@
 import os
 import json
 import unicodedata
+import uuid
 from kivy.properties import StringProperty, ColorProperty, NumericProperty, ObjectProperty, ListProperty
 from kivy.uix.screenmanager import Screen
-from kivymd.uix.pickers import MDColorPicker
 from kivymd.uix.dialog import MDDialog
+from screens.color_palette import open_palette_picker
 from kivymd.uix.gridlayout import MDGridLayout
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.textfield import MDTextField
@@ -20,6 +21,7 @@ from kivy.clock import Clock
 from plyer import filechooser
 
 from screens.image_utils import prepare_project_image
+from screens.emoji_assets import ensure_emoji_assets, resolve_emoji_source
 from kivymd.app import MDApp
 from kivymd.uix.behaviors import RectangularRippleBehavior
 from kivy.uix.behaviors import ButtonBehavior
@@ -162,8 +164,7 @@ class AddProjectScreen(Screen):
 
         # Build emoji index once
         if not self._emoji_index:
-            app = MDApp.get_running_app()
-            emoji_dir = os.path.join(app.directory, "assets", "Emoji_PNG")
+            emoji_dir = ensure_emoji_assets()
             self._emoji_index = EmojiMetadata.build_emoji_index(emoji_dir)
             print(f"[EmojiPicker] Built index with {len(self._emoji_index)} emojis")
 
@@ -266,7 +267,7 @@ class AddProjectScreen(Screen):
         print(f"[EmojiPicker] Filtered to {len(filtered)} emojis")
     
     def _on_emoji_selected(self, emoji_val):
-        self.selected_icon = emoji_val
+        self.selected_icon = resolve_emoji_source(emoji_val)
         if hasattr(self, 'emoji_dialog'):
             self.emoji_dialog.dismiss()
         # Clear search for next time
@@ -353,13 +354,16 @@ class AddProjectScreen(Screen):
             return # Could add a Toast here for "Name required"
 
         project_data = {
+            # Stable per-project ID used to key all timer/goal/details state.
+            # New in the post-uid refactor — projects.json entries without a
+            # ``uid`` are migrated on startup by active_timer.ensure_project_uids.
+            "uid": f"proj-{uuid.uuid4().hex}",
             "title": project_name,
             "color": list(self.selected_color),
             "icon": self.selected_icon,
             "image": self.selected_image_path
         }
 
-        # 1. Persistent storage of project metadata
         storage_path = os.path.join(app.user_data_dir, 'projects.json')
         projects = []
         if os.path.exists(storage_path):
@@ -368,16 +372,16 @@ class AddProjectScreen(Screen):
                     projects = json.load(f)
             except (IOError, json.JSONDecodeError):
                 pass
-        
+
         projects.append(project_data)
         with open(storage_path, 'w') as f:
             json.dump(projects, f)
 
-        # 2. Add to active HomeScreen UI
         home_screen = app.root.get_screen('home')
         home_screen.add_project_card(
-            project_name, self.selected_image_path, self.selected_icon, 
-            self.selected_color, 0.1, 0.9
+            project_name, self.selected_image_path, self.selected_icon,
+            self.selected_color, 0.1, 0.9,
+            uid=project_data["uid"],
         )
 
         # 3. Cleanup and Navigation
@@ -385,27 +389,14 @@ class AddProjectScreen(Screen):
         app.root.current = "home"
 
     def select_color(self):
-        # Reverting to the full MDColorPicker which includes the color wheel
-        color_picker = MDColorPicker(
-            size_hint=(0.8, 0.85),
-            default_color=self.selected_color,
-            text_button_ok="WYBIERZ",
-            text_button_cancel="ANULUJ",
-            type_color="HEX",
-            # Smaller values create a much smoother, longer gradient without hitting "white" too fast.
-            # These values provide a subtle but modern shift in hue.
-            adjacent_color_constants=[0.15, 0.3, 0.25],
-            # Makes the color bars and selection elements rounded and modern.
-            radius_color_scale=dp(15)
+        """Pick a project color from the curated swatch palette."""
+        open_palette_picker(
+            default_color=tuple(self.selected_color),
+            on_pick=self._apply_picked_color,
         )
-        color_picker.open()
-        # The on_release event is fired only when the "SELECT" button is clicked
-        color_picker.bind(on_release=self._confirm_color)
 
-    def _confirm_color(self, instance, type_color, color):
-        # Update property when the SELECT button is clicked
+    def _apply_picked_color(self, color):
         self.selected_color = color
-        instance.dismiss()
 
     def _populate_emoji_grid(self, emoji_list):
         """Populate grid with emoji buttons."""

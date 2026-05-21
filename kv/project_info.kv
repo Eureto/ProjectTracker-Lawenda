@@ -6,10 +6,12 @@
 #:import CarProgressButton screens.project_info.CarProgressButton
 #:import ChecklistGoalRow screens.project_info.ChecklistGoalRow
 #:import StageItemRow screens.project_info.StageItemRow
+#:import StageTextTap screens.project_info.StageTextTap
 #:import UnderlineTextBlock screens.project_info.UnderlineTextBlock
 #:import TimelineSpine screens.project_info.TimelineSpine
 #:import StatusCircleButton screens.project_info.StatusCircleButton
-#:import EtapyFinishRow screens.project_info.EtapyFinishRow
+#:import EtapyPlusRow screens.project_info.EtapyPlusRow
+#:import EtapyPlusSpine screens.project_info.EtapyPlusSpine
 #:import ZrobioneSection screens.project_info.ZrobioneSection
 #:import ZrobioneHeaderBar screens.project_info.ZrobioneHeaderBar
 
@@ -34,7 +36,7 @@
             id: note_scroll
             size_hint: 1, 1
             do_scroll_x: False
-            bar_width: dp(4)
+            bar_width: 0
 
             MDLabel:
                 id: note_label
@@ -343,39 +345,50 @@
 <StageItemRow>:
     TimelineSpine:
         id: spine
-    MDLabel:
+    Widget:
+        # Spacer that nudges Podkrok text further from the spine so it sits
+        # to the right of the arrow head (drawn inside TimelineSpine).
         id: sub_arrow
-        text: "→"
         size_hint_x: None
-        width: 0
+        width: dp(16) if root.is_sub else 0
         opacity: 0
-        font_size: sp(14)
-        theme_text_color: "Custom"
-        text_color: 1, 1, 1, 0.9
-        valign: "middle"
-    UnderlineTextBlock:
-        id: underline_block
+    StageTextTap:
+        id: tap_area
         size_hint_x: 1
-        text: root.display_text
+        on_release: root._open_editor()
+        UnderlineTextBlock:
+            id: underline_block
+            size_hint_x: 1
+            text: root.display_text
+            # Krok labels are visually weightier than Podkrok labels.
+            font_size: sp(13) if root.is_sub else sp(16)
+            # The trailing rule under the very last timeline item leaves a
+            # stray horizontal line between the section and the Dodaj-krok
+            # row, so suppress it.
+            show_rule: not root.is_last
     StatusCircleButton:
         id: status_btn
-        show_crown: True
+        # Match the highly-visible white style used in Lista celów (the
+        # previous purple ring blended into the section background).
+        show_crown: False
+        white_style: True
 
-<EtapyFinishRow>:
-    TimelineSpine:
-        is_last: True
+<EtapyPlusRow>:
+    EtapyPlusSpine:
+        id: plus_spine
         size_hint_x: None
         width: dp(22)
-    Widget:
-        size_hint_x: 1
-    MDIcon:
-        icon: "flag-checkered"
+        connect_top: root.connect_top
+    MDLabel:
+        text: "Dodaj krok"
+        font_size: sp(13)
+        bold: True
         theme_text_color: "Custom"
-        text_color: 1, 1, 1, 1
-        icon_size: dp(26)
-        size_hint_x: None
-        width: dp(40)
-        pos_hint: {"center_y": 0.5}
+        text_color: 1, 1, 1, 0.8
+        valign: "middle"
+        halign: "left"
+        size_hint_x: 1
+        text_size: self.size
 
 <ProjectInfoScreen>:
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
@@ -406,7 +419,7 @@
             ScrollView:
                 do_scroll_x: False
                 size_hint_y: 1
-                bar_width: dp(4)
+                bar_width: 0
 
                 MDBoxLayout:
                     orientation: "vertical"
@@ -424,10 +437,10 @@
 
                         MDBoxLayout:
                             size_hint_y: None
-                            height: dp(28)
+                            height: dp(48)
                             MDLabel:
                                 text: "Notatki"
-                                font_size: sp(17)
+                                font_size: sp(34)
                                 bold: True
                                 theme_text_color: "Custom"
                                 text_color: 1, 1, 1, 1
@@ -460,13 +473,13 @@
 
                         MDLabel:
                             text: "Czas"
-                            font_size: sp(17)
+                            font_size: sp(34)
                             bold: True
                             theme_text_color: "Custom"
                             text_color: 1, 1, 1, 1
                             halign: "left"
                             size_hint_y: None
-                            height: dp(26)
+                            height: dp(48)
 
                         MDLabel:
                             text: root.timer_display
@@ -507,7 +520,7 @@
                         size_hint_y: None
                         height: dp(28)
 
-                    # --- Cele czasowy ---
+                    # --- Cel czasowy ---
                     MDBoxLayout:
                         orientation: "vertical"
                         spacing: dp(16)
@@ -516,10 +529,10 @@
 
                         MDBoxLayout:
                             size_hint_y: None
-                            height: dp(28)
+                            height: dp(48)
                             MDLabel:
-                                text: "Cele czasowy"
-                                font_size: sp(17)
+                                text: "Cele czasowe"
+                                font_size: sp(34)
                                 bold: True
                                 theme_text_color: "Custom"
                                 text_color: 1, 1, 1, 1
@@ -553,10 +566,10 @@
 
                         MDBoxLayout:
                             size_hint_y: None
-                            height: dp(28)
+                            height: dp(48)
                             MDLabel:
                                 text: "Lista celów"
-                                font_size: sp(17)
+                                font_size: sp(34)
                                 bold: True
                                 theme_text_color: "Custom"
                                 text_color: 1, 1, 1, 1
@@ -594,10 +607,10 @@
 
                         MDBoxLayout:
                             size_hint_y: None
-                            height: dp(28)
+                            height: dp(48)
                             MDLabel:
                                 text: "Etapy"
-                                font_size: sp(17)
+                                font_size: sp(34)
                                 bold: True
                                 theme_text_color: "Custom"
                                 text_color: 1, 1, 1, 1
@@ -608,7 +621,7 @@
                                 size_hint_x: 1
                             SectionHeaderAction:
                                 icon: "plus"
-                                on_release: root.open_add_etapy_sheet()
+                                on_release: root.open_add_etapy_group_sheet()
 
                         ScrollView:
                             size_hint_y: None

@@ -6,6 +6,7 @@ import os
 
 from kivy.clock import Clock
 from kivymd.app import MDApp
+from screens.emoji_assets import resolve_emoji_source
 
 
 def _sessions_path():
@@ -52,7 +53,13 @@ def find_project_meta(project_title):
     return {}
 
 
-def record_session(project_title, duration_seconds, started_at=None, ended_at=None):
+def record_session(
+    project_title,
+    duration_seconds,
+    started_at=None,
+    ended_at=None,
+    project_uid="",
+):
     """Append a completed tracking session (newest first)."""
     if not project_title or duration_seconds < 1:
         return None
@@ -66,8 +73,9 @@ def record_session(project_title, duration_seconds, started_at=None, ended_at=No
 
     meta = find_project_meta(project_title)
     entry = {
+        "project_uid": project_uid or meta.get("uid", ""),
         "project_title": project_title,
-        "emoji_source": meta.get("icon", "emoticon-happy-outline"),
+        "emoji_source": resolve_emoji_source(meta.get("icon", "emoticon-happy-outline")),
         "image": meta.get("image", ""),
         "color": meta.get("color", [0.7, 0.5, 1, 1]),
         "started_at": started.isoformat(),
@@ -238,6 +246,9 @@ def get_last_session():
     meta = find_project_meta(session.get("project_title", ""))
     if meta.get("icon"):
         session["emoji_source"] = meta["icon"]
+    session["emoji_source"] = resolve_emoji_source(
+        session.get("emoji_source") or "folder-outline"
+    )
     return session
 
 
@@ -296,13 +307,21 @@ def sessions_in_period(sessions, period_label):
 
 
 def _merge_project_meta(row):
-    """Fill icon/color from projects.json when missing on stored sessions."""
+    """Fill icon/color from projects.json when missing on stored sessions.
+
+    Always rewrites the icon through resolve_emoji_source so that PNG entries
+    stored as legacy in-repo paths (e.g. assets/Emoji_PNG/foo.png) point at the
+    runtime-extracted location after the emoji-zip packaging refactor.
+    """
     meta = find_project_meta(row["title"])
     if meta:
         if meta.get("icon"):
             row["emoji_source"] = meta["icon"]
         if meta.get("color"):
             row["color"] = meta["color"]
+    row["emoji_source"] = resolve_emoji_source(
+        row.get("emoji_source") or "folder-outline"
+    )
     return row
 
 
@@ -315,7 +334,9 @@ def aggregate_by_project(sessions, period_label):
         if title not in totals:
             totals[title] = {
                 "title": title,
-                "emoji_source": s.get("emoji_source", "folder-outline"),
+                "emoji_source": resolve_emoji_source(
+                    s.get("emoji_source", "folder-outline")
+                ),
                 "color": s.get("color", [0.6, 0.4, 0.8, 1]),
                 "total_seconds": 0,
             }
@@ -326,7 +347,9 @@ def aggregate_by_project(sessions, period_label):
             meta = find_project_meta(title)
             totals[title] = {
                 "title": title,
-                "emoji_source": meta.get("icon", "folder-outline"),
+                "emoji_source": resolve_emoji_source(
+                    meta.get("icon", "folder-outline")
+                ),
                 "color": meta.get("color", [0.6, 0.4, 0.8, 1]),
                 "total_seconds": 0,
             }

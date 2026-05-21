@@ -7,6 +7,8 @@ BIN = $(VENV)/bin
 ENTRY_POINT = main.py
 TEST_DIR = tests
 SYSTEM_SETUP = ./setup_dependencies.sh
+EMOJI_DIR = assets/Emoji_PNG
+EMOJI_ZIP = assets/Emoji_PNG.zip
 
 # Activation command
 ACTIVATE = . $(BIN)/activate
@@ -16,6 +18,16 @@ RUN_ENV = $(ACTIVATE) &&
 
 # Staging dir buildozer clears with Python rmtree before each copy (fails on FUSE/NTFS).
 BUILDOZER_APP_DIR = .buildozer/android/app
+
+# Buildozer internal paths that we sometimes nudge to force a partial rebuild.
+BUILDOZER_DISTS_DIR = .buildozer/android/platform
+ANDROID_GRADLE_BUILD_DIRS = $(BUILDOZER_DISTS_DIR)/build-*/dists/*/build
+
+# Gradle tuning passed into every Android invocation: keep the daemon warm,
+# build in parallel, reuse the local build cache. Saves ~5-10s/build on top
+# of the p4a 'clean' skip below.
+GRADLE_OPTS_FAST = -Dorg.gradle.daemon=true -Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.configureondemand=true -Dorg.gradle.jvmargs=-Xmx4g
+RUN_BUILDOZER = GRADLE_OPTS="$(GRADLE_OPTS_FAST)" buildozer
 
 # Android application id (package.domain + package.name from buildozer.spec)
 ANDROID_PACKAGE = $(shell awk -F' = ' '/^package\.domain/ {d=$$2} /^package\.name/ {n=$$2} END {if (d && n) print d"."n}' buildozer.spec)
@@ -29,7 +41,8 @@ ANDROID_PACKAGE = $(shell awk -F' = ' '/^package\.domain/ {d=$$2} /^package\.nam
 # 3. head -n 1: takes the first available device
 DEVICE_CONNECTED = $(shell adb devices 2>/dev/null | grep -v "List of devices" | grep -v "^$$" | head -n 1)
 
-.PHONY: help deploy debug test clean logcat prepare android-app-reset uninstall default
+.PHONY: help deploy debug test clean deep-clean logcat prepare android-app-reset \
+        rebuild-android quick emoji-zip uninstall default patch-p4a
 
 # Detect if Java 17 is already the active version
 JAVA_VER_CHECK = $(shell java -version 2>&1 | grep -q "17\." && echo "1" || echo "0")
@@ -73,20 +86,49 @@ android-app-reset: ## Remove Android app staging dir (fixes buildozer rmtree on 
 		rm -rf "$(BUILDOZER_APP_DIR)"; \
 	fi
 
-deploy: prepare android-app-reset ## Auto-deploy: Android (if connected) or PC (fallback)
+emoji-zip: ## Pack emoji PNGs into one APK asset zip
+	@python3 scripts/build_emoji_zip.py
+
+patch-p4a: ## Remove forced 'gradlew clean' from p4a toolchain (idempotent; re-run after deep-clean)
+	@python3 scripts/patch_p4a_skip_clean.py
+
+deploy: prepare emoji-zip patch-p4a android-app-reset ## Auto-deploy: Android (if connected) or PC (fallback)
 	@$(RUN_ENV) if [ -n "$(DEVICE_CONNECTED)" ]; then \
 		echo "[INFO] Android device detected: $(DEVICE_CONNECTED)"; \
 		echo "[INFO] Packaging and deploying to device..."; \
-		buildozer android debug deploy run; \
+		$(RUN_BUILDOZER) android debug deploy run; \
 	else \
 		echo "[WARN] No Android device detected. Deploying to local PC..."; \
 		python3 $(ENTRY_POINT); \
 	fi
 
-debug: prepare android-app-reset ## Build & Run with logs: Android (logcat) or PC (debug level)
+quick: prepare emoji-zip patch-p4a ## Fastest Android rebuild (skip staging reset; Python/.kv edits only)
+	@if [ -z "$(DEVICE_CONNECTED)" ]; then \
+		echo "[ERROR] No Android device detected. Use 'make deploy' on desktop."; \
+		exit 1; \
+	fi
+	@echo "[INFO] Quick rebuild (no staging reset; keeps p4a dist + gradle cache)..."
+	@$(RUN_ENV) $(RUN_BUILDOZER) android debug deploy run
+
+rebuild-android: prepare emoji-zip patch-p4a android-app-reset ## After buildozer.spec changes (services, permissions, Java); keeps p4a dist
+	@echo "[INFO] Forcing Android project regen (Java/manifest re-emit; keeps p4a dist)..."
+	@for d in $(ANDROID_GRADLE_BUILD_DIRS); do \
+		if [ -d "$$d" ]; then \
+			echo "[INFO]   removing $$d"; \
+			rm -rf "$$d"; \
+		fi; \
+	done
+	@if [ -z "$(DEVICE_CONNECTED)" ]; then \
+		echo "[WARN] No Android device detected. Skipping deploy/run."; \
+		$(RUN_ENV) $(RUN_BUILDOZER) android debug; \
+	else \
+		$(RUN_ENV) $(RUN_BUILDOZER) android debug deploy run; \
+	fi
+
+debug: prepare patch-p4a android-app-reset ## Build & Run with logs: Android (logcat) or PC (debug level)
 	@$(RUN_ENV) if [ -n "$(DEVICE_CONNECTED)" ]; then \
 		echo "[INFO] Starting Android Debug Cycle..."; \
-		buildozer android debug deploy run logcat; \
+		$(RUN_BUILDOZER) android debug deploy run logcat; \
 	else \
 		echo "[INFO] Starting PC Debug Mode..."; \
 		KIVY_LOG_LEVEL=debug python3 $(ENTRY_POINT); \
@@ -100,8 +142,14 @@ test: prepare ## Run project tests using pytest
 		echo "[ERROR] Test directory '$(TEST_DIR)' not found."; \
 	fi
 
-clean: ## Remove build artifacts and temporary cache
-	@echo "[INFO] Cleaning build environment..."
+clean: ## Light clean (bin/, staging, __pycache__); keeps p4a dist so next build is fast
+	@echo "[INFO] Light clean (keeps p4a dist; use 'make deep-clean' for full reset)..."
+	@$(MAKE) android-app-reset
+	rm -rf bin/
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+
+deep-clean: ## FULL reset incl. p4a dist + native deps; next build is 30-40 minutes
+	@echo "[WARN] Deep clean: next build will recompile python-for-android distribution (slow)."
 	@$(MAKE) android-app-reset
 	@$(RUN_ENV) buildozer appclean
 	rm -rf bin/

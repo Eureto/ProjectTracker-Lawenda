@@ -2,6 +2,7 @@ import datetime
 import json
 import os
 import re
+import uuid
 from kivy.animation import Animation
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -17,18 +18,18 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.spinner import Spinner
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
-from kivy.utils import get_color_from_hex
+from kivy.utils import get_color_from_hex, platform
 from kivy.uix.scrollview import ScrollView
 from kivymd.app import MDApp
 from kivy.uix.boxlayout import BoxLayout
 from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.button import MDFlatButton, MDRaisedButton
 from kivymd.uix.card import MDCard
-from kivymd.uix.dialog import MDDialog
 from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 
 from screens.keyboard_inset import keyboard_inset
+from screens import active_timer
+from screens.emoji_assets import emoji_path
 from screens.session_store import record_session, schedule_home_last_session_refresh
 
 # Project root = parent of `screens/` (works on device and desktop).
@@ -40,7 +41,7 @@ def _car_asset_path(filename):
 
 
 def _emoji_asset_path(filename):
-    return os.path.join(_PKG_ROOT, "assets", "Emoji_PNG", filename)
+    return emoji_path(filename)
 
 
 RESET_NEVER = "never"
@@ -61,10 +62,114 @@ _CROWN_GOLD = get_color_from_hex("#ffc107")
 _GOAL_CARD_PURPLE = list(get_color_from_hex("#7e57c2"))
 _GOAL_CARD_GREEN = list(get_color_from_hex("#43a047"))
 _CROWN_EMOJI_PATH = _emoji_asset_path("u1F451.png")
+_ANDROID_PACKAGE = "org.stokrotka.stokrotka"
+_ANDROID_SERVICE_CLASS = f"{_ANDROID_PACKAGE}.ServiceTimerservice"
 
 ETAPY_ADD_GROUP = "Grupa etapów"
-ETAPY_ADD_STEP = "Krok etapu"
-ETAPY_ADD_SUB = "Podkrok"
+
+
+def _android_log(message):
+    """Print Kivy logger + Android logcat (tag: ProjectTrackerSvc)."""
+    try:
+        from kivy.logger import Logger
+
+        Logger.info("ProjectTrackerSvc: %s", message)
+    except Exception:
+        pass
+    if platform != "android":
+        return
+    try:
+        from jnius import autoclass
+
+        autoclass("android.util.Log").i("ProjectTrackerSvc", str(message))
+    except Exception:
+        pass
+
+
+def _manifest_service_class_names(activity):
+    """Return every service class declared in our app's AndroidManifest."""
+    try:
+        from jnius import autoclass
+
+        PackageManager = autoclass("android.content.pm.PackageManager")
+        package_name = activity.getPackageName()
+        info = activity.getPackageManager().getPackageInfo(
+            package_name, PackageManager.GET_SERVICES
+        )
+        services = info.services
+        if services is None:
+            return []
+        out = []
+        for i in range(len(services)):
+            name = services[i].name
+            if name:
+                out.append(name)
+        return out
+    except Exception as exc:
+        _android_log(f"manifest service enumeration failed: {exc!r}")
+        return []
+
+
+def _start_service_via_intent(autoclass, activity, class_name):
+    Intent = autoclass("android.content.Intent")
+    VERSION = autoclass("android.os.Build$VERSION")
+    context = activity.getApplicationContext()
+    intent = Intent()
+    intent.setClassName(context.getPackageName(), class_name)
+    if VERSION.SDK_INT >= 26:
+        context.startForegroundService(intent)
+    else:
+        context.startService(intent)
+
+
+def ensure_android_timer_service():
+    """Start the foreground service that owns the running-timer notifications."""
+    if platform != "android":
+        return
+    try:
+        from jnius import autoclass
+    except Exception as exc:
+        _android_log(f"pyjnius unavailable: {exc!r}")
+        return
+
+    try:
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+    except Exception as exc:
+        _android_log(f"PythonActivity lookup failed: {exc!r}")
+        return
+
+    candidates = []
+    for name in _manifest_service_class_names(activity):
+        _android_log(f"manifest service available: {name}")
+        if name not in candidates:
+            candidates.append(name)
+    if _ANDROID_SERVICE_CLASS not in candidates:
+        candidates.append(_ANDROID_SERVICE_CLASS)
+
+    last_error = None
+    for class_name in candidates:
+        try:
+            service_cls = autoclass(class_name)
+            service_cls.start(activity, "")
+            _android_log(f"started service via {class_name}.start()")
+            return
+        except Exception as exc:
+            last_error = (class_name, exc)
+
+        try:
+            _start_service_via_intent(autoclass, activity, class_name)
+            _android_log(f"started service via Intent to {class_name}")
+            return
+        except Exception as exc:
+            last_error = (class_name, exc)
+
+    if last_error:
+        _android_log(
+            f"failed to start any service. Tried {candidates}. "
+            f"Last error on {last_error[0]}: {last_error[1]!r}"
+        )
+    else:
+        _android_log("no service classes found in manifest")
 
 
 class _RoundedSheetBackground:
@@ -333,6 +438,7 @@ class UnderlineTextBlock(BoxLayout):
     font_size = NumericProperty(sp(14))
     compact_rule = BooleanProperty(False)
     line_box_height = NumericProperty(0)
+    show_rule = BooleanProperty(True)
 
     def __init__(self, **kwargs):
         kwargs.setdefault("orientation", "vertical")
@@ -359,11 +465,14 @@ class UnderlineTextBlock(BoxLayout):
             text_color=self._relayout,
             compact_rule=self._relayout,
             line_box_height=self._relayout,
+            show_rule=self._draw_rule,
         )
         Clock.schedule_once(lambda _dt: self._relayout(), 0)
 
     def _draw_rule(self, *_args):
         self._rule.canvas.clear()
+        if not self.show_rule:
+            return
         w, h = self._rule.size
         if w < 1 or h < 1:
             return
@@ -748,13 +857,18 @@ class StageItemRow(MDBoxLayout):
         self._underline = self.ids.underline_block
         self._status_btn = self.ids.status_btn
         self._status_btn.bind(on_release=self._toggle_done)
-        self.ids.sub_arrow.opacity = 1 if self.is_sub else 0
+        # `sub_arrow` is now just a horizontal spacer for Podkroki — the
+        # spine itself draws the visual arrow head, so we keep this widget
+        # invisible and use it only to indent the text.
+        self.ids.sub_arrow.opacity = 0
         self.ids.sub_arrow.width = dp(16) if self.is_sub else 0
         self._spine.is_sub = self.is_sub
         self._spine.is_first = self.is_first
         self._spine.is_last = self.is_last
-        if self.is_sub:
-            self.padding = [dp(18), 0, 0, 0]
+        # NOTE: we intentionally do NOT shift the row's left padding for
+        # subs. Indenting the whole row would also shift the spine, which
+        # would break the vertical line continuity with the parent Krok.
+        # The dp(16) spacer above provides the text-only indent instead.
         self._apply_done_to_ui()
         Clock.schedule_once(self._sync_height, 0)
 
@@ -773,6 +887,17 @@ class StageItemRow(MDBoxLayout):
                 self.group_index, self.item_index, self.child_index, self.done
             )
 
+    def _open_editor(self, *_args):
+        """Open the edit-krok bottom sheet for this row's owning krok.
+
+        Tapping a Podkrok opens the parent Krok's editor so the user can
+        rename, add, or delete sibling Podkroki from one place.
+        """
+        screen = self.parent_screen
+        if screen is None:
+            return
+        screen.open_edit_etapy_krok_sheet(int(self.group_index), int(self.item_index))
+
     def _sync_height(self, *_args):
         underline = self._underline or self.ids.get("underline_block")
         if underline is None:
@@ -780,7 +905,10 @@ class StageItemRow(MDBoxLayout):
         self._underline = underline
         underline.text = self.display_text
         if self.width > 1:
-            pad = dp(50) if self.is_sub else dp(34)
+            # Approximate width consumed by the fixed-width siblings:
+            #   spine(22) + sub_arrow_spacer(16 or 0) + status_btn(26)
+            #   + 3 spacings(8 each)
+            pad = dp(88) if self.is_sub else dp(72)
             underline.width = max(sp(40), self.width - pad)
         underline._relayout()
         self.height = max(dp(40), underline.height + dp(4))
@@ -805,31 +933,127 @@ class TimelineSpine(Widget):
         if self.height < 1:
             return
         cx = self.center_x
-        node_r = dp(5) if self.is_sub else dp(6)
         node_cy = self.center_y
         with self.canvas:
-            if not self.is_sub:
-                Color(*_GREY_NODE)
-                Line(points=[cx, self.top, cx, self.y], width=dp(1.5))
+            # Always draw the connecting line so the timeline spine reads as
+            # one continuous chain — even through Podkroki and behind the
+            # arrow head.
+            Color(*_GREY_NODE)
+            Line(points=[cx, self.top, cx, self.y], width=dp(1.5))
             Color(*(_PURPLE if self.done else _GREY_NODE))
-            Ellipse(
-                pos=(cx - node_r, node_cy - node_r),
-                size=(2 * node_r, 2 * node_r),
-            )
+            if self.is_sub:
+                # Right-pointing arrow head ( > ) drawn to the RIGHT of the
+                # spine line so the line itself stays uninterrupted. The
+                # arrow's left tip starts ~dp(4) past the line so there's a
+                # clear visual gap between line and arrow.
+                gap = dp(4)
+                tip_x = cx + gap
+                a = dp(5)
+                Line(
+                    points=[
+                        tip_x, node_cy + a,
+                        tip_x + a, node_cy,
+                        tip_x, node_cy - a,
+                    ],
+                    width=dp(1.8),
+                )
+            else:
+                node_r = dp(6)
+                Ellipse(
+                    pos=(cx - node_r, node_cy - node_r),
+                    size=(2 * node_r, 2 * node_r),
+                )
 
 
-class EtapyFinishRow(MDBoxLayout):
+class StageTextTap(ButtonBehavior, BoxLayout):
+    """ButtonBehavior wrapper around the StageItemRow text area: tap = edit krok."""
+
+    pass
+
+
+class EtapyPlusSpine(Widget):
+    """Spine column for the EtapyPlusRow: line from the top of the row to the
+    centre, then a filled purple circle with a white plus glyph at the centre.
+
+    Width matches TimelineSpine (dp(22)) so the plus node lines up exactly with
+    the dots above it in the timeline.
+
+    ``connect_top`` controls whether the upward line is drawn — set to False
+    when the row is the only timeline entry so the '+' button doesn't appear
+    to be connected to nothing.
+    """
+
+    connect_top = BooleanProperty(True)
+
     def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint_x", None)
+        kwargs.setdefault("width", dp(22))
+        super().__init__(**kwargs)
+        self.bind(
+            pos=self._redraw,
+            size=self._redraw,
+            connect_top=self._redraw,
+        )
+        Clock.schedule_once(lambda _dt: self._redraw(), 0)
+
+    def _redraw(self, *_args):
+        self.canvas.clear()
+        if self.height < 1 or self.width < 1:
+            return
+        cx = self.center_x
+        cy = self.center_y
+        node_r = dp(10)
+        with self.canvas:
+            if self.connect_top:
+                Color(*_GREY_NODE)
+                Line(points=[cx, self.top, cx, cy], width=dp(1.5))
+            Color(*_PURPLE)
+            Ellipse(pos=(cx - node_r, cy - node_r), size=(2 * node_r, 2 * node_r))
+            Color(1, 1, 1, 1)
+            arm = node_r * 0.55
+            Line(points=[cx - arm, cy, cx + arm, cy], width=dp(2.2))
+            Line(points=[cx, cy - arm, cx, cy + arm], width=dp(2.2))
+
+
+class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
+    """Persistent 'add krok' row at the bottom of the etapy timeline.
+
+    Visually continues the timeline spine and ends in a purple '+' node.
+    The whole row is tappable; tapping opens the EditEtapyKrokBottomSheet in
+    new-krok mode against the currently selected group.
+
+    ``connect_top`` controls whether the upward line on the spine is drawn.
+    When the row is the only timeline entry it should be False so the '+'
+    button isn't trailed by an orphaned vertical line.
+    """
+
+    parent_screen = ObjectProperty(None, allownone=True)
+    connect_top = BooleanProperty(True)
+
+    def __init__(self, parent_screen=None, **kwargs):
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint_y", None)
-        kwargs.setdefault("height", dp(44))
+        kwargs.setdefault("height", dp(48))
         kwargs.setdefault("spacing", dp(8))
         super().__init__(**kwargs)
+        self.parent_screen = parent_screen
+        self.bind(on_release=self._on_release)
+
+    def _on_release(self, *_args):
+        screen = self.parent_screen
+        if screen is not None:
+            screen.open_new_etapy_krok_sheet()
 
 
 class ProjectInfoScreen(MDScreen):
     """Project detail panel: dynamic notes & goals, timer, bottom nav like home."""
 
+    # ``project_uid`` is the canonical lookup key for every per-project file
+    # (project_details, active_timer, active_goals). ``project_title`` is the
+    # display name only — two projects can legitimately share it. When the uid
+    # is empty (legacy / fresh install with no migration yet) the title is used
+    # as a fallback key so we still find the right blob.
+    project_uid = StringProperty("")
     project_title = StringProperty("")
     timer_display = StringProperty("00:00:00")
     timer_running = BooleanProperty(False)
@@ -850,16 +1074,36 @@ class ProjectInfoScreen(MDScreen):
         self._add_note_sheet = None
         self._goal_sheet = None
         self._goal_period_ev = None
-        self.bind(project_title=self._on_project_title_changed)
+        self._loading_project_content = False
+        # When project_uid changes we always need to swap content; when only
+        # project_title changes (rename in place) we just refresh metadata.
+        self.bind(project_uid=self._on_project_identity_changed)
+        self.bind(project_title=self._on_project_identity_changed)
 
-    def _on_project_title_changed(self, *_args):
+    def _state_key(self):
+        """Storage key for this project's per-project blob."""
+        return self.project_uid or self.project_title or "_"
+
+    def _on_project_identity_changed(self, *_args):
         mgr = self.manager
         if mgr is not None and mgr.current == self.name:
             self.load_project_content()
+            self._restore_active_runtime()
+
+    def on_pre_enter(self):
+        # Render the new project's content BEFORE the transition completes so
+        # the user never sees a frame of the previous project's UI bleeding
+        # through. on_enter still re-runs runtime restore once the screen is
+        # actually visible.
+        self.load_project_content()
+        self._restore_active_runtime()
 
     def on_enter(self):
         Window.bind(on_keyboard=self._on_keyboard)
-        self.load_project_content()
+        # on_pre_enter has already populated the UI; we only need the runtime
+        # re-sync (e.g. timer drift while the transition animated) and the
+        # period refresh scheduler here.
+        self._restore_active_runtime()
         self._refresh_time_goal_periods()
         if self._goal_period_ev is not None:
             self._goal_period_ev.cancel()
@@ -870,12 +1114,9 @@ class ProjectInfoScreen(MDScreen):
         if self._goal_period_ev is not None:
             self._goal_period_ev.cancel()
             self._goal_period_ev = None
-        if self.timer_running:
-            self._finish_timer_run()
-            self.timer_running = False
-            self.timer_button_caption = "start"
+        self._sync_active_timer_elapsed()
         self._stop_timer_event()
-        self._stop_all_goal_trackers()
+        self._stop_all_goal_trackers(update_active=False)
         self.save_project_content()
 
     def _refresh_time_goal_periods(self, *_args):
@@ -895,10 +1136,10 @@ class ProjectInfoScreen(MDScreen):
         if changed:
             self.save_project_content()
 
-    def _stop_all_goal_trackers(self):
+    def _stop_all_goal_trackers(self, update_active=True):
         for row in list(self.ids.goals_list.children):
             if isinstance(row, TimeGoalTrackRow):
-                row.stop_tracking()
+                row.stop_tracking(update_active=update_active)
 
     def _on_keyboard(self, window, key, scancode, codepoint, modifier):
         if key == 27:
@@ -928,7 +1169,9 @@ class ProjectInfoScreen(MDScreen):
             json.dump(data, f, indent=2)
 
     def save_project_content(self):
-        key = self.project_title or "_"
+        if not (self.project_uid or self.project_title):
+            return
+        key = self._state_key()
         data = self._read_all_states()
         data[key] = {
             "timer_elapsed": self._timer_elapsed_seconds,
@@ -941,68 +1184,73 @@ class ProjectInfoScreen(MDScreen):
 
     def load_project_content(self):
         if self.timer_running:
-            self._finish_timer_run()
             self.timer_running = False
             self.timer_button_caption = "start"
             self._stop_timer_event()
         self._run_started_at = None
-        self._clear_dynamic_widgets()
-        key = self.project_title or "_"
-        blob = self._read_all_states().get(key)
-        if blob:
-            self._timer_elapsed_seconds = int(blob.get("timer_elapsed", 0))
-            self._refresh_timer_label()
-            for n in blob.get("notes") or []:
-                t = (n.get("text") or "").strip()
-                if not t:
-                    continue
-                self.add_note(text=n.get("text", ""), tall=bool(n.get("tall", False)))
-            for g in blob.get("goals") or []:
-                goal = g.get("goal", "1h/tydzień")
-                tgt = g.get("goal_target_seconds")
-                if tgt is None:
-                    tgt = parse_goal_target_seconds(goal)
-                logged = float(g.get("logged_seconds", 0))
-                if logged <= 0 and "percent" in g:
-                    try:
-                        p = float(g.get("percent", 0))
-                        logged = max(0.0, (p / 100.0) * float(tgt))
-                    except (TypeError, ValueError):
+        self._loading_project_content = True
+        try:
+            self._clear_dynamic_widgets()
+            key = self._state_key()
+            blob = self._read_all_states().get(key)
+            if blob:
+                self._timer_elapsed_seconds = int(blob.get("timer_elapsed", 0))
+                self._refresh_timer_label()
+                for n in blob.get("notes") or []:
+                    t = (n.get("text") or "").strip()
+                    if not t:
+                        continue
+                    self.add_note(text=n.get("text", ""), tall=bool(n.get("tall", False)))
+                for g in blob.get("goals") or []:
+                    goal = g.get("goal", "1h/tydzień")
+                    tgt = g.get("goal_target_seconds")
+                    if tgt is None:
+                        tgt = parse_goal_target_seconds(goal)
+                    logged = float(g.get("logged_seconds", 0))
+                    if logged <= 0 and "percent" in g:
+                        try:
+                            p = float(g.get("percent", 0))
+                            logged = max(0.0, (p / 100.0) * float(tgt))
+                        except (TypeError, ValueError):
+                            logged = 0.0
+                    rm = parse_reset_mode(g.get("reset_mode", ""))
+                    saved_pk = g.get("period_key")
+                    cur = current_period_key(rm)
+                    if rm != RESET_NEVER and saved_pk is not None and saved_pk != cur:
                         logged = 0.0
-                rm = parse_reset_mode(g.get("reset_mode", ""))
-                saved_pk = g.get("period_key")
-                cur = current_period_key(rm)
-                if rm != RESET_NEVER and saved_pk is not None and saved_pk != cur:
-                    logged = 0.0
-                    pk = cur
-                elif saved_pk is None:
-                    pk = cur
-                else:
-                    pk = saved_pk
-                self.add_time_goal(
-                    title=g.get("title", ""),
-                    goal=goal,
-                    goal_target_seconds=float(tgt),
-                    logged_seconds=logged,
-                    reset_mode=rm,
-                    period_key=pk,
-                )
-            for cg in blob.get("checklist_goals") or []:
-                t = (cg.get("text") or "").strip()
-                if t:
-                    self.add_checklist_goal(text=t, done=bool(cg.get("done", False)))
-            et = blob.get("etapy") or {}
-            self._etapy_groups = et.get("groups") or []
-            self._etapy_selected_index = int(et.get("selected_index", 0))
-        else:
-            self._timer_elapsed_seconds = 0
-            self._refresh_timer_label()
-            self._etapy_groups = []
-            self._etapy_selected_index = 0
-        self._run_base_elapsed = self._timer_elapsed_seconds
-        self._clamp_etapy_selection()
-        self._rebuild_etapy_chips()
-        self._rebuild_etapy_timeline()
+                        pk = cur
+                    elif saved_pk is None:
+                        pk = cur
+                    else:
+                        pk = saved_pk
+                    self.add_time_goal(
+                        title=g.get("title", ""),
+                        goal=goal,
+                        goal_target_seconds=float(tgt),
+                        logged_seconds=logged,
+                        reset_mode=rm,
+                        period_key=pk,
+                        uid=g.get("uid") or "",
+                        geofence=g.get("geofence") or None,
+                    )
+                for cg in blob.get("checklist_goals") or []:
+                    t = (cg.get("text") or "").strip()
+                    if t:
+                        self.add_checklist_goal(text=t, done=bool(cg.get("done", False)))
+                et = blob.get("etapy") or {}
+                self._etapy_groups = et.get("groups") or []
+                self._etapy_selected_index = int(et.get("selected_index", 0))
+            else:
+                self._timer_elapsed_seconds = 0
+                self._refresh_timer_label()
+                self._etapy_groups = []
+                self._etapy_selected_index = 0
+            self._run_base_elapsed = self._timer_elapsed_seconds
+            self._clamp_etapy_selection()
+            self._rebuild_etapy_chips()
+            self._rebuild_etapy_timeline()
+        finally:
+            self._loading_project_content = False
 
     def _clear_dynamic_widgets(self):
         for c in list(self.ids.notes_list.children):
@@ -1039,16 +1287,19 @@ class ProjectInfoScreen(MDScreen):
         out = []
         for row in self.ids.goals_list.children:
             if isinstance(row, TimeGoalTrackRow):
-                out.append(
-                    {
-                        "title": row.title_text,
-                        "goal": row.goal_text,
-                        "goal_target_seconds": row.goal_target_seconds,
-                        "logged_seconds": row.logged_seconds,
-                        "reset_mode": row.reset_mode,
-                        "period_key": row.period_key,
-                    }
-                )
+                entry = {
+                    "title": row.title_text,
+                    "goal": row.goal_text,
+                    "goal_target_seconds": row.goal_target_seconds,
+                    "logged_seconds": row.logged_seconds,
+                    "reset_mode": row.reset_mode,
+                    "period_key": row.period_key,
+                    "uid": row.active_uid,
+                }
+                geofence = dict(row.geofence or {})
+                if geofence:
+                    entry["geofence"] = geofence
+                out.append(entry)
         return out
 
     def _all_done_checklist_rows(self, zr=None):
@@ -1213,11 +1464,13 @@ class ProjectInfoScreen(MDScreen):
     # --- Etapy ---
 
     _etapy_sheet = None
+    _etapy_krok_sheet = None
 
-    def open_add_etapy_sheet(self):
+    def open_add_etapy_group_sheet(self):
+        """Header '+' → create a new Grupa etapów (only that)."""
         if self._etapy_sheet is not None:
             return
-        sheet = AddEtapyBottomSheet(self)
+        sheet = AddEtapyGroupBottomSheet(self)
 
         def _cleared(*_a):
             self._etapy_sheet = None
@@ -1225,6 +1478,34 @@ class ProjectInfoScreen(MDScreen):
         sheet.bind(on_dismiss=_cleared)
         self._etapy_sheet = sheet
         sheet.open()
+
+    def _open_etapy_krok_sheet(self, group_index, item_index):
+        """Internal: open the full Krok editor (new or edit)."""
+        if self._etapy_krok_sheet is not None:
+            return
+        sheet = EditEtapyKrokBottomSheet(self, group_index, item_index)
+
+        def _cleared(*_a):
+            self._etapy_krok_sheet = None
+
+        sheet.bind(on_dismiss=_cleared)
+        self._etapy_krok_sheet = sheet
+        sheet.open()
+
+    def open_new_etapy_krok_sheet(self):
+        """In-timeline '+' → create a new Krok in the selected group."""
+        if not self._etapy_groups:
+            return
+        self._clamp_etapy_selection()
+        self._open_etapy_krok_sheet(self._etapy_selected_index, None)
+
+    def open_edit_etapy_krok_sheet(self, group_index, item_index):
+        """Tap on a Krok/Podkrok row → edit the owning Krok."""
+        try:
+            _ = self._etapy_groups[int(group_index)]["items"][int(item_index)]
+        except (IndexError, KeyError, TypeError):
+            return
+        self._open_etapy_krok_sheet(int(group_index), int(item_index))
 
     def _clamp_etapy_selection(self):
         if not self._etapy_groups:
@@ -1266,22 +1547,49 @@ class ProjectInfoScreen(MDScreen):
         self._rebuild_etapy_timeline()
         self.save_project_content()
 
-    def add_etapy_step(self, text, parent_item_index=None):
+    def create_etapy_step(self, group_index, text, children=None):
+        """Append a new Krok with its Podkroki (called by the krok editor)."""
         text = (text or "").strip()
         if not text:
             return
-        group = self._selected_etapy_group()
-        if group is None:
-            self.add_etapy_group("Ogólne")
-            group = self._selected_etapy_group()
-        if parent_item_index is None:
-            group["items"].append({"text": text, "done": False, "children": []})
-        else:
-            try:
-                children = group["items"][parent_item_index].setdefault("children", [])
-                children.append({"text": text, "done": False})
-            except (IndexError, KeyError):
-                group["items"].append({"text": text, "done": False, "children": []})
+        try:
+            group = self._etapy_groups[int(group_index)]
+        except (IndexError, TypeError):
+            return
+        normalized_children = [
+            {"text": (c.get("text") or "").strip(), "done": bool(c.get("done", False))}
+            for c in (children or [])
+            if (c.get("text") or "").strip()
+        ]
+        group.setdefault("items", []).append(
+            {"text": text, "done": False, "children": normalized_children}
+        )
+        self._rebuild_etapy_timeline()
+        self.save_project_content()
+
+    def update_etapy_step(self, group_index, item_index, text, children=None):
+        """Replace the Krok name + its Podkroki list in one save (krok editor)."""
+        text = (text or "").strip() or "Krok"
+        try:
+            item = self._etapy_groups[int(group_index)]["items"][int(item_index)]
+        except (IndexError, KeyError, TypeError):
+            return
+        item["text"] = text
+        item["children"] = [
+            {"text": (c.get("text") or "").strip(), "done": bool(c.get("done", False))}
+            for c in (children or [])
+            if (c.get("text") or "").strip()
+        ]
+        self._rebuild_etapy_timeline()
+        self.save_project_content()
+
+    def delete_etapy_step(self, group_index, item_index):
+        """Remove a Krok (and all its Podkroki) from the selected group."""
+        try:
+            items = self._etapy_groups[int(group_index)]["items"]
+            del items[int(item_index)]
+        except (IndexError, KeyError, TypeError):
+            return
         self._rebuild_etapy_timeline()
         self.save_project_content()
 
@@ -1291,17 +1599,6 @@ class ProjectInfoScreen(MDScreen):
             return
         box.clear_widgets()
         if not self._etapy_groups:
-            hint = MDLabel(
-                text="Dodaj grupę etapów przyciskiem +",
-                font_size=sp(13),
-                theme_text_color="Custom",
-                text_color=(1, 1, 1, 0.65),
-                size_hint=(None, None),
-                height=dp(32),
-            )
-            hint.texture_update()
-            hint.width = hint.texture_size[0] + dp(16)
-            box.add_widget(hint)
             return
         for idx, group in enumerate(self._etapy_groups):
             active = idx == self._etapy_selected_index
@@ -1343,66 +1640,60 @@ class ProjectInfoScreen(MDScreen):
         timeline.clear_widgets()
         group = self._selected_etapy_group()
         if group is None:
-            timeline.add_widget(
-                MDLabel(
-                    text="Dodaj grupę etapów przyciskiem +",
-                    font_size=sp(13),
-                    theme_text_color="Custom",
-                    text_color=(1, 1, 1, 0.65),
-                    size_hint_y=None,
-                    height=dp(36),
-                )
-            )
+            # No group → no in-timeline '+'. The header '+' is the only path
+            # for creating the first group.
             return
         items = group.get("items") or []
-        flat_count = sum(1 + len(it.get("children") or []) for it in items)
-        if flat_count == 0:
-            empty = MDLabel(
-                text="Brak kroków — dodaj krok etapu przyciskiem +",
-                font_size=sp(13),
-                theme_text_color="Custom",
-                text_color=(1, 1, 1, 0.65),
-                size_hint_y=None,
-                height=dp(36),
+        gi = self._etapy_selected_index
+        # Pre-compute (item_index, child_index) of the visually last row so
+        # we can mark it `is_last` and suppress its trailing underline.
+        last_ii = -1
+        last_ci = -1
+        if items:
+            last_ii = len(items) - 1
+            last_children = items[last_ii].get("children") or []
+            last_ci = len(last_children) - 1 if last_children else -1
+        seq = 0
+        for ii, item in enumerate(items):
+            seq += 1
+            is_last_row = (ii == last_ii and last_ci == -1)
+            timeline.add_widget(
+                StageItemRow(
+                    display_text=item.get("text", ""),
+                    done=bool(item.get("done", False)),
+                    is_sub=False,
+                    is_first=(seq == 1),
+                    is_last=is_last_row,
+                    parent_screen=self,
+                    group_index=gi,
+                    item_index=ii,
+                    child_index=-1,
+                )
             )
-            timeline.add_widget(empty)
-        else:
-            gi = self._etapy_selected_index
-            seq = 0
-            for ii, item in enumerate(items):
+            children = item.get("children") or []
+            for ci, child in enumerate(children):
                 seq += 1
+                is_last_row = (ii == last_ii and ci == last_ci)
                 timeline.add_widget(
                     StageItemRow(
-                        display_text=item.get("text", ""),
-                        done=bool(item.get("done", False)),
-                        is_sub=False,
-                        is_first=(seq == 1),
-                        is_last=False,
+                        display_text=child.get("text", ""),
+                        done=bool(child.get("done", False)),
+                        is_sub=True,
+                        is_first=False,
+                        is_last=is_last_row,
                         parent_screen=self,
                         group_index=gi,
                         item_index=ii,
-                        child_index=-1,
+                        child_index=ci,
                     )
                 )
-                for ci, child in enumerate(item.get("children") or []):
-                    seq += 1
-                    timeline.add_widget(
-                        StageItemRow(
-                            display_text=child.get("text", ""),
-                            done=bool(child.get("done", False)),
-                            is_sub=True,
-                            is_first=False,
-                            is_last=False,
-                            parent_screen=self,
-                            group_index=gi,
-                            item_index=ii,
-                            child_index=ci,
-                        )
-                    )
-            children = timeline.children
-            if children and isinstance(children[0], StageItemRow):
-                children[0].is_last = False
-        timeline.add_widget(EtapyFinishRow())
+        # Persistent in-timeline '+' node — only when a group is selected.
+        # The spine's upward line is only drawn when there's at least one
+        # Krok above, so an empty group doesn't show an orphan vertical line
+        # trailing from the top of the screen down to the '+' button.
+        timeline.add_widget(
+            EtapyPlusRow(parent_screen=self, connect_top=bool(items))
+        )
 
     # --- Notes ---
 
@@ -1453,10 +1744,10 @@ class ProjectInfoScreen(MDScreen):
     def on_goals_add_clicked(self):
         self.open_add_goal_sheet()
 
-    def open_add_goal_sheet(self):
+    def open_add_goal_sheet(self, draft=None):
         if self._goal_sheet is not None:
             return
-        sheet = AddTimeGoalBottomSheet(self)
+        sheet = AddTimeGoalBottomSheet(self, draft=draft)
 
         def _cleared(*_a):
             self._goal_sheet = None
@@ -1464,6 +1755,46 @@ class ProjectInfoScreen(MDScreen):
         sheet.bind(on_dismiss=_cleared)
         self._goal_sheet = sheet
         sheet.open()
+
+    def open_geofence_picker_for_goal_draft(self, draft):
+        """Open the map picker, preserving the in-progress goal draft.
+
+        ``draft`` must be a mutable dict with the current form values; we mutate
+        its ``geofence`` slot and re-open the goal sheet on return.
+        """
+        if not isinstance(draft, dict):
+            draft = {}
+        existing = draft.get("geofence") or {}
+
+        def _on_done(result):
+            action = (result or {}).get("action", "cancel")
+            if action == "save":
+                draft["geofence"] = result.get("geofence") or {}
+            elif action == "clear":
+                draft["geofence"] = {}
+            Clock.schedule_once(
+                lambda _dt: self.open_add_goal_sheet(draft=draft), 0
+            )
+
+        app = MDApp.get_running_app()
+        if app is None or app.root is None:
+            return
+        try:
+            picker = app.root.get_screen("geofence_picker")
+        except Exception:
+            picker = None
+        if picker is None:
+            self.open_add_goal_sheet(draft=draft)
+            return
+        picker.configure(
+            initial_lat=existing.get("lat"),
+            initial_lon=existing.get("lon"),
+            initial_radius_m=existing.get("radius_m"),
+            initial_zoom=existing.get("zoom"),
+            return_screen="project_info",
+            on_done=_on_done,
+        )
+        app.root.current = "geofence_picker"
 
     def add_time_goal(
         self,
@@ -1473,6 +1804,8 @@ class ProjectInfoScreen(MDScreen):
         logged_seconds=0.0,
         reset_mode=RESET_WEEKLY,
         period_key=None,
+        uid="",
+        geofence=None,
     ):
         tgt = float(goal_target_seconds) if goal_target_seconds is not None else parse_goal_target_seconds(goal)
         tgt = max(10.0, tgt)
@@ -1486,7 +1819,9 @@ class ProjectInfoScreen(MDScreen):
             logged_seconds=max(0.0, float(logged_seconds)),
             reset_mode=reset_mode,
             period_key=period_key,
+            active_uid=uid or f"goal-{uuid.uuid4().hex}",
             parent_screen=self,
+            geofence=dict(geofence) if isinstance(geofence, dict) else {},
         )
         row.apply_logged_to_ui()
         self.ids.goals_list.add_widget(row)
@@ -1494,6 +1829,8 @@ class ProjectInfoScreen(MDScreen):
     def remove_time_goal_row(self, row):
         if isinstance(row, TimeGoalTrackRow):
             row.stop_tracking()
+            if row.active_uid:
+                active_timer.remove_goal(row.active_uid)
         goals = self.ids.get("goals_list")
         if goals is None:
             return
@@ -1503,7 +1840,64 @@ class ProjectInfoScreen(MDScreen):
             row.parent.remove_widget(row)
         self.save_project_content()
 
+    def _active_goal_rows_by_uid(self):
+        rows = {}
+        goals = self.ids.get("goals_list")
+        if goals is None:
+            return rows
+        for row in goals.children:
+            if isinstance(row, TimeGoalTrackRow) and row.active_uid:
+                rows[row.active_uid] = row
+        return rows
+
+    def _state_matches_project(self, state):
+        """True when ``state`` (timer / goal) belongs to the current project.
+
+        Prefer uid comparison; fall back to title comparison only when neither
+        side has a uid (e.g. partially migrated installs).
+        """
+        if not isinstance(state, dict):
+            return False
+        state_uid = state.get("project_uid")
+        if self.project_uid and state_uid:
+            return state_uid == self.project_uid
+        if state_uid or self.project_uid:
+            # One side has a uid and the other doesn't → assume mismatch to
+            # avoid falsely binding a renamed-but-shared-name project.
+            return False
+        return state.get("project_title") == self.project_title
+
+    def _restore_active_runtime(self):
+        timer_state = active_timer.read_project_timer()
+        if self._state_matches_project(timer_state):
+            started = timer_state.get("started_at")
+            try:
+                self._run_started_at = datetime.datetime.fromisoformat(started)
+            except (TypeError, ValueError):
+                self._run_started_at = datetime.datetime.now()
+            self._run_base_elapsed = int(timer_state.get("base_elapsed_seconds", 0) or 0)
+            self._timer_elapsed_seconds = active_timer.elapsed_from_state(timer_state)
+            self._refresh_timer_label()
+            self._stop_timer_event()
+            self._timer_ev = Clock.schedule_interval(self._on_timer_tick, 1.0)
+            self.timer_running = True
+            self.timer_button_caption = "stop"
+
+        rows_by_uid = self._active_goal_rows_by_uid()
+        for goal_state in active_timer.read_goals():
+            if not self._state_matches_project(goal_state):
+                continue
+            row = rows_by_uid.get(goal_state.get("uid"))
+            if row is not None:
+                row.restore_tracking_from_state(goal_state)
+
     # --- Timer ---
+
+    def _sync_active_timer_elapsed(self):
+        state = active_timer.read_project_timer()
+        if self._state_matches_project(state):
+            self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
+            self._refresh_timer_label()
 
     def _refresh_timer_label(self):
         s = self._timer_elapsed_seconds
@@ -1520,6 +1914,7 @@ class ProjectInfoScreen(MDScreen):
                 self.project_title,
                 duration,
                 started_at=self._run_started_at,
+                project_uid=self.project_uid,
             )
         self._run_started_at = None
         self._run_base_elapsed = self._timer_elapsed_seconds
@@ -1530,11 +1925,21 @@ class ProjectInfoScreen(MDScreen):
             self._finish_timer_run()
             self.timer_running = False
             self.timer_button_caption = "start"
+            active_timer.clear_project_timer()
             self.save_project_content()
+            schedule_home_last_session_refresh()
         else:
             self._stop_timer_event()
             self._run_base_elapsed = self._timer_elapsed_seconds
             self._run_started_at = datetime.datetime.now()
+            active_timer.start_project_timer(
+                self.project_title,
+                base_elapsed_seconds=self._run_base_elapsed,
+                started_at=self._run_started_at,
+                project_uid=self.project_uid,
+            )
+            self.save_project_content()
+            ensure_android_timer_service()
             self._timer_ev = Clock.schedule_interval(self._on_timer_tick, 1.0)
             self.timer_running = True
             self.timer_button_caption = "stop"
@@ -1545,17 +1950,25 @@ class ProjectInfoScreen(MDScreen):
             self._timer_ev = None
 
     def _on_timer_tick(self, _dt):
-        self._timer_elapsed_seconds += 1
+        state = active_timer.read_project_timer()
+        if self._state_matches_project(state):
+            self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
+        elif self.timer_running:
+            self._stop_timer_event()
+            self.timer_running = False
+            self.timer_button_caption = "start"
+            self.load_project_content()
+            self._restore_active_runtime()
+            return
+        else:
+            self._timer_elapsed_seconds += 1
         self._refresh_timer_label()
 
     # --- Bottom bar / settings ---
 
     def _finalize_and_go_home(self):
-        if self.timer_running:
-            self._finish_timer_run()
-            self.timer_running = False
-            self.timer_button_caption = "start"
-            self._stop_timer_event()
+        self._stop_timer_event()
+        self._stop_all_goal_trackers(update_active=False)
         self.save_project_content()
         MDApp.get_running_app().root.current = "home"
         schedule_home_last_session_refresh()
@@ -1567,18 +1980,18 @@ class ProjectInfoScreen(MDScreen):
         MDApp.get_running_app().root.current = "statistics"
 
     def open_project_settings(self):
-        dlg = MDDialog(
-            title="Ustawienia projektu",
-            text=f"Projekt: {self.project_title or '—'}\n\nTu pojawią się opcje projektu.",
-        )
-        btn = MDFlatButton(
-            text="OK",
-            theme_text_color="Custom",
-            text_color=(0.2, 0.2, 0.2, 1),
-        )
-        btn.bind(on_release=lambda *a: dlg.dismiss())
-        dlg.buttons = [btn]
-        dlg.open()
+        """Persist current state, then route to the dedicated settings screen."""
+        if not (self.project_uid or self.project_title):
+            return
+        self._stop_all_goal_trackers(update_active=False)
+        self.save_project_content()
+        app = MDApp.get_running_app()
+        if not app or not getattr(app, "root", None):
+            return
+        settings = app.root.get_screen("project_settings")
+        settings.project_uid = self.project_uid
+        settings.project_title = self.project_title
+        app.root.current = "project_settings"
 
 
 class _BottomSheetKeyboardMixin:
@@ -1987,10 +2400,12 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
     """Bottom sheet: title + goal string (e.g. 1h/1d); target duration parsed for the car progress."""
 
-    def __init__(self, project_screen, **kwargs):
+    def __init__(self, project_screen, draft=None, **kwargs):
         super().__init__(**kwargs)
         self.project_screen = project_screen
         self._closing = False
+        self._draft = dict(draft) if isinstance(draft, dict) else {}
+        self._geofence = dict(self._draft.get("geofence") or {})
         self.size_hint = (1, 1)
         self.auto_dismiss = False
         self.background_color = (0, 0, 0, 0)
@@ -2046,6 +2461,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
         self.title_field = RoundedSheetTextInput(
             hint_text="Nazwa celu",
+            text=str(self._draft.get("title", "")),
             multiline=False,
             size_hint_y=None,
             height=dp(44),
@@ -2062,8 +2478,8 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             height=dp(62),
         )
         for label_text, default_val, attr in (
-            ("Godziny", "1", "hours_field"),
-            ("Minuty", "0", "minutes_field"),
+            ("Godziny", str(self._draft.get("hours", "1")), "hours_field"),
+            ("Minuty", str(self._draft.get("minutes", "0")), "minutes_field"),
         ):
             col = MDBoxLayout(
                 orientation="vertical",
@@ -2129,7 +2545,9 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             self._reset_chips[mode] = chip
             chip_row.add_widget(chip)
         self._body.add_widget(chip_row)
-        self._select_reset_mode(RESET_WEEKLY)
+        self._select_reset_mode(
+            parse_reset_mode(self._draft.get("reset_mode")) if self._draft.get("reset_mode") else RESET_WEEKLY
+        )
 
         self._body.add_widget(
             MDLabel(
@@ -2144,6 +2562,8 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
                 shorten_from="right",
             )
         )
+
+        self._body.add_widget(self._build_geofence_section())
 
         self._body_scroll.add_widget(self._body)
         self.panel.add_widget(self._body_scroll)
@@ -2182,6 +2602,130 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self._selected_reset_mode = mode
         for m, chip in self._reset_chips.items():
             chip.selected = m == mode
+
+    def _geofence_summary_text(self):
+        gf = self._geofence or {}
+        if not gf:
+            return "Nie wybrano lokalizacji."
+        try:
+            lat = float(gf.get("lat"))
+            lon = float(gf.get("lon"))
+            radius = float(gf.get("radius_m"))
+        except (TypeError, ValueError):
+            return "Nie wybrano lokalizacji."
+        return f"Wybrano: {lat:.4f}, {lon:.4f}  |  {int(radius)} m"
+
+    def _build_geofence_section(self):
+        container = MDBoxLayout(
+            orientation="vertical",
+            spacing=dp(4),
+            size_hint_y=None,
+            height=dp(96),
+        )
+
+        app = MDApp.get_running_app()
+        button_row = MDBoxLayout(
+            orientation="horizontal",
+            spacing=dp(8),
+            size_hint_y=None,
+            height=dp(40),
+        )
+        btn_map = RoundedSheetButton(
+            text="Mapa",
+            size_hint_x=None,
+            width=dp(112),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+        )
+        btn_map.bind(on_release=lambda *_a: self._open_geofence_picker())
+        button_row.add_widget(btn_map)
+
+        if self._geofence:
+            btn_clear = RoundedSheetButton(
+                text="Usuń",
+                size_hint_x=None,
+                width=dp(80),
+                bg_color=[0.94, 0.94, 0.96, 1],
+                text_rgb=list(get_color_from_hex("#444444")),
+            )
+            btn_clear.bind(on_release=lambda *_a: self._clear_geofence())
+            button_row.add_widget(btn_clear)
+
+        button_row.add_widget(Widget(size_hint_x=1))
+        container.add_widget(button_row)
+
+        container.add_widget(
+            MDLabel(
+                text="Zaznacz miejsce gdzie chcesz mierzyć czas automatycznie po wejściu",
+                font_style="Caption",
+                theme_text_color="Custom",
+                text_color=(0.35, 0.35, 0.38, 1),
+                size_hint_y=None,
+                height=dp(28),
+                text_size=(None, None),
+                shorten=False,
+                halign="left",
+                valign="top",
+            )
+        )
+
+        self._geofence_summary_lbl = MDLabel(
+            text=self._geofence_summary_text(),
+            font_style="Caption",
+            theme_text_color="Custom",
+            text_color=(0.20, 0.20, 0.22, 1) if self._geofence else (0.45, 0.45, 0.48, 1),
+            size_hint_y=None,
+            height=dp(20),
+            halign="left",
+            valign="middle",
+        )
+        container.add_widget(self._geofence_summary_lbl)
+
+        # The descriptive label needs proper text wrapping. Bind text_size to
+        # its own width so it can wrap when the panel is narrow.
+        def _bind_wrap(lbl):
+            def _sync(*_a):
+                lbl.text_size = (lbl.width, None)
+                lbl.texture_update()
+                lbl.height = max(dp(20), lbl.texture_size[1])
+
+            lbl.bind(width=_sync)
+            Clock.schedule_once(lambda _dt: _sync(), 0)
+
+        _bind_wrap(container.children[1])  # the descriptive MDLabel
+        return container
+
+    def _capture_form_into_draft(self):
+        self._draft.update(
+            {
+                "title": (self.title_field.text or "").strip(),
+                "hours": (self.hours_field.text or "").strip() or "0",
+                "minutes": (self.minutes_field.text or "").strip() or "0",
+                "reset_mode": self._selected_reset_mode,
+                "geofence": dict(self._geofence) if self._geofence else {},
+            }
+        )
+
+    def _open_geofence_picker(self):
+        self._capture_form_into_draft()
+        screen = self.project_screen
+        draft = self._draft
+        # Fast-dismiss the modal (no animation) so it doesn't overlay the map
+        # screen we're about to navigate to.
+        self._sheet_unbind_keyboard()
+        self.title_field.focus = False
+        self.hours_field.focus = False
+        self.minutes_field.focus = False
+        self._closing = True
+        super(AddTimeGoalBottomSheet, self).dismiss()
+        Clock.schedule_once(
+            lambda _dt: screen.open_geofence_picker_for_goal_draft(draft), 0
+        )
+
+    def _clear_geofence(self):
+        self._geofence = {}
+        if getattr(self, "_geofence_summary_lbl", None) is not None:
+            self._geofence_summary_lbl.text = self._geofence_summary_text()
+            self._geofence_summary_lbl.text_color = (0.45, 0.45, 0.48, 1)
 
     def _sync_goal_body_height(self):
         spacing = float(self._body.spacing)
@@ -2262,7 +2806,9 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             goal_target_seconds=quota,
             logged_seconds=0.0,
             reset_mode=mode,
+            geofence=dict(self._geofence) if self._geofence else None,
         )
+        self.project_screen.save_project_content()
         self.dismiss()
 
     def dismiss(self, *largs):
@@ -2445,8 +2991,12 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         anim.start(self.panel)
 
 
-class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
-    """Add etapy group, main step, or sub-step."""
+class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
+    """Minimal sheet for the Etapy header '+': asks only for a Grupa etapów name.
+
+    After the redesign, the only way to create a new group is here. Kroki and
+    Podkroki live inside EditEtapyKrokBottomSheet (opened from the timeline).
+    """
 
     def __init__(self, project_screen, **kwargs):
         super().__init__(**kwargs)
@@ -2480,7 +3030,7 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
         self.panel.add_widget(
             MDLabel(
-                text="Dodaj do etapów",
+                text="Nowa grupa etapów",
                 font_style="Subtitle1",
                 bold=True,
                 theme_text_color="Custom",
@@ -2490,29 +3040,8 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
-        self.type_spinner = RoundedSheetSpinner(
-            text=ETAPY_ADD_STEP,
-            values=[ETAPY_ADD_GROUP, ETAPY_ADD_STEP, ETAPY_ADD_SUB],
-            size_hint_y=None,
-            height=dp(44),
-            font_size=sp(15),
-        )
-        self.type_spinner.bind(text=self._on_type_changed)
-        self.panel.add_widget(self.type_spinner)
-
-        self.parent_spinner = RoundedSheetSpinner(
-            text="",
-            values=[""],
-            size_hint_y=None,
-            height=dp(44),
-            font_size=sp(15),
-            opacity=0,
-            disabled=True,
-        )
-        self.panel.add_widget(self.parent_spinner)
-
         self.field = RoundedSheetTextInput(
-            hint_text="Nazwa…",
+            hint_text="Nazwa grupy (np. Salto)…",
             multiline=False,
             size_hint_y=None,
             height=dp(48),
@@ -2545,7 +3074,6 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         bar.add_widget(btn_add)
         self.panel.add_widget(bar)
         self.add_widget(root)
-        self._refresh_parent_spinner()
 
     def _apply_sheet_layout(self, animate=False):
         self._sync_modal_height()
@@ -2565,33 +3093,6 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     def _relayout_for_keyboard(self, animate=False):
         self._apply_sheet_layout(animate)
-
-    def _on_type_changed(self, _spinner, value):
-        sub = value == ETAPY_ADD_SUB
-        self.parent_spinner.opacity = 1 if sub else 0
-        self.parent_spinner.disabled = not sub
-        self.parent_spinner.height = dp(44) if sub else 0
-        if sub:
-            self._refresh_parent_spinner()
-        if value == ETAPY_ADD_GROUP:
-            self.field.hint_text = "Nazwa grupy (np. Salto)…"
-        elif value == ETAPY_ADD_SUB:
-            self.field.hint_text = "Nazwa podkroku…"
-        else:
-            self.field.hint_text = "Nazwa kroku…"
-        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(True), 0)
-
-    def _refresh_parent_spinner(self):
-        group = self.project_screen._selected_etapy_group()
-        labels = []
-        if group:
-            for i, it in enumerate(group.get("items") or []):
-                t = (it.get("text") or f"Krok {i + 1}").strip()
-                labels.append(f"{i + 1}. {t[:40]}")
-        if not labels:
-            labels = ["(najpierw dodaj krok)"]
-        self.parent_spinner.values = labels
-        self.parent_spinner.text = labels[0]
 
     def on_open(self):
         self._sheet_kb_bound = False
@@ -2618,25 +3119,11 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             self._schedule_keyboard_relayout(False)
 
     def _commit_and_close(self):
-        kind = self.type_spinner.text
         text = (self.field.text or "").strip()
         if not text:
             self.dismiss()
             return
-        if kind == ETAPY_ADD_GROUP:
-            self.project_screen.add_etapy_group(text)
-        elif kind == ETAPY_ADD_SUB:
-            parent_txt = self.parent_spinner.text or ""
-            if parent_txt.startswith("("):
-                self.dismiss()
-                return
-            try:
-                idx = int(parent_txt.split(".", 1)[0]) - 1
-            except ValueError:
-                idx = 0
-            self.project_screen.add_etapy_step(text, parent_item_index=idx)
-        else:
-            self.project_screen.add_etapy_step(text)
+        self.project_screen.add_etapy_group(text)
         self.dismiss()
 
     def dismiss(self, *largs):
@@ -2647,7 +3134,379 @@ class AddEtapyBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.field.focus = False
         h = max(self.panel.height, dp(1))
         anim = Animation(y=-h, d=0.22, t="in_cubic")
-        anim.bind(on_complete=lambda *a: super(AddEtapyBottomSheet, self).dismiss())
+        anim.bind(on_complete=lambda *a: super(AddEtapyGroupBottomSheet, self).dismiss())
+        anim.start(self.panel)
+
+
+class _PodkrokEditorRow(MDBoxLayout):
+    """One inline editor row inside EditEtapyKrokBottomSheet's Podkroki list.
+
+    Renders a bullet, an editable text field, and a red × delete button. Stores
+    the original ``done`` flag so reorders/edits preserve completion state.
+    """
+
+    def __init__(self, sheet, text="", done=False, **kwargs):
+        kwargs.setdefault("orientation", "horizontal")
+        kwargs.setdefault("spacing", dp(6))
+        kwargs.setdefault("size_hint_y", None)
+        kwargs.setdefault("height", dp(44))
+        super().__init__(**kwargs)
+        self.sheet = sheet
+        self.done_state = bool(done)
+
+        self.add_widget(
+            MDLabel(
+                text="•",
+                size_hint_x=None,
+                width=dp(14),
+                font_size=sp(22),
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#7e57c2"),
+                halign="center",
+                valign="middle",
+                bold=True,
+            )
+        )
+
+        self.field = RoundedSheetTextInput(
+            hint_text="Nazwa podkroku…",
+            text=text or "",
+            multiline=False,
+            size_hint_y=None,
+            height=dp(40),
+            font_size=sp(15),
+            padding=[dp(10), dp(10), dp(10), dp(10)],
+            foreground_color=get_color_from_hex("#222222"),
+            cursor_color=get_color_from_hex("#7e57c2"),
+        )
+        self.add_widget(self.field)
+
+        del_btn = Button(
+            text="×",
+            size_hint=(None, None),
+            size=(dp(36), dp(36)),
+            background_normal="",
+            background_down="",
+            background_color=(0, 0, 0, 0),
+            color=get_color_from_hex("#e53935"),
+            font_size=sp(22),
+            bold=True,
+        )
+        del_btn.bind(on_release=lambda *_: self.sheet._remove_podkrok_row(self))
+        self.add_widget(del_btn)
+
+
+class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
+    """Slides-up editor for one Krok and its Podkroki.
+
+    Modes:
+      * item_index=None → new Krok against ``group_index`` (no delete button).
+      * item_index=int  → edit existing Krok; bottom-left 'Usuń' deletes it.
+
+    Podkroki are fully manageable: rename inline, delete with × on each row,
+    'Dodaj podkrok' appends an empty row. All changes commit on 'Zapisz'.
+    """
+
+    def __init__(self, project_screen, group_index, item_index=None, **kwargs):
+        super().__init__(**kwargs)
+        self.project_screen = project_screen
+        self.group_index = int(group_index)
+        self.item_index = item_index
+        self._closing = False
+        self.size_hint = (1, 1)
+        self.auto_dismiss = False
+        self.background_color = (0, 0, 0, 0)
+        self.background = ""
+
+        # Snapshot initial state so cancel actually discards.
+        self._initial_text = ""
+        self._initial_children = []
+        if item_index is not None:
+            try:
+                src = project_screen._etapy_groups[self.group_index]["items"][item_index]
+                self._initial_text = src.get("text", "")
+                self._initial_children = [
+                    {
+                        "text": c.get("text", ""),
+                        "done": bool(c.get("done", False)),
+                    }
+                    for c in (src.get("children") or [])
+                ]
+            except (IndexError, KeyError, TypeError):
+                pass
+
+        root = FloatLayout()
+        self._fl = root
+        dim = Button(
+            size_hint=(1, 1),
+            pos_hint={"x": 0, "y": 0},
+            background_normal="",
+            background_color=(0, 0, 0, 0.45),
+        )
+        dim.bind(on_release=lambda *a: self.dismiss())
+        root.add_widget(dim)
+
+        self.panel = MDCard(
+            orientation="vertical",
+            padding=[dp(14), dp(10), dp(14), 0],
+            spacing=dp(8),
+            size_hint=(1, None),
+            height=dp(420),
+            radius=[dp(22), dp(22), 0, 0],
+            md_bg_color=(1, 1, 1, 1),
+            elevation=16,
+        )
+        root.add_widget(self.panel)
+
+        title = "Edytuj krok" if item_index is not None else "Nowy krok"
+        self.panel.add_widget(
+            MDLabel(
+                text=title,
+                font_style="Subtitle1",
+                bold=True,
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#222222"),
+                size_hint_y=None,
+                height=dp(24),
+                valign="middle",
+            )
+        )
+
+        self.name_field = RoundedSheetTextInput(
+            hint_text="Nazwa kroku…",
+            text=self._initial_text,
+            multiline=False,
+            size_hint_y=None,
+            height=dp(48),
+            font_size=sp(16),
+            padding=[dp(12), dp(12), dp(12), dp(12)],
+            foreground_color=get_color_from_hex("#222222"),
+            cursor_color=get_color_from_hex("#7e57c2"),
+        )
+        self.panel.add_widget(self.name_field)
+
+        self.panel.add_widget(
+            MDLabel(
+                text="Podkroki",
+                font_size=sp(13),
+                bold=True,
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#666666"),
+                size_hint_y=None,
+                height=dp(20),
+                valign="middle",
+            )
+        )
+
+        self._podkrok_scroll = ScrollView(
+            size_hint_y=None,
+            height=dp(150),
+            do_scroll_x=False,
+            bar_width=dp(4),
+        )
+        self._podkrok_box = MDBoxLayout(
+            orientation="vertical",
+            spacing=dp(6),
+            size_hint_y=None,
+            height=dp(0),
+        )
+        self._podkrok_box.bind(minimum_height=self._sync_podkrok_box_height)
+        self._podkrok_scroll.add_widget(self._podkrok_box)
+        self.panel.add_widget(self._podkrok_scroll)
+
+        app = MDApp.get_running_app()
+        add_pod_btn = RoundedSheetButton(
+            text="+ Dodaj podkrok",
+            size_hint_y=None,
+            height=dp(40),
+            bg_color=[0.94, 0.92, 1.0, 1],
+            text_rgb=list(get_color_from_hex("#5e35b1")),
+        )
+        add_pod_btn.bind(on_release=lambda *_: self._add_podkrok_row())
+        self.panel.add_widget(add_pod_btn)
+
+        for child in self._initial_children:
+            self._add_podkrok_row(child.get("text", ""), child.get("done", False))
+
+        bar = MDBoxLayout(
+            orientation="horizontal",
+            size_hint_y=None,
+            height=dp(48),
+            spacing=dp(12),
+        )
+        if item_index is not None:
+            btn_delete = RoundedSheetButton(
+                text="Usuń",
+                size_hint_x=None,
+                width=dp(96),
+                bg_color=list(get_color_from_hex("#e53935")),
+            )
+            btn_delete.bind(on_release=lambda *a: self._delete_and_close())
+            bar.add_widget(btn_delete)
+        bar.add_widget(Widget(size_hint_x=1))
+        btn_cancel = RoundedSheetButton(
+            text="Anuluj",
+            size_hint_x=None,
+            width=dp(96),
+            bg_color=[0.94, 0.94, 0.96, 1],
+            text_rgb=list(get_color_from_hex("#444444")),
+        )
+        btn_cancel.bind(on_release=lambda *a: self.dismiss())
+        save_label = "Zapisz" if item_index is not None else "Dodaj"
+        btn_save = RoundedSheetButton(
+            text=save_label,
+            size_hint_x=None,
+            width=dp(104),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+        )
+        btn_save.bind(on_release=lambda *a: self._commit_and_close())
+        bar.add_widget(btn_cancel)
+        bar.add_widget(btn_save)
+        self.panel.add_widget(bar)
+        self.add_widget(root)
+
+    # --- Podkrok list management ---
+
+    def _add_podkrok_row(self, text="", done=False):
+        row = _PodkrokEditorRow(self, text=text, done=done)
+        self._podkrok_box.add_widget(row)
+        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(True), 0)
+
+    def _remove_podkrok_row(self, row):
+        if row.parent is self._podkrok_box:
+            self._podkrok_box.remove_widget(row)
+        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(True), 0)
+
+    def _sync_podkrok_box_height(self, *_):
+        self._podkrok_box.height = self._podkrok_box.minimum_height
+        Clock.schedule_once(lambda _dt: self._apply_sheet_layout(False), 0)
+
+    # --- Layout (mirrors AddTimeGoalBottomSheet pattern) ---
+
+    def _apply_sheet_layout(self, animate=False):
+        self._sync_modal_height()
+        body_h = float(self._podkrok_box.minimum_height)
+        self._podkrok_scroll.height = max(dp(60), min(body_h, dp(220)))
+        self.panel.height = self._panel_height_for_content(
+            self.panel, self._podkrok_scroll.height, body_scroll=self._podkrok_scroll
+        )
+        self.panel.width = self.width or Window.width
+        self.panel.x = 0
+        self.panel.pos_hint = {}
+        win_h = float(self.height or Window.height or 640)
+        target_y = self._sheet_bottom_y(win_h)
+        max_h = win_h - target_y
+        if self.panel.height > max_h:
+            chrome = self._measure_panel_chrome(
+                self.panel, exclude=(self._podkrok_scroll,)
+            )
+            self._podkrok_scroll.height = max(dp(60), max_h - chrome)
+            self.panel.height = self._panel_height_for_content(
+                self.panel,
+                self._podkrok_scroll.height,
+                body_scroll=self._podkrok_scroll,
+            )
+        if animate:
+            Animation(y=target_y, d=0.12, t="out_cubic").start(self.panel)
+        else:
+            self.panel.y = target_y
+
+    def _relayout_for_keyboard(self, animate=False):
+        self._apply_sheet_layout(animate)
+
+    def on_open(self):
+        self._sheet_kb_bound = False
+        self._sheet_bind_keyboard()
+        self._enable_resize_softinput()
+        self.panel.y = -dp(500)
+        Clock.schedule_once(self._open_start, 0)
+
+    def _open_start(self, _dt):
+        self._apply_sheet_layout(False)
+        target_y = self.panel.y
+        self.panel.y = -self.panel.height
+        Animation(y=target_y, d=0.28, t="out_cubic").start(self.panel)
+        Clock.schedule_once(self._request_focus, 0.35)
+
+    def on_size(self, *_):
+        if self.panel is not None and self.parent is not None:
+            self.panel.width = self.width
+            self._sync_modal_height()
+            self._schedule_keyboard_relayout(False)
+
+    def _request_focus(self, _dt):
+        self.name_field.focus = True
+        self._schedule_keyboard_relayout(True)
+        if self.name_field.text:
+            self.name_field.cursor = (len(self.name_field.text), 0)
+
+    def _sheet_input_focused(self):
+        """Override mixin: the base class only checks hard-coded attribute names.
+
+        We also have name_field plus a dynamic list of _PodkrokEditorRow widgets,
+        each with its own .field. If any of them is focused, the sheet should
+        lift above the keyboard.
+        """
+        if getattr(self, "name_field", None) is not None and self.name_field.focus:
+            return True
+        box = getattr(self, "_podkrok_box", None)
+        if box is not None:
+            for row in box.children:
+                field = getattr(row, "field", None)
+                if field is not None and getattr(field, "focus", False):
+                    return True
+        return False
+
+    # --- Commit / delete ---
+
+    def _collect_children(self):
+        out = []
+        rows = [
+            w for w in reversed(self._podkrok_box.children)
+            if isinstance(w, _PodkrokEditorRow)
+        ]
+        for row in rows:
+            text = (row.field.text or "").strip()
+            if not text:
+                continue
+            out.append({"text": text, "done": bool(row.done_state)})
+        return out
+
+    def _commit_and_close(self):
+        name = (self.name_field.text or "").strip()
+        children = self._collect_children()
+        if not name:
+            if self.item_index is None:
+                self.dismiss()
+                return
+            name = "Krok"
+        if self.item_index is None:
+            self.project_screen.create_etapy_step(
+                self.group_index, name, children
+            )
+        else:
+            self.project_screen.update_etapy_step(
+                self.group_index, self.item_index, name, children
+            )
+        self.dismiss()
+
+    def _delete_and_close(self):
+        if self.item_index is not None:
+            self.project_screen.delete_etapy_step(self.group_index, self.item_index)
+        self.dismiss()
+
+    def dismiss(self, *largs):
+        if self._closing:
+            return
+        self._closing = True
+        self._sheet_unbind_keyboard()
+        self.name_field.focus = False
+        for row in list(self._podkrok_box.children):
+            if isinstance(row, _PodkrokEditorRow):
+                row.field.focus = False
+        h = max(self.panel.height, dp(1))
+        anim = Animation(y=-h, d=0.22, t="in_cubic")
+        anim.bind(on_complete=lambda *a: super(EditEtapyKrokBottomSheet, self).dismiss())
         anim.start(self.panel)
 
 
@@ -2768,9 +3627,11 @@ class TimeGoalTrackRow(MDBoxLayout):
     elapsed_text = StringProperty("")
     reset_mode = StringProperty(RESET_WEEKLY)
     period_key = StringProperty("")
-    car_source_idle = StringProperty(_car_asset_path("CCcc 1.png"))
-    car_source_active = StringProperty(_car_asset_path("ZZzz 1.png"))
+    active_uid = StringProperty("")
+    car_source_idle = StringProperty(_car_asset_path("ZZzz 1.png"))
+    car_source_active = StringProperty(_car_asset_path("CCcc 1.png"))
     parent_screen = ObjectProperty(None, allownone=True)
+    geofence = ObjectProperty({})
 
     _tick_ev = None
     _caption_scheduled = False
@@ -2849,6 +3710,20 @@ class TimeGoalTrackRow(MDBoxLayout):
             self._has_reached_goal = False
             self._overflow_cx = None
             self._overflow_dir = -1
+            if self.tracking_active and self.active_uid:
+                project_title = self.parent_screen.project_title if self.parent_screen else ""
+                project_uid = self.parent_screen.project_uid if self.parent_screen else ""
+                active_timer.start_goal(
+                    self.active_uid,
+                    project_title,
+                    self.title_text,
+                    self.goal_text,
+                    self.goal_target_seconds,
+                    base_logged_seconds=0.0,
+                    reset_mode=self.reset_mode,
+                    period_key=self.period_key,
+                    project_uid=project_uid,
+                )
 
     def apply_logged_to_ui(self):
         t = max(10.0, float(self.goal_target_seconds))
@@ -2930,21 +3805,79 @@ class TimeGoalTrackRow(MDBoxLayout):
     def start_tracking(self):
         if self._tick_ev is not None:
             return
+        if not self.active_uid:
+            self.active_uid = f"goal-{uuid.uuid4().hex}"
+        self._ensure_period()
+        project_title = self.parent_screen.project_title if self.parent_screen else ""
+        project_uid = self.parent_screen.project_uid if self.parent_screen else ""
+        active_timer.start_goal(
+            self.active_uid,
+            project_title,
+            self.title_text,
+            self.goal_text,
+            self.goal_target_seconds,
+            base_logged_seconds=self.logged_seconds,
+            reset_mode=self.reset_mode,
+            period_key=self.period_key,
+            project_uid=project_uid,
+        )
+        if self.parent_screen:
+            self.parent_screen.save_project_content()
+        ensure_android_timer_service()
         self.tracking_active = True
         self._tick_ev = Clock.schedule_interval(self._on_track_tick, 0.05)
 
-    def stop_tracking(self):
+    def stop_tracking(self, update_active=True):
+        state = active_timer.read_goal(self.active_uid) if self.active_uid else {}
+        if state:
+            self.logged_seconds = float(state.get("base_logged_seconds", 0.0)) + float(
+                active_timer.running_seconds(state)
+            )
         if self._tick_ev is not None:
             self._tick_ev.cancel()
             self._tick_ev = None
         self.tracking_active = False
         self._update_progress_from_time(0)
+        if update_active and self.active_uid:
+            active_timer.remove_goal(self.active_uid)
+            if self.parent_screen:
+                self.parent_screen.save_project_content()
+
+    def restore_tracking_from_state(self, goal_state):
+        if not goal_state:
+            return
+        self.active_uid = goal_state.get("uid", self.active_uid)
+        self.logged_seconds = float(goal_state.get("base_logged_seconds", 0.0)) + float(
+            active_timer.running_seconds(goal_state)
+        )
+        self._ensure_period()
+        self.tracking_active = True
+        if self._tick_ev is not None:
+            self._tick_ev.cancel()
+        self._tick_ev = Clock.schedule_interval(self._on_track_tick, 0.05)
+        self._update_progress_from_time(0)
 
     def _on_track_tick(self, dt):
+        state = active_timer.read_goal(self.active_uid) if self.active_uid else {}
+        if state:
+            self.logged_seconds = float(state.get("base_logged_seconds", 0.0)) + float(
+                active_timer.running_seconds(state)
+            )
+        elif self.tracking_active:
+            self.tracking_active = False
+            if self._tick_ev is not None:
+                self._tick_ev.cancel()
+                self._tick_ev = None
+            if self.parent_screen:
+                self.parent_screen.load_project_content()
+                self.parent_screen._restore_active_runtime()
+            return
+        else:
+            self.logged_seconds += float(dt)
         self._ensure_period()
-        self.logged_seconds += float(dt)
         self._update_progress_from_time(dt)
 
     def on_parent(self, *_args):
         if self.parent is None:
-            self.stop_tracking()
+            loading = bool(self.parent_screen and getattr(self.parent_screen, "_loading_project_content", False))
+            self.stop_tracking(update_active=not loading)

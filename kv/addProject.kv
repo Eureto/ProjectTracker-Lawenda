@@ -120,19 +120,19 @@
         # ── Header ──
         BoxLayout:
             size_hint_y: None
-            height: dp(44)
+            height: dp(60)
             spacing: dp(0)
 
             ClickableAnchorLayout:
                 size_hint_x: None
-                width: dp(36)
+                width: dp(56)
                 anchor_x: "left"
                 on_release: app.root.current = "home"
                 MDIcon:
                     icon: "chevron-left"
                     theme_text_color: "Custom"
                     text_color: 1, 1, 1, 1
-                    icon_size: sp(30)
+                    font_size: sp(50)
                     adaptive_size: True
 
             Label:
@@ -146,12 +146,13 @@
 
             Widget:
                 size_hint_x: None
-                width: dp(36)
+                width: dp(56)
 
         # ── Scrollable body ──
         ScrollView:
             do_scroll_x: False
             size_hint_y: 1
+            bar_width: 0
 
             MDBoxLayout:
                 orientation: "vertical"
@@ -185,7 +186,9 @@
                             emoji_source: root.selected_icon
                             card_color: root.selected_color
                             title_font_style: "H6"
-                            emoji_size: dp(72)
+                            emoji_size: dp(45)
+                            emoji_right_hint: 1.25
+                            emoji_right_hint_png: 1.05
 
                     # "Podgląd" label below card
                     Label:
