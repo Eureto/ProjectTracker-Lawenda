@@ -1,5 +1,10 @@
 """Android foreground service that owns persistent running-timer notifications."""
 
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+# Convert ARGB components to a signed integer used for notification colors.
+
 import os
 import sys
 import time
@@ -25,6 +30,7 @@ TAG = "ProjectTrackerSvc"
 IDLE_GRACE_SECONDS = 6
 
 
+# Convert ARGB components to a signed integer color value.
 def _argb(a, r, g, b):
     val = (a << 24) | (r << 16) | (g << 8) | b
     if val >= 0x80000000:
@@ -35,6 +41,7 @@ def _argb(a, r, g, b):
 ACCENT_COLOR = _argb(0xFF, 0x8A, 0x2B, 0xE2)
 
 
+# Log a message to both stdout and Android logcat (if available).
 def _logcat(message):
     print(f"{TAG}: {message}", flush=True)
     try:
@@ -45,6 +52,7 @@ def _logcat(message):
         pass
 
 
+# Format a duration in seconds as HH:MM:SS string.
 def _format_seconds(seconds):
     seconds = int(max(0, seconds))
     h, rem = divmod(seconds, 3600)
@@ -52,10 +60,12 @@ def _format_seconds(seconds):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
+# Compute a stable notification ID for a goal based on its UID.
 def _goal_notification_id(uid):
     return GOAL_NOTIFICATION_BASE_ID + (zlib.crc32(uid.encode("utf-8")) % 8000)
 
 
+# Calculate progress metrics for a goal (label, percent, logged, target).
 def _goal_progress(goal):
     logged = float(goal.get("base_logged_seconds", 0.0)) + active_timer.running_seconds(goal)
     target = max(1.0, float(goal.get("target_seconds", 1.0)))
@@ -64,12 +74,15 @@ def _goal_progress(goal):
     return label, pct, int(logged), int(target)
 
 
+# Produce a short textual representation of a goal's progress.
 def _goal_text(goal):
     label, pct, logged, _ = _goal_progress(goal)
     return f"{label} - {pct}% ({_format_seconds(logged)})"
 
 
+# Service class that manages Android foreground notifications for timers and goals.
 class TimerNotificationService:
+    # Initialize the service, set up notification channel and placeholder.
     def __init__(self):
         from jnius import autoclass
 
@@ -117,9 +130,11 @@ class TimerNotificationService:
         self._start_foreground(PLACEHOLDER_NOTIFICATION_ID, self._placeholder_notification())
         self._register_stop_receiver()
 
+    # Helper to convert a Python value to a Java String.
     def _jstr(self, value):
         return self.JavaString(str(value or ""))
 
+    # Load the app's large icon bitmap for notifications.
     def _load_large_icon(self):
         if self.BitmapFactory is None:
             return None
@@ -131,6 +146,7 @@ class TimerNotificationService:
             _logcat(f"large icon load failed: {exc!r}")
             return None
 
+    # Create the Android notification channel (API 26+).
     def _create_channel(self):
         if self.sdk_int < 26:
             return
@@ -146,12 +162,14 @@ class TimerNotificationService:
             pass
         self.manager.createNotificationChannel(channel)
 
+    # Determine appropriate PendingIntent flags based on SDK version.
     def _pending_flags(self):
         flags = self.PendingIntent.FLAG_UPDATE_CURRENT
         if self.sdk_int >= 23:
             flags |= self.PendingIntent.FLAG_IMMUTABLE
         return flags
 
+    # Build an intent that launches the main activity with the project title.
     def _activity_intent(self, project_title):
         intent = self.Intent(self.context, self.PythonActivity)
         intent.setFlags(
@@ -160,6 +178,7 @@ class TimerNotificationService:
         intent.putExtra("project", project_title or "")
         return intent
 
+    # Build an intent that triggers a stop action (timer or goal).
     def _stop_intent(self, action, uid=""):
         intent = self.Intent(self._jstr(action))
         intent.setPackage(self._jstr(self.package_name))
@@ -167,11 +186,13 @@ class TimerNotificationService:
             intent.putExtra(self._jstr("uid"), self._jstr(uid))
         return intent
 
+    # Return a Notification.Builder appropriate for the SDK version.
     def _builder(self):
         if self.sdk_int >= 26:
             return self.NotificationBuilder(self.context, CHANNEL_ID)
         return self.NotificationBuilder(self.context)
 
+    # Apply a BigTextStyle to a notification builder for expanded view.
     def _apply_style(self, builder, title, expanded_text):
         try:
             style = self.BigTextStyle()
@@ -181,6 +202,7 @@ class TimerNotificationService:
         except Exception as exc:
             _logcat(f"BigTextStyle failed: {exc!r}")
 
+    # Common builder for timer and goal notifications.
     def _notification_builder(
         self,
         title,
@@ -239,6 +261,7 @@ class TimerNotificationService:
             self._apply_style(builder, title, expanded_text)
         return builder
 
+    # Build a placeholder notification shown while the service starts.
     def _placeholder_notification(self):
         builder = self._builder()
         builder.setSmallIcon(self.icon)
@@ -258,6 +281,7 @@ class TimerNotificationService:
         builder.setShowWhen(False)
         return builder.build()
 
+    # Build the foreground notification for the running project timer.
     def _timer_notification(self, state):
         project = state.get("project_title", "") or "Projekt"
         elapsed = active_timer.elapsed_from_state(state)
@@ -276,6 +300,7 @@ class TimerNotificationService:
             sub_text="Lawenda",
         ).build()
 
+    # Build a notification for an active goal.
     def _goal_notification(self, goal):
         uid = str(goal.get("uid", "") or "")
         project = goal.get("project_title", "") or "Projekt"
@@ -303,6 +328,7 @@ class TimerNotificationService:
             sub_text="Lawenda",
         ).build()
 
+    # Start or update the foreground service with the given notification.
     def _start_foreground(self, notification_id, notification):
         if self._foreground_id == notification_id:
             try:
@@ -322,6 +348,7 @@ class TimerNotificationService:
                 pass
         self._foreground_id = notification_id
 
+    # Stop the foreground service and clear its notification.
     def _stop_foreground(self):
         try:
             if self.sdk_int >= 24:
@@ -337,6 +364,7 @@ class TimerNotificationService:
                 pass
             self._foreground_id = None
 
+    # Register a BroadcastReceiver to handle stop actions from notifications.
     def _register_stop_receiver(self):
         try:
             from android.broadcast import BroadcastReceiver
@@ -373,6 +401,7 @@ class TimerNotificationService:
             _logcat(f"BroadcastReceiver.start failed: {exc!r}")
             self._receiver = None
 
+    # Unregister the previously registered BroadcastReceiver.
     def _unregister_stop_receiver(self):
         if self._receiver is None:
             return
@@ -382,6 +411,7 @@ class TimerNotificationService:
             pass
         self._receiver = None
 
+    # Perform a single update cycle: refresh notifications for timer and goals.
     def _tick_once(self):
         timer_state = active_timer.read_project_timer()
         goals = active_timer.read_goals()
@@ -412,6 +442,7 @@ class TimerNotificationService:
 
         return bool(active_ids)
 
+    # Main loop of the service; periodically updates notifications until idle.
     def run(self):
         _logcat("service started")
         try:

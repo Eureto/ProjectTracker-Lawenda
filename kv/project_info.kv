@@ -15,6 +15,16 @@
 #:import ZrobioneSection screens.project_info.ZrobioneSection
 #:import ZrobioneHeaderBar screens.project_info.ZrobioneHeaderBar
 
+# ---------------------------------------------------------------------------
+# UI Component Definitions
+# ---------------------------------------------------------------------------
+# The following sections define custom widget templates used throughout the
+# ProjectInfo screen. Each template groups related UI elements and defines the
+# visual layout that will be rendered on screen.
+
+# ProjectNoteRow – displays a single note with text and a delete button.
+
+# Section: Project Note Row
 <ProjectNoteRow>:
     orientation: "horizontal"
     spacing: dp(10)
@@ -72,6 +82,7 @@
                 pos: self.center_x - dp(18), self.center_y - dp(18)
                 size: dp(36), dp(36)
 
+# Section: Time Goal Track Row (shows a progress car button, timer, and goal info)
 <TimeGoalTrackRow>:
     orientation: "horizontal"
     spacing: dp(10)
@@ -250,6 +261,7 @@
                         pos: self.pos
                         size: self.size
 
+# Section: Header Action Button (used for plus icons in headers)
 <SectionHeaderAction@MDIconButton>:
     size_hint: None, None
     width: dp(48)
@@ -259,6 +271,7 @@
     icon_size: dp(24)
     md_bg_color: 0, 0, 0, 0
 
+# Section: "Zrobione" Header Bar (collapsible header for completed items)
 <ZrobioneHeaderBar>:
     size_hint_y: None
     height: dp(28)
@@ -288,6 +301,7 @@
             icon_size: dp(24)
             size_hint: None, None
 
+# Section: Zrobione Section (container for completed checklist items)
 <ZrobioneSection>:
     orientation: "vertical"
     spacing: dp(8)
@@ -302,6 +316,7 @@
         spacing: dp(14)
         size_hint_y: None
 
+# Section: Checklist Goal Row (displays a goal with index, text, and status button)
 <ChecklistGoalRow>:
     size_hint_y: None
     valign: "middle"
@@ -342,6 +357,7 @@
             size_hint: None, None
             size: dp(26), dp(26)
 
+# Section: Stage Item Row (timeline item with optional sub-step and status)
 <StageItemRow>:
     TimelineSpine:
         id: spine
@@ -373,6 +389,7 @@
         show_crown: False
         white_style: True
 
+# Section: Etapy Plus Row (adds a new step button in the timeline)
 <EtapyPlusRow>:
     EtapyPlusSpine:
         id: plus_spine
@@ -390,6 +407,7 @@
         size_hint_x: 1
         text_size: self.size
 
+# Section: Project Info Screen (main screen layout with notes, timer, goals, etc.)
 <ProjectInfoScreen>:
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
 
