@@ -54,7 +54,7 @@ def _argb(a, r, g, b):
 ACCENT_COLOR = _argb(0xFF, 0x8A, 0x2B, 0xE2)
 
 
-# Log a message to both stdout and Android logcat (if available).
+# Zapisuje wiadomość zarówno w konsoli (stdout), jak i w logach systemowych Android (logcat).
 def _logcat(message):
     # Zapisuje wiadomość zarówno w konsoli (print) jak i w logach systemowych Android (logcat) 
     # do celów debugowania. Dzięki temu deweloper może śledzić działanie aplikacji 
@@ -172,11 +172,11 @@ class TimerNotificationService:
         self._start_foreground(PLACEHOLDER_NOTIFICATION_ID, self._placeholder_notification())
         self._register_stop_receiver()
 
-    # Helper to convert a Python value to a Java String.
+    # Pomocnicza funkcja do zamiany wartości Pythona na tekst (String) dla Javy.
     def _jstr(self, value):
         return self.JavaString(str(value or ""))
 
-    # Load the app's large icon bitmap for notifications.
+    # Wczytuje dużą ikonę aplikacji do wyświetlania w powiadomieniach.
     def _load_large_icon(self):
         # Wczytuje dużą ikonę aplikacji z zasobów Androida, która będzie wyświetlana
         # w powiadomieniu jako większe obrazki. Jeśli BitmapFactory nie jest dostępna
@@ -256,7 +256,7 @@ class TimerNotificationService:
             return self.NotificationBuilder(self.context, CHANNEL_ID)
         return self.NotificationBuilder(self.context)
 
-    # Apply a BigTextStyle to a notification builder for expanded view.
+    # Stosuje styl BigTextStyle do powiadomienia, żeby można było rozwinąć i zobaczyć więcej treści.
     def _apply_style(self, builder, title, expanded_text):
         try:
             style = self.BigTextStyle()
@@ -266,7 +266,7 @@ class TimerNotificationService:
         except Exception as exc:
             _logcat(f"BigTextStyle failed: {exc!r}")
 
-    # Common builder for timer and goal notifications.
+    # Wspólna funkcja do tworzenia powiadomień dla stopera i celów.
     def _notification_builder(
         self,
         title,
@@ -325,7 +325,7 @@ class TimerNotificationService:
             self._apply_style(builder, title, expanded_text)
         return builder
 
-    # Build a placeholder notification shown while the service starts.
+    # Tworzy tymczasowe powiadomienie widoczne podczas uruchamiania usługi.
     def _placeholder_notification(self):
         # Tworzy tymczasowe powiadomienie widoczne na pasku statusu tylko
         # podczas uruchamiania usługi, zanim zacznie działać właściwy stoper.
@@ -350,7 +350,7 @@ class TimerNotificationService:
         builder.setShowWhen(False)
         return builder.build()
 
-    # Build the foreground notification for the running project timer.
+    # Tworzy powiadomienie dla uruchomionego stopera projektu (usługa na pierwszym planie).
     def _timer_notification(self, state):
         project = state.get("project_title", "") or "Projekt"
         elapsed = active_timer.elapsed_from_state(state)
@@ -369,7 +369,7 @@ class TimerNotificationService:
             sub_text="Lawenda",
         ).build()
 
-    # Build a notification for an active goal.
+    # Tworzy powiadomienie dla aktywnego celu czasowego.
     def _goal_notification(self, goal):
         uid = str(goal.get("uid", "") or "")
         project = goal.get("project_title", "") or "Projekt"
@@ -397,7 +397,7 @@ class TimerNotificationService:
             sub_text="Lawenda",
         ).build()
 
-    # Start or update the foreground service with the given notification.
+    # Uruchamia lub aktualizuje usługę na pierwszym planie z podanym powiadomieniem.
     def _start_foreground(self, notification_id, notification):
         # Uruchamia usługę Android na pierwszym planie ("foreground service").
         # To specjalny rodzaj usługi, która pokazuje stałe powiadomienie
@@ -494,7 +494,7 @@ class TimerNotificationService:
             pass
         self._receiver = None
 
-    # Perform a single update cycle: refresh notifications for timer and goals.
+    # Wykonuje pojedynczy cykl aktualizacji: odświeża powiadomienia dla stopera i celów.
     def _tick_once(self):
         # Odświeża wszystkie powiadomienia na pasku statusu.
         # Sprawdza:

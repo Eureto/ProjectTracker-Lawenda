@@ -19,7 +19,7 @@ from kivy.metrics import dp, sp
 
 
 def _log(message):
-    """Single-line tagged logcat/Kivy log emitter for the geofence picker."""
+    """Wysyła pojedyncze linie logów (do Kivy i logcat Androida) dla ekranu wyboru lokalizacji."""
     try:
         Logger.info("GeofencePicker: %s", message)
     except Exception:
@@ -178,7 +178,7 @@ class GeofenceCircleOverlay(Widget):
             diameter_px=self._redraw,
         )
 
-    # Never consume touches — let the map handle pan/zoom.
+    # Nie przechwytuj dotknięć — mapa sama obsługuje przesuwanie i przybliżanie.
     def on_touch_down(self, touch):
         return False
 
@@ -471,8 +471,8 @@ class GeofencePickerScreen(MDScreen):
                 size_hint=(1, 1),
                 pos_hint={"x": 0, "y": 0},
             )
-            # Smooth (fractional) zoom on assignment; suppress accidental
-            # tap-to-zoom; keep tile rendering live during gestures.
+            # Płynne (nie tylko całkowite) przybliżanie; wyłącz przypadkowe
+            # przybliżanie po dotknięciu; nie zatrzymuj rysowania kafelków mapy podczas gestów.
             self._safe_set(self._mapview, "snap_to_zoom", False)
             self._safe_set(self._mapview, "double_tap_zoom", False)
             self._safe_set(self._mapview, "pause_on_action", False)
@@ -485,9 +485,9 @@ class GeofencePickerScreen(MDScreen):
                 zoom=lambda *_a: self._refresh_overlay(),
                 size=lambda *_a: self._refresh_overlay(),
             )
-            # mapview.scale is a Python @property, not a Kivy property — bind
-            # to the inner Scatter's bindable scale/pos so the overlay tracks
-            # fractional zoom changes from diff_scale_at().
+            # mapview.scale to zwykła właściwość Pythona, a nie Kivy — dlatego
+            # podpinamy się do wewnętrznego Scattera, żeby nakładka reagowała
+            # na płynne zmiany przybliżenia z diff_scale_at().
             scatter = getattr(self._mapview, "_scatter", None)
             if scatter is not None:
                 try:
@@ -530,9 +530,9 @@ class GeofencePickerScreen(MDScreen):
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return
         z = max(_MIN_ZOOM, min(_MAX_ZOOM, float(zoom)))
-        # MapView's `zoom` is a NumericProperty (often float when
-        # snap_to_zoom=False). If the source only supports int, the cast
-        # below at least keeps it valid.
+        # Właściwość `zoom` w MapView to NumericProperty (często liczba
+        # zmiennoprzecinkowa, gdy snap_to_zoom=False). Jeśli źródło mapy
+        # obsługuje tylko liczby całkowite, rzutowanie poniżej zapewni poprawną wartość.
         try:
             self._mapview.zoom = z
         except Exception:
@@ -580,8 +580,8 @@ class GeofencePickerScreen(MDScreen):
         title.bind(size=lambda lbl, *_: setattr(lbl, "text_size", lbl.size))
         header.add_widget(title)
 
-        # Spacer that mirrors the back-button width so the title stays
-        # centered.
+        # Niewidzialny odstęp, który równoważy szerokość przycisku powrotu,
+        # żeby tytuł pozostał wyśrodkowany.
         spacer = Widget(size_hint_x=None, width=dp(56))
         header.add_widget(spacer)
 
@@ -631,8 +631,8 @@ class GeofencePickerScreen(MDScreen):
         radius_row.add_widget(self._radius_label)
         panel.add_widget(radius_row)
 
-        # Status line — used to surface the GPS bootstrap state so the user
-        # can tell whether the app is actively trying to locate them.
+        # Linia statusu — pokazuje stan uruchamiania GPS, żeby użytkownik
+        # wiedział, czy aplikacja właśnie próbuje ustalić jego lokalizację.
         self._status_lbl = Label(
             text="",
             font_size=sp(12),
@@ -648,11 +648,10 @@ class GeofencePickerScreen(MDScreen):
         )
         panel.add_widget(self._status_lbl)
 
-        # Zoom controls — primary way to size the area. Pinch-zoom is
-        # disabled on _StableMapView so this is what the user uses. The
-        # buttons drive `diff_scale_at` so zoom is continuous (no integer
-        # snapping); tap for a small step, press-and-hold for fast smooth
-        # zoom.
+        # Przyciski przybliżania — główny sposób na zmianę rozmiaru obszaru.
+        # Ściskanie dwoma palcami (pinch-to-zoom) jest wyłączone, więc
+        # użytkownik używa tych przycisków. Zoom jest płynny (bez skoków).
+        # Krótkie dotknięcie = mały krok, przytrzymanie = szybkie płynne zbliżanie.
         zoom_row = BoxLayout(
             orientation="horizontal",
             size_hint=(1, None),
@@ -683,7 +682,7 @@ class GeofencePickerScreen(MDScreen):
             spacing=dp(12),
         )
 
-        # Theme color used for primary actions across the rest of the app.
+        # Kolor motywu używany dla głównych przycisków w całej aplikacji.
         app = MDApp.get_running_app()
         primary_bg = list(
             get_color_from_hex(
@@ -691,8 +690,9 @@ class GeofencePickerScreen(MDScreen):
             )
         )
 
-        # Destructive — same red as "Usuń" elsewhere. The header chevron
-        # already provides Cancel, so we only need Wyczyść + Zapisz here.
+        # Destrukcyjny — ten sam czerwony kolor co przycisk "Usuń" w innych
+        # miejscach. Strzałka w nagłówku już umożliwia anulowanie, więc
+        # tutaj potrzebujemy tylko "Wyczyść" i "Zapisz".
         clear_btn = RoundedSheetButton(
             text="Wyczyść",
             font_size=sp(15),
@@ -734,19 +734,19 @@ class GeofencePickerScreen(MDScreen):
             width=dp(56),
             bg_color=bg,
         )
-        # Press-and-hold for continuous smooth zoom; tap for a small step.
+        # Przytrzymanie = płynne ciągłe przybliżanie; dotknięcie = mały krok.
         btn.bind(
             on_press=lambda *_a, _d=direction: self._zoom_press_start(_d),
             on_release=lambda *_a: self._zoom_press_stop(),
         )
         return btn
 
-    # Per-tick zoom amount (in "scale octaves"): scatter.scale *= 2**TICK.
-    # 60 ticks/sec * 0.035 ≈ 2.1 octaves/sec ≈ 4× zoom per second when held.
-    _ZOOM_TICK = 0.035
-    # Initial step applied on press for snappy tap response.
+    # Wartość przybliżenia na jeden "tik" (w oktawach skali): scatter.scale *= 2**TICK.
+    # 60 tików/sek * 0.035 ≈ 2.1 oktaw/sek ≈ 4× przybliżenia na sekundę przy przytrzymaniu.
+    # Pierwszy skok jest stosowany od razu po dotknięciu, żeby reakcja była natychmiastowa.
     _ZOOM_TAP_STEP = 0.18
-
+    _ZOOM_TICK = 0.035
+    
     def _zoom_press_start(self, direction):
         # Gdy użytkownik przytrzyma przycisk zoomu – zaczynamy płynnie
         # przybliżać lub oddalać mapę. Od razu robimy jeden skok

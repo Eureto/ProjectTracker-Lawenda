@@ -32,7 +32,7 @@ from screens import active_timer
 from screens.emoji_assets import emoji_path
 from screens.session_store import record_session, schedule_home_last_session_refresh
 
-# Project root = parent of `screens/` (works on device and desktop).
+# Główny folder projektu = nadrzędny dla `screens/` (działa zarówno na telefonie, jak i komputerze).
 _PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
@@ -48,7 +48,7 @@ RESET_NEVER = "never"
 RESET_DAILY = "daily"
 RESET_WEEKLY = "weekly"
 
-# Match MDIconButton width so + icons, Zrobione chevron, and status circles share one vertical line.
+# Wyrównanie do szerokości MDIconButton, żeby ikony +, strzałka "Zrobione" i kółka statusu były w jednej linii.
 _RIGHT_ACTION_WIDTH = dp(48)
 
 _SHEET_FIELD_RADIUS = dp(12)
@@ -69,7 +69,7 @@ ETAPY_ADD_GROUP = "Grupa etapów"
 
 
 def _android_log(message):
-    """Print Kivy logger + Android logcat (tag: ProjectTrackerSvc)."""
+    """Zapisuje wiadomość w logach Kivy oraz w logcat Androida (tag: ProjectTrackerSvc)."""
     try:
         from kivy.logger import Logger
 
@@ -87,7 +87,7 @@ def _android_log(message):
 
 
 def _manifest_service_class_names(activity):
-    """Return every service class declared in our app's AndroidManifest."""
+    """Zwraca wszystkie klasy usług zadeklarowane w AndroidManifest naszej aplikacji."""
     try:
         from jnius import autoclass
 
@@ -123,7 +123,7 @@ def _start_service_via_intent(autoclass, activity, class_name):
 
 
 def ensure_android_timer_service():
-    """Start the foreground service that owns the running-timer notifications."""
+    """Uruchamia usługę na pierwszym planie, która wyświetla powiadomienia o aktywnym stoperze."""
     if platform != "android":
         return
     try:
@@ -173,7 +173,7 @@ def ensure_android_timer_service():
 
 
 class _RoundedSheetBackground:
-    """Draw a rounded fill behind sheet inputs (TextInput / Spinner)."""
+    """Rysuje zaokrąglone tło pod polami tekstowymi (TextInput / Spinner) w arkuszach."""
 
     fill_color = ListProperty([0.97, 0.97, 0.97, 1])
     corner_radius = NumericProperty(_SHEET_FIELD_RADIUS)
@@ -185,8 +185,8 @@ class _RoundedSheetBackground:
         Clock.schedule_once(lambda _dt: self._redraw_rounded_bg(), 0)
 
     def _redraw_rounded_bg(self, *_args):
-        # Only remove our background group — clearing canvas.before drops Kivy's
-        # TextInput foreground Color rule and leaves label textures white.
+        # Usuwamy tylko naszą własną grupę tła — czyszczenie całego canvas.before
+        # usunęłoby regułę koloru Kivy i tekst stałby się biały.
         self.canvas.before.remove_group("sheet_field_bg")
         r = float(self.corner_radius)
         with self.canvas.before:
@@ -200,7 +200,7 @@ class _RoundedSheetBackground:
 
 
 class RoundedSheetTextInput(_RoundedSheetBackground, TextInput):
-    """Sheet TextInput with rounded fill; bakes text color into label textures."""
+    """Pole tekstowe w arkuszu z zaokrąglonym tłem i wbudowanym kolorem tekstu."""
 
     def __init__(self, **kwargs):
         kwargs.setdefault("background_color", (0, 0, 0, 0))
@@ -274,7 +274,7 @@ class RoundedSheetSpinner(_RoundedSheetBackground, Spinner):
 
 
 class ResetPeriodChip(Button):
-    """Rounded reset-period choice for the time-goal sheet."""
+    """Zaokrąglony przycisk wyboru okresu resetowania dla celu czasowego."""
 
     selected = BooleanProperty(False)
 
@@ -312,7 +312,7 @@ class ResetPeriodChip(Button):
 
 
 class RoundedSheetButton(Button):
-    """Rounded action button for bottom sheets (replaces flat MD buttons in sheets)."""
+    """Zaokrąglony przycisk akcji w arkuszach (zastępuje płaskie przyciski MD w arkuszach)."""
 
     bg_color = ListProperty([0.7, 0.5, 1, 1])
     text_rgb = ListProperty([1, 1, 1, 1])
@@ -346,7 +346,7 @@ class RoundedSheetButton(Button):
 
 
 def current_period_key(reset_mode):
-    """Calendar day / ISO week key used to reset progress when the period rolls over."""
+    """Klucz (dzień kalendarzowy / tydzień ISO) używany do resetowania postępów po zakończeniu okresu."""
     if reset_mode == RESET_NEVER:
         return "all"
     if reset_mode == RESET_DAILY:
@@ -390,7 +390,7 @@ def parse_reset_mode(value):
 
 
 def parse_goal_target_seconds(goal_str):
-    """Best-effort parse from strings like '1h/1d', '30min', '2h'. Defaults to 1 hour."""
+    """Próbuje odczytać czas z tekstu takiego jak '1h/1d', '30min', '2h'. Domyślnie 1 godzina."""
     s = (goal_str or "").lower().replace(",", ".")
     m = re.search(r"(\d+(?:\.\d+)?)\s*h", s)
     if m:
@@ -405,7 +405,7 @@ def parse_goal_target_seconds(goal_str):
 
 
 def parse_goal_hours_minutes(hours_text, minutes_text):
-    """Build target duration from separate hour and minute fields."""
+    """Tworzy docelowy czas z osobnych pól godzin i minut."""
     try:
         hours = max(0, int((hours_text or "0").strip()))
     except ValueError:
@@ -431,7 +431,7 @@ def format_goal_elapsed(seconds):
 
 
 class UnderlineTextBlock(BoxLayout):
-    """White label with a horizontal rule underneath (mockup list / stage lines)."""
+    """Biała etykieta z poziomą linią pod spodem (lista projektów / linie etapów)."""
 
     text = StringProperty("")
     text_color = ListProperty([1, 1, 1, 1])
@@ -509,7 +509,7 @@ class UnderlineTextBlock(BoxLayout):
 
 
 class StatusCircleButton(Button):
-    """Circle toggle on the right — white ring for checklist, purple/crown for etapy."""
+    """Przycisk z kółkiem po prawej — biały pierścień dla listy celów, fioletowy/koronka dla etapów."""
 
     done = BooleanProperty(False)
     show_crown = BooleanProperty(True)
@@ -682,7 +682,7 @@ class ChecklistGoalRow(MDBoxLayout):
 
 
 class ZrobioneHeaderBar(MDBoxLayout):
-    """Tappable row: title + chevron."""
+    """Wiersz do kliknięcia: tytuł + strzałka."""
 
     section = ObjectProperty(None, allownone=True)
 
@@ -710,7 +710,7 @@ class ZrobioneHeaderBar(MDBoxLayout):
 
 
 class ZrobioneSection(MDBoxLayout):
-    """Collapsible 'Zrobione' bucket for completed checklist goals."""
+    """Rozwijana sekcja 'Zrobione' dla ukończonych celów z listy."""
 
     expanded = BooleanProperty(True)
     done_count = NumericProperty(0)
@@ -832,7 +832,7 @@ class ZrobioneSection(MDBoxLayout):
 
 
 class StageItemRow(MDBoxLayout):
-    """Timeline row: spine + underline text + status (crown when done)."""
+    """Wiersz na osi czasu: linia + podkreślony tekst + status (koronka gdy zrobione)."""
 
     display_text = StringProperty("")
     done = BooleanProperty(False)
@@ -857,18 +857,18 @@ class StageItemRow(MDBoxLayout):
         self._underline = self.ids.underline_block
         self._status_btn = self.ids.status_btn
         self._status_btn.bind(on_release=self._toggle_done)
-        # `sub_arrow` is now just a horizontal spacer for Podkroki — the
-        # spine itself draws the visual arrow head, so we keep this widget
-        # invisible and use it only to indent the text.
+        # `sub_arrow` to teraz tylko poziomy odstęp dla Podkroków — strzałkę
+        # rysuje sama oś (spine), więc ten element jest niewidoczny i służy
+        # tylko do wcięcia tekstu.
         self.ids.sub_arrow.opacity = 0
         self.ids.sub_arrow.width = dp(16) if self.is_sub else 0
         self._spine.is_sub = self.is_sub
         self._spine.is_first = self.is_first
         self._spine.is_last = self.is_last
-        # NOTE: we intentionally do NOT shift the row's left padding for
-        # subs. Indenting the whole row would also shift the spine, which
-        # would break the vertical line continuity with the parent Krok.
-        # The dp(16) spacer above provides the text-only indent instead.
+        # UWAGA: celowo NIE przesuwamy lewego marginesu wiersza dla
+        # Podkroków. Przesunięcie całego wiersza przesunęłoby też oś pionową,
+        # co przerwałoby ciągłość linii z nadrzędnym Krokiem. Zamiast tego
+        # odstęp dp(16) powyżej robi wcięcie tylko dla tekstu.
         self._apply_done_to_ui()
         Clock.schedule_once(self._sync_height, 0)
 
@@ -966,21 +966,21 @@ class TimelineSpine(Widget):
 
 
 class StageTextTap(ButtonBehavior, BoxLayout):
-    """ButtonBehavior wrapper around the StageItemRow text area: tap = edit krok."""
+    """Otoczka wokół tekstu StageItemRow, która reaguje na kliknięcie: dotknięcie = edycja kroku."""
 
     pass
 
 
 class EtapyPlusSpine(Widget):
-    """Spine column for the EtapyPlusRow: line from the top of the row to the
-    centre, then a filled purple circle with a white plus glyph at the centre.
+    """Kolumna osi dla wiersza EtapyPlusRow: linia od góry do środka,
+    a potem wypełnione fioletowe kółko z białym plusem pośrodku.
 
-    Width matches TimelineSpine (dp(22)) so the plus node lines up exactly with
-    the dots above it in the timeline.
+    Szerokość odpowiada TimelineSpine (dp(22)), żeby węzeł z plusem
+    był idealnie w jednej linii z kropkami powyżej na osi czasu.
 
-    ``connect_top`` controls whether the upward line is drawn — set to False
-    when the row is the only timeline entry so the '+' button doesn't appear
-    to be connected to nothing.
+    ``connect_top`` kontroluje, czy rysować górną linię — ustaw na False,
+    gdy to jedyny wpis na osi, żeby przycisk '+' nie wyglądał,
+    jakby był połączony z niczym.
     """
 
     connect_top = BooleanProperty(True)
@@ -1016,15 +1016,15 @@ class EtapyPlusSpine(Widget):
 
 
 class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
-    """Persistent 'add krok' row at the bottom of the etapy timeline.
+    """Stały wiersz 'dodaj krok' na dole osi czasu etapów.
 
-    Visually continues the timeline spine and ends in a purple '+' node.
-    The whole row is tappable; tapping opens the EditEtapyKrokBottomSheet in
-    new-krok mode against the currently selected group.
+    Wizualnie kontynuuje linię osi czasu i kończy się fioletowym węzłem z '+'.
+    Cały wiersz można kliknąć — otwiera edytor EditEtapyKrokBottomSheet
+    w trybie dodawania nowego kroku do wybranej grupy.
 
-    ``connect_top`` controls whether the upward line on the spine is drawn.
-    When the row is the only timeline entry it should be False so the '+'
-    button isn't trailed by an orphaned vertical line.
+    ``connect_top`` kontroluje, czy rysować górną linię na osi.
+    Gdy to jedyny wpis na osi czasu, powinno być False, żeby przycisk '+'
+    nie był połączony pionową linią z niczym.
     """
 
     parent_screen = ObjectProperty(None, allownone=True)
@@ -1046,13 +1046,13 @@ class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
 
 
 class ProjectInfoScreen(MDScreen):
-    """Project detail panel: dynamic notes & goals, timer, bottom nav like home."""
+    """Panel szczegółów projektu: notatki i cele, stoper, dolne menu nawigacyjne jak na głównym."""
 
-    # ``project_uid`` is the canonical lookup key for every per-project file
-    # (project_details, active_timer, active_goals). ``project_title`` is the
-    # display name only — two projects can legitimately share it. When the uid
-    # is empty (legacy / fresh install with no migration yet) the title is used
-    # as a fallback key so we still find the right blob.
+    # ``project_uid`` to główny klucz identyfikacyjny we wszystkich plikach
+    # projektu (project_details, active_timer, active_goals). ``project_title``
+    # to tylko nazwa wyświetlana — dwa projekty mogą mieć tę samą nazwę.
+    # Gdy uid jest puste (stara wersja / nowa instalacja bez migracji),
+    # używamy tytułu jako klucza zapasowego, żeby nadal znaleźć dane.
     project_uid = StringProperty("")
     project_title = StringProperty("")
     timer_display = StringProperty("00:00:00")
@@ -1075,13 +1075,14 @@ class ProjectInfoScreen(MDScreen):
         self._goal_sheet = None
         self._goal_period_ev = None
         self._loading_project_content = False
-        # When project_uid changes we always need to swap content; when only
-        # project_title changes (rename in place) we just refresh metadata.
+        # Gdy zmienia się project_uid, trzeba przeładować całą zawartość;
+        # gdy zmienia się tylko nazwa projektu (zmiana nazwy w miejscu),
+        # wystarczy odświeżyć metadane.
         self.bind(project_uid=self._on_project_identity_changed)
         self.bind(project_title=self._on_project_identity_changed)
 
     def _state_key(self):
-        """Storage key for this project's per-project blob."""
+        """Klucz do danych tego projektu w plikach stanu."""
         return self.project_uid or self.project_title or "_"
 
     def _on_project_identity_changed(self, *_args):
@@ -1091,18 +1092,18 @@ class ProjectInfoScreen(MDScreen):
             self._restore_active_runtime()
 
     def on_pre_enter(self):
-        # Render the new project's content BEFORE the transition completes so
-        # the user never sees a frame of the previous project's UI bleeding
-        # through. on_enter still re-runs runtime restore once the screen is
-        # actually visible.
+        # Wyświetl zawartość nowego projektu PRZED zakończeniem animacji
+        # przejścia, żeby użytkownik nie zobaczył przebłysków poprzedniego
+        # projektu. Funkcja on_enter i tak uruchomi ponownie przywracanie
+        # stanu, gdy ekran będzie już widoczny.
         self.load_project_content()
         self._restore_active_runtime()
 
     def on_enter(self):
         Window.bind(on_keyboard=self._on_keyboard)
-        # on_pre_enter has already populated the UI; we only need the runtime
-        # re-sync (e.g. timer drift while the transition animated) and the
-        # period refresh scheduler here.
+        # on_pre_enter już wypełnił interfejs; tutaj potrzebujemy tylko
+        # ponownej synchronizacji stanu (np. opóźnienia stopera podczas
+        # animacji) i harmonogramu odświeżania okresów.
         self._restore_active_runtime()
         self._refresh_time_goal_periods()
         if self._goal_period_ev is not None:
@@ -1120,7 +1121,7 @@ class ProjectInfoScreen(MDScreen):
         self.save_project_content()
 
     def _refresh_time_goal_periods(self, *_args):
-        """Reset car-goal progress when the calendar day or ISO week rolls over."""
+        """Resetuje postęp samochodzika, gdy skończy się dzień lub tydzień."""
         goals = self.ids.get("goals_list")
         if goals is None:
             return
@@ -1467,7 +1468,7 @@ class ProjectInfoScreen(MDScreen):
     _etapy_krok_sheet = None
 
     def open_add_etapy_group_sheet(self):
-        """Header '+' → create a new Grupa etapów (only that)."""
+        """Przycisk '+' w nagłówku → tworzy nową Grupę etapów (tylko to)."""
         if self._etapy_sheet is not None:
             return
         sheet = AddEtapyGroupBottomSheet(self)
@@ -1480,7 +1481,7 @@ class ProjectInfoScreen(MDScreen):
         sheet.open()
 
     def _open_etapy_krok_sheet(self, group_index, item_index):
-        """Internal: open the full Krok editor (new or edit)."""
+        """Wewnętrzne: otwiera pełny edytor Kroku (nowy lub edycja)."""
         if self._etapy_krok_sheet is not None:
             return
         sheet = EditEtapyKrokBottomSheet(self, group_index, item_index)
@@ -1493,14 +1494,14 @@ class ProjectInfoScreen(MDScreen):
         sheet.open()
 
     def open_new_etapy_krok_sheet(self):
-        """In-timeline '+' → create a new Krok in the selected group."""
+        """Przycisk '+' na osi czasu → tworzy nowy Krok w wybranej grupie."""
         if not self._etapy_groups:
             return
         self._clamp_etapy_selection()
         self._open_etapy_krok_sheet(self._etapy_selected_index, None)
 
     def open_edit_etapy_krok_sheet(self, group_index, item_index):
-        """Tap on a Krok/Podkrok row → edit the owning Krok."""
+        """Dotknięcie wiersza Kroku/Podkroku → edycja nadrzędnego Kroku."""
         try:
             _ = self._etapy_groups[int(group_index)]["items"][int(item_index)]
         except (IndexError, KeyError, TypeError):
@@ -1548,7 +1549,7 @@ class ProjectInfoScreen(MDScreen):
         self.save_project_content()
 
     def create_etapy_step(self, group_index, text, children=None):
-        """Append a new Krok with its Podkroki (called by the krok editor)."""
+        """Dodaje nowy Krok z jego Podkrokami (wywoływane przez edytor kroku)."""
         text = (text or "").strip()
         if not text:
             return
@@ -1568,7 +1569,7 @@ class ProjectInfoScreen(MDScreen):
         self.save_project_content()
 
     def update_etapy_step(self, group_index, item_index, text, children=None):
-        """Replace the Krok name + its Podkroki list in one save (krok editor)."""
+        """Zastępuje nazwę Kroku i listę jego Podkroków w jednym zapisie (edytor kroku)."""
         text = (text or "").strip() or "Krok"
         try:
             item = self._etapy_groups[int(group_index)]["items"][int(item_index)]
@@ -1584,7 +1585,7 @@ class ProjectInfoScreen(MDScreen):
         self.save_project_content()
 
     def delete_etapy_step(self, group_index, item_index):
-        """Remove a Krok (and all its Podkroki) from the selected group."""
+        """Usuwa Krok (i wszystkie jego Podkroki) z wybranej grupy."""
         try:
             items = self._etapy_groups[int(group_index)]["items"]
             del items[int(item_index)]
@@ -1757,10 +1758,11 @@ class ProjectInfoScreen(MDScreen):
         sheet.open()
 
     def open_geofence_picker_for_goal_draft(self, draft):
-        """Open the map picker, preserving the in-progress goal draft.
+        """Otwiera wybór lokalizacji na mapie, zachowując roboczą wersję celu.
 
-        ``draft`` must be a mutable dict with the current form values; we mutate
-        its ``geofence`` slot and re-open the goal sheet on return.
+        ``draft`` to modyfikowalny słownik z bieżącymi wartościami formularza;
+        funkcja uzupełnia w nim pole ``geofence`` i po powrocie otwiera
+        ponownie arkusz celu.
         """
         if not isinstance(draft, dict):
             draft = {}
@@ -1851,10 +1853,10 @@ class ProjectInfoScreen(MDScreen):
         return rows
 
     def _state_matches_project(self, state):
-        """True when ``state`` (timer / goal) belongs to the current project.
+        """Zwraca True, gdy ``state`` (stoper / cel) należy do bieżącego projektu.
 
-        Prefer uid comparison; fall back to title comparison only when neither
-        side has a uid (e.g. partially migrated installs).
+        Najpierw porównuje unikalne identyfikatory (uid); gdy żadna strona
+        nie ma uid (np. częściowo skonwertowane dane), porównuje nazwy.
         """
         if not isinstance(state, dict):
             return False
@@ -1980,7 +1982,7 @@ class ProjectInfoScreen(MDScreen):
         MDApp.get_running_app().root.current = "statistics"
 
     def open_project_settings(self):
-        """Persist current state, then route to the dedicated settings screen."""
+        """Zapisuje bieżący stan, a potem przechodzi do ekranu ustawień projektu."""
         if not (self.project_uid or self.project_title):
             return
         self._stop_all_goal_trackers(update_active=False)
@@ -1995,7 +1997,7 @@ class ProjectInfoScreen(MDScreen):
 
 
 class _BottomSheetKeyboardMixin:
-    """Keep bottom-sheet panels above the soft keyboard with room for fields + actions."""
+    """Utrzymuje panele arkuszowe nad klawiaturą ekranową, zostawiając miejsce na pola i przyciski."""
 
     _KB_RELAYOUT_DELAYS = (0.0, 0.2, 0.35, 0.5, 0.7, 0.9, 1.15)
 
@@ -2026,8 +2028,8 @@ class _BottomSheetKeyboardMixin:
 
     def _keyboard_unreserved_gap(self):
         """
-        How far the Kivy window bottom sits above the real keyboard top.
-        Trimming the modal by this removes the visible gap on adjustResize devices.
+        O ile dolna krawędź okna Kivy znajduje się nad rzeczywistą górą klawiatury.
+        Odjęcie tej wartości od okna modalnego usuwa widoczną przerwę na urządzeniach z trybem adjustResize.
         """
         baseline = float(getattr(self, "_win_h_baseline", 0) or 0)
         win_h = float(Window.height or 0)
@@ -2112,7 +2114,7 @@ class _BottomSheetKeyboardMixin:
         return baseline > win_h + dp(40)
 
     def _keyboard_lift(self):
-        """Extra bottom inset only when the window did NOT shrink (keyboard overlays full screen)."""
+        """Dodatkowy odstęp na dole tylko wtedy, gdy okno się NIE zmniejszyło (klawiatura nakłada się na pełny ekran)."""
         if self._window_shrunk_for_keyboard():
             return 0.0
 
@@ -2129,7 +2131,7 @@ class _BottomSheetKeyboardMixin:
         return lift
 
     def _measure_panel_chrome(self, panel, exclude=()):
-        """Sum fixed chrome (padding, title, buttons) so the field does not cover the action bar."""
+        """Zlicza stałe elementy (marginesy, tytuł, przyciski), żeby pole tekstowe nie zakrywało paska akcji."""
         chrome = float(panel.padding[1]) + float(panel.padding[3])
         excluded = set(exclude)
         for child in panel.children:
@@ -2164,7 +2166,7 @@ class _BottomSheetKeyboardMixin:
     def _sheet_panel_geometry(
         self, max_panel_dp, chrome_dp, field_max_dp=None, fill_available=False
     ):
-        """Return (panel_height, target_y, inner_height) for the sheet body."""
+        """Zwraca (panel_height, target_y, inner_height) — wysokość, pozycję i wnętrze arkusza."""
         win_h = float(self.height or Window.height or 640)
         chrome = float(chrome_dp)
         target_y = self._sheet_bottom_y(win_h)
@@ -2196,7 +2198,7 @@ class _BottomSheetKeyboardMixin:
         return panel_h, target_y, inner_h
 
     def _panel_height_for_content(self, panel, body_height, body_scroll=None):
-        """Panel height = padding + fixed children + body (no extra slack)."""
+        """Wysokość panelu = marginesy + stałe elementy + zawartość (bez dodatkowego luzu)."""
         pad = float(panel.padding[1]) + float(panel.padding[3])
         spacing = float(panel.spacing)
         n = len(panel.children)
@@ -2210,7 +2212,7 @@ class _BottomSheetKeyboardMixin:
 
 
 class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
-    """Slides up from the bottom with a text field and add action; requests keyboard via focus."""
+    """Wysuwa się od dołu z polem tekstowym i przyciskiem dodawania; automatycznie pokazuje klawiaturę."""
 
     _NOTE_FIELD_LINES = 4
 
@@ -2398,7 +2400,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
 
 class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
-    """Bottom sheet: title + goal string (e.g. 1h/1d); target duration parsed for the car progress."""
+    """Arkusz: tytuł + opis celu (np. 1h/1d); docelowy czas jest odczytywany dla postępu samochodzika."""
 
     def __init__(self, project_screen, draft=None, **kwargs):
         super().__init__(**kwargs)
@@ -2709,8 +2711,8 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self._capture_form_into_draft()
         screen = self.project_screen
         draft = self._draft
-        # Fast-dismiss the modal (no animation) so it doesn't overlay the map
-        # screen we're about to navigate to.
+        # Szybko zamyka arkusz (bez animacji), żeby nie nakładał się na ekran
+        # mapy, do którego za chwilę przejdziemy.
         self._sheet_unbind_keyboard()
         self.title_field.focus = False
         self.hours_field.focus = False
@@ -2826,7 +2828,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
 
 class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
-    """Add or edit a simple checklist goal (Lista celów)."""
+    """Dodaje lub edytuje prosty cel z listy (Lista celów)."""
 
     def __init__(self, project_screen, goal_row=None, **kwargs):
         super().__init__(**kwargs)
@@ -2992,10 +2994,10 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
 
 class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
-    """Minimal sheet for the Etapy header '+': asks only for a Grupa etapów name.
+    """Minimalny arkusz dla przycisku '+' w nagłówku Etapów: pyta tylko o nazwę Grupy etapów.
 
-    After the redesign, the only way to create a new group is here. Kroki and
-    Podkroki live inside EditEtapyKrokBottomSheet (opened from the timeline).
+    Po przeprojektowaniu to jedyne miejsce do tworzenia nowej grupy.
+    Kroki i Podkroki są edytowane w EditEtapyKrokBottomSheet (otwieranym z osi czasu).
     """
 
     def __init__(self, project_screen, **kwargs):
@@ -3139,10 +3141,10 @@ class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
 
 class _PodkrokEditorRow(MDBoxLayout):
-    """One inline editor row inside EditEtapyKrokBottomSheet's Podkroki list.
+    """Pojedynczy wiersz edytora wewnątrz listy Podkroków w EditEtapyKrokBottomSheet.
 
-    Renders a bullet, an editable text field, and a red × delete button. Stores
-    the original ``done`` flag so reorders/edits preserve completion state.
+    Zawiera punktor, pole tekstowe do edycji i czerwony przycisk × do usuwania.
+    Zachowuje oryginalny stan ``done``, żeby zmiana kolejności/edycja nie kasowała informacji o ukończeniu.
     """
 
     def __init__(self, sheet, text="", done=False, **kwargs):
@@ -3197,14 +3199,14 @@ class _PodkrokEditorRow(MDBoxLayout):
 
 
 class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
-    """Slides-up editor for one Krok and its Podkroki.
+    """Edytor wysuwany od dołu dla jednego Kroku i jego Podkroków.
 
-    Modes:
-      * item_index=None → new Krok against ``group_index`` (no delete button).
-      * item_index=int  → edit existing Krok; bottom-left 'Usuń' deletes it.
+    Tryby:
+      * item_index=None → nowy Krok w ``group_index`` (bez przycisku usuwania).
+      * item_index=int  → edycja istniejącego Kroku; przycisk 'Usuń' w lewym dolnym rogu go usuwa.
 
-    Podkroki are fully manageable: rename inline, delete with × on each row,
-    'Dodaj podkrok' appends an empty row. All changes commit on 'Zapisz'.
+    Podkroki można w pełni zarządzać: zmieniać nazwę w miejscu, usuwać × w każdym wierszu,
+    'Dodaj podkrok' dodaje pusty wiersz. Wszystkie zmiany są zapisywane przyciskiem 'Zapisz'.
     """
 
     def __init__(self, project_screen, group_index, item_index=None, **kwargs):
@@ -3218,7 +3220,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.background_color = (0, 0, 0, 0)
         self.background = ""
 
-        # Snapshot initial state so cancel actually discards.
+        # Zapisuje początkowy stan, żeby anulowanie faktycznie odrzucało zmiany.
         self._initial_text = ""
         self._initial_children = []
         if item_index is not None:
@@ -3441,11 +3443,11 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             self.name_field.cursor = (len(self.name_field.text), 0)
 
     def _sheet_input_focused(self):
-        """Override mixin: the base class only checks hard-coded attribute names.
+        """Nadpisuje metodę z domieszki: oryginalna klasa sprawdza tylko kilka ustalonych nazw.
 
-        We also have name_field plus a dynamic list of _PodkrokEditorRow widgets,
-        each with its own .field. If any of them is focused, the sheet should
-        lift above the keyboard.
+        My mamy dodatkowo name_field oraz dynamiczną listę _PodkrokEditorRow,
+        z których każdy ma własne pole .field. Jeśli któreś z nich jest
+        aktywne, arkusz powinien unieść się nad klawiaturę.
         """
         if getattr(self, "name_field", None) is not None and self.name_field.focus:
             return True
@@ -3511,7 +3513,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
 
 class ProjectNoteRow(MDBoxLayout):
-    """Tap note body to edit; × on the right deletes."""
+    """Dotknięcie treści notatki = edycja; × po prawej = usuwanie."""
 
     tall = BooleanProperty(False)
     display_text = StringProperty("")
@@ -3598,7 +3600,7 @@ class ProjectNoteRow(MDBoxLayout):
 
 
 class CarProgressButton(ButtonBehavior, Image):
-    """Tappable car sprite. Plain Image so the track RelativeLayout can move it via pos_hint center_x."""
+    """Klikalny samochodzik. Zwykły Image, żeby RelativeLayout na pasku mógł go przesuwać przez pos_hint center_x."""
 
     def __init__(self, **kwargs):
         kwargs.setdefault("nocache", True)
@@ -3611,7 +3613,7 @@ class CarProgressButton(ButtonBehavior, Image):
 
 
 class TimeGoalTrackRow(MDBoxLayout):
-    """Time goal track: tap car to start/pause; × on the right deletes."""
+    """Pasek celu czasowego: dotknięcie samochodzika = start/pauza; × po prawej = usuwanie."""
 
     title_text = StringProperty("")
     goal_text = StringProperty("")
@@ -3748,13 +3750,13 @@ class TimeGoalTrackRow(MDBoxLayout):
         return tw, min_cx, max_cx
 
     def _car_travel_speed(self, min_cx, max_cx):
-        """Same px/s as 0→100% progress: full road span per goal target duration."""
+        """Taka sama liczba px/s jak przy postępie 0→100%: pełna długość paska na docelowy czas."""
         span = max(1.0, max_cx - min_cx)
         duration = max(10.0, float(self.goal_target_seconds))
         return span / duration
 
     def _advance_overflow_car(self, min_cx, max_cx, dt):
-        """After 100%: drive the full road left ↔ right; flip at each end."""
+        """Po osiągnięciu 100%: samochodzik jeździ w lewo i prawo; odwraca się na każdym końcu."""
         if self._overflow_cx is None:
             self._overflow_cx = max_cx
             self._overflow_dir = -1

@@ -155,8 +155,9 @@ class ProjectSettingsScreen(Screen):
 
         original = self._original_title
         original_uid = self._original_uid
-        # Renames no longer need to re-key state — every state file is keyed
-        # by uid now, so duplicate titles are explicitly OK.
+        # Po zmianie nazwy nie trzeba już przestawiać kluczy w danych —
+        # każdy plik stanu jest powiązany z unikalnym identyfikatorem (uid),
+        # więc projekty o takich samych nazwach nie stanowią problemu.
         self._write_projects_json(new_name)
         self._rename_sessions_by_uid(new_name)
         self._refresh_home_cards()

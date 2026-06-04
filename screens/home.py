@@ -275,8 +275,9 @@ class ProjectCard(MDCard):
     def open_project_info(self):
         app = MDApp.get_running_app()
         info = app.root.get_screen("project_info")
-        # ``project_uid`` is the lookup key for all per-project state. Set it
-        # BEFORE the title so the title-change handler sees the new uid.
+        # ``project_uid`` to unikalny identyfikator, po którym szukamy
+        # wszystkich danych tego projektu. Ustaw go PRZED tytułem,
+        # żeby reszta kodu od razu wiedziała, z którym projektem ma do czynienia.
         info.project_uid = self.uid or ""
         info.project_title = self.title
         app.root.current = "project_info"
@@ -299,9 +300,10 @@ class ProjectCard(MDCard):
                 except (IOError, json.JSONDecodeError):
                     pass
 
-            # Card positions are keyed by uid so duplicate-titled projects no
-            # longer overwrite each other. Legacy title keys migrate during
-            # active_timer.migrate_legacy_state_to_uids on startup.
+            # Położenie kart jest zapisywane według unikalnego identyfikatora (uid),
+            # a nie według nazwy. Dzięki temu dwa projekty o tej samej nazwie
+            # nie nadpisują sobie nawzajem pozycji. Stare dane (zapisane według
+            # nazwy) są konwertowane przy starcie w migrate_legacy_state_to_uids.
             key = self.uid or self.title
             data[key] = {'x': rel_x, 'top': rel_y}
 
@@ -446,7 +448,7 @@ class HomeScreen(MDScreen):
         return cards
 
     def _grid_layout_metrics(self, container, cards):
-        """Spacing for 2-column grid; top_pad clears the emoji badge above each card."""
+        """Odstępy dla układu dwukolumnowego; top_pad robi miejsce na znaczek emoji nad każdą kartą."""
         margin_x = dp(16)
         gutter = dp(12)
         row_gap = dp(16)
@@ -468,7 +470,7 @@ class HomeScreen(MDScreen):
         Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
 
     def apply_initial_layout(self):
-        """Run grid or free layout once the projects container has a real width."""
+        """Uruchamia układ siatki lub swobodny, gdy kontener projektów ma już rzeczywistą szerokość."""
         container = self.ids.projects_container
         if container.width < 1:
             Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
