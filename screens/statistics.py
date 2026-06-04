@@ -1,3 +1,12 @@
+# ---------------------------------------------------------------------------
+# EKRAN STATYSTYK – wykres kołowy i tabela projektów
+# ---------------------------------------------------------------------------
+# Ten ekran pokazuje użytkownikowi podsumowanie czasu spędzonego nad
+# projektami: wykres kołowy (każdy kolor to inny projekt) oraz tabelę
+# z nazwami projektów i czasem. Użytkownik może wybrać okres:
+# miesiąc, tydzień lub dzień.
+# ---------------------------------------------------------------------------
+
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.animation import Animation
@@ -18,16 +27,23 @@ from kivymd.uix.label import MDLabel
 from kivymd.uix.label import MDIcon
 
 
+# ---------------------------------------------------------------------------
+# PRZYCISK WYBORU OKRESU (Miesiąc / Tydzień / Dzień)
+# ---------------------------------------------------------------------------
+# Każdy przycisk to "pigułka" – po kliknięciu wypełnia się na biało.
+# Animacja płynnie przechodzi między stanem wybranym i niewybranym.
+# Pigułkowaty przycisk wyboru okresu (Miesiąc/Tydzień/Dzień) – po kliknięciu
+# wypełnia się białym tłem z płynną animacją.
 class PeriodSegmentButton(Button):
-    """
-    Pill-shaped period choice. `selected` is bound from KV to `root.selected_period`
-    so the background is not overwritten by KivyMD ripple logic (fixes two-tap).
-    """
+    
     selected = BooleanProperty(False)
     selection_progress = NumericProperty(0)
 
     _anim_duration = 0.22
 
+    # Przygotowuje przycisk wyboru okresu (Dzień/Tydzień/Miesiąc):
+    # usuwa domyślne tło, ustawia rozmiar i wysokość, oraz podłącza
+    # funkcje które rysują efekt "pigułki" po kliknięciu.
     def __init__(self, **kwargs):
         kwargs.setdefault("background_normal", "")
         kwargs.setdefault("background_down", "")
@@ -47,6 +63,11 @@ class PeriodSegmentButton(Button):
         self._apply_visual()
 
     def _on_selected_change(self, *args):
+        # Gdy użytkownik kliknie w przycisk okresu (Dzień/Tydzień/Miesiąc),
+        # ten przycisk staje się "wybrany" (selected=True), a inne przestają.
+        # Ta funkcja płynnie animuje zmianę: przycisk wypełnia się białym
+        # tłem gdy jest wybrany, lub staje się przezroczysty gdy nie.
+        # Animacja trwa 0.22 sekundy i wygląda jak "płynne wypełnianie pigułki".
         target = 1.0 if self.selected else 0.0
         if abs(self.selection_progress - target) < 1e-4:
             return
@@ -58,8 +79,11 @@ class PeriodSegmentButton(Button):
         ).start(self)
 
     def _apply_visual(self, *args):
+        # Rysuje tło przycisku okresu: białe gdy jest wybrany, przezroczyste
+        # gdy nie. Dodatkowo przyciemnia kolor tekstu (czcionka staje się
+        # ciemniejsza gdy przycisk jest aktywny, jaśniejsza gdy nie).
+        # Używa RoundedRectangle do zaokrąglonych rogów.
         p = max(0.0, min(1.0, self.selection_progress))
-        # Text: white -> dark gray
         t = 0.15
         self.color = (1 - (1 - t) * p, 1 - (1 - t) * p, 1 - (1 - t) * p, 1)
         r = dp(22)
@@ -70,9 +94,16 @@ class PeriodSegmentButton(Button):
 
 
 def _make_segment_color_dot(rgba, size_dp=20):
+    # Tworzy małe kolorowe kółko, które pojawia się obok nazwy projektu
+    # w tabeli statystyk. Kolor kółka odpowiada kolorowi danego wycinka
+    # na wykresie kołowym – dzięki temu widać który wycinek reprezentuje
+    # który projekt. Gdy kolor nie ma przezroczystości – dodaje ją.
     dot = Widget(size_hint=(None, None), size=(dp(size_dp), dp(size_dp)))
     rgba = tuple(rgba) if len(rgba) >= 4 else (*rgba[:3], 1.0)
 
+    # Rysuje kolorowe kółko od nowa przy każdej zmianie położenia
+    # lub rozmiaru. Czyści stare rysunki i tworzy nowe kółko
+    # w aktualnej pozycji i rozmiarze.
     def redraw(*_):
         dot.canvas.clear()
         with dot.canvas:
@@ -84,15 +115,20 @@ def _make_segment_color_dot(rgba, size_dp=20):
     return dot
 
 
+# ---------------------------------------------------------------------------
+# WIERSZ Z DANYMI JEDNEGO PROJEKTU W TABELI
+# ---------------------------------------------------------------------------
+# Jeden wiersz w tabeli statystyk: ikona projektu, nazwa i czas.
 class StatisticsDetailRow(MDBoxLayout):
-    """One project row in the stats table; properties so time text always updates."""
-
+    
     project_name = StringProperty("")
     time_text = StringProperty("0 s")
     icon_name = StringProperty("folder-outline")
     icon_rgba = ListProperty([1, 1, 1, 1])
     segment_rgba = ListProperty([0.6, 0.4, 0.8, 1])
 
+    # Przygotowuje wiersz w tabeli statystyk: zapamiętuje dane projektu
+    # (nazwę, czas, ikonę, kolor) i ustawia jego wygląd.
     def __init__(self, row_data, **kwargs):
         self._row_data = row_data
         kwargs.setdefault("orientation", "horizontal")
@@ -101,6 +137,8 @@ class StatisticsDetailRow(MDBoxLayout):
         kwargs.setdefault("spacing", dp(6))
         super().__init__(**kwargs)
 
+    # Po załadowaniu wyglądu wiersza z pliku KV – wypełnia go danymi
+    # projektu (nazwa, czas, ikona) i przygotowuje kolorową kropkę.
     def on_kv_post(self, base_widget):
         self.apply_row(self._row_data)
         self.bind(segment_rgba=self._redraw_segment_dot)
@@ -109,6 +147,10 @@ class StatisticsDetailRow(MDBoxLayout):
         Clock.schedule_once(self._redraw_segment_dot, 0)
 
     def apply_row(self, row_data):
+        # Wypełnia pojedynczy wiersz w tabeli statystyk danymi projektu:
+        # nazwa projektu, przepracowany czas, ikona (emoji) i jej kolor,
+        # oraz kolor segmentu na wykresie kołowym.
+        # Jeden wiersz = jeden projekt w wybranym okresie.
         self.project_name = row_data.get("name", "")
         self.time_text = row_data.get("time", "0 s")
         self.icon_name = row_data.get("icon", "folder-outline")
@@ -116,6 +158,10 @@ class StatisticsDetailRow(MDBoxLayout):
         self.segment_rgba = list(row_data.get("segment_color", (0.6, 0.4, 0.8, 1)))
 
     def _redraw_segment_dot(self, *_args):
+        # Odświeża wygląd kolorowej kropki obok nazwy projektu.
+        # Kropka jest rysowana jako kolorowe kółko (Ellipse) na płótnie
+        # Kivy. Jej kolor pochodzi z danych statystyk – to ten sam kolor
+        # co dany wycinek na wykresie kołowym obok.
         if "segment_dot" not in self.ids:
             return
         dot = self.ids.segment_dot
@@ -128,18 +174,29 @@ class StatisticsDetailRow(MDBoxLayout):
             Ellipse(pos=dot.pos, size=dot.size)
 
 
+# ---------------------------------------------------------------------------
+# WYKRES KOŁOWY
+# ---------------------------------------------------------------------------
+# Niestandardowy wykres kołowy – rysowany bezpośrednio na płótnie (canvas).
+# Przyjmuje dane: [{'color': (r,g,b,a), 'percent': 25}, ...]
+# Każdy wycinek to procent z 360 stopni koła.
 class PieChart(Widget):
-    """
-    Niestandardowy wykres kołowy napisany w czystym Kivy.
-    Przyjmuje listę słowników w formacie:
-    [{'color': (r, g, b, a), 'percent': wartość_procentowa}, ...]
-    """
     data = ListProperty([])
 
+    # Przygotowuje wykres kołowy – odświeża go przy zmianie pozycji, rozmiaru lub danych.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.bind(pos=self.update_canvas, size=self.update_canvas, data=self.update_canvas)
 
+    # Rysuje wykres kołowy – każdy kolor to inny projekt.
+    # Działa to tak:
+    # 1. Zaczynamy od kąta 0° (góra koła) i idziemy zgodnie z ruchem wskazówek zegara
+    # 2. Każdy projekt dostaje wycinek koła proporcjonalny do swojego czasu
+    #    Np. jeśli projekt A ma 25% czasu, dostanie 25% z 360° = 90° wycinka
+    # 3. angle_start = gdzie zaczął się poprzedni wycinek
+    #    angle_end = angle_start + (procent projektu * 360°)
+    # 4. Kolejny projekt zaczyna się tam, gdzie skończył poprzedni
+    # 5. Po wszystkich projektach koło jest w 100% wypełnione
     def update_canvas(self, *args):
         self.canvas.clear()
         with self.canvas:
@@ -152,6 +209,9 @@ class PieChart(Widget):
                 angle_start = angle_end
 
 
+# ---------------------------------------------------------------------------
+# GŁÓWNY EKRAN STATYSTYK
+# ---------------------------------------------------------------------------
 class StatisticsScreen(MDScreen):
     selected_period = StringProperty("Miesiąc")
     total_time_text = StringProperty("suma: 0 s")
@@ -160,13 +220,20 @@ class StatisticsScreen(MDScreen):
     stats_card_height = NumericProperty(dp(120))
 
     def set_period(self, label: str):
+        # Zmienia okres dla którego pokazujemy statystyki.
+        # Użytkownik może wybrać: Dzień (od północy), Tydzień (od poniedziałku)
+        # lub Miesiąc (od 1. dnia miesiąca). Po zmianie odświeża wszystkie dane
+        # na ekranie: wykres kołowy, tabelę i sumę całkowitą.
         if label not in ("Dzień", "Tydzień", "Miesiąc"):
             return
         self.selected_period = label
         Clock.schedule_once(lambda _dt: self.refresh_statistics(), 0)
 
     def set_statistics_rows(self, rows):
-        """Fill the details panel; always rebuild rows for the active period."""
+        # Wypełnia tabelę na ekranie statystyk wierszami z danymi projektów.
+        # Najpierw czyści stare wiersze, potem dodaje nowe (w odwrotnej
+        # kolejności – Kivy układa od góry do dołu). Na koniec przelicza
+        # wysokość karty statystyk i przewijanej zawartości.
         cont = self.ids.stats_rows_container
         while cont.children:
             cont.remove_widget(cont.children[0])
@@ -178,6 +245,10 @@ class StatisticsScreen(MDScreen):
         Clock.schedule_once(self._relayout_stats_scroll, 0)
 
     def _layout_stats_card(self):
+        # Oblicza jak wysoka ma być karta z statystykami, żeby zmieściły
+        # się w niej wszystkie wiersze projektów. Bierze pod uwagę:
+        # nagłówek, odstępy między wierszami, wysokość każdego wiersza
+        # oraz ewentualny pusty obszar (gdy brak danych).
         card = self.ids.stats_card
         cont = self.ids.stats_rows_container
         pad = card.padding
@@ -202,11 +273,21 @@ class StatisticsScreen(MDScreen):
         self.stats_card_height = pt + pb + header_h + gap + row_heights + row_gaps + empty_h
 
     def _relayout_stats_scroll(self, _dt=None):
+        # Aktualizuje wysokość przewijanej zawartości statystyk.
+        # Kivy czasem nie przelicza automatycznie wysokości gdy dodajemy
+        # lub usuwamy elementy – to wymusza poprawne odświeżenie,
+        # dzięki czemu cała zawartość jest widoczna i przewijalna.
         if "stats_scroll_content" in self.ids:
             grid = self.ids.stats_scroll_content
             grid.height = grid.minimum_height
 
     def refresh_statistics(self):
+        # Główna funkcja odświeżająca cały ekran statystyk.
+        # 1. Pobiera dane z pliku (sesje i cele czasowe)
+        # 2. Przygotowuje dane dla wykresu kołowego (kolory + procenty)
+        # 3. Przygotowuje dane dla tabeli (nazwy, czasy, ikony)
+        # 4. Oblicza łączny czas wszystkich projektów
+        # 5. Aktualizuje wszystkie elementy na ekranie
         period = self.selected_period
         pie, rows, total_sec = statistics_from_sessions(period)
         self.total_time_text = format_statistics_total(total_sec)
@@ -215,13 +296,21 @@ class StatisticsScreen(MDScreen):
         self.set_statistics_rows(rows)
         self._relayout_stats_scroll()
 
+    # Gdy użytkownik zmieni wybrany okres (Dzień/Tydzień/Miesiąc) –
+    # automatycznie odświeża statystyki, żeby pokazać dane z nowego okresu.
     def on_selected_period(self, _instance, value):
         if value in ("Dzień", "Tydzień", "Miesiąc"):
             self.refresh_statistics()
 
     def on_enter(self):
+        # Gdy użytkownik wchodzi na ekran statystyk – automatycznie
+        # odświeżamy wszystkie dane. Dzięki temu zawsze widzi aktualne
+        # informacje, nawet jeśli coś zmieniło się na innych ekranach.
         self.refresh_statistics()
 
+    # Przygotowuje ekran statystyk: uruchamia standardową inicjalizację
+    # Kivy i ustawia nasłuchiwanie na zmianę wybranego okresu
+    # (Dzień/Tydzień/Miesiąc), żeby automatycznie odświeżać dane.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.bind(selected_period=self.on_selected_period)

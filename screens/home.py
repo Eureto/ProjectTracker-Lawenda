@@ -1,3 +1,16 @@
+# ---------------------------------------------------------------------------
+# EKRAN GŁÓWNY (HOME) – lista projektów i ostatnia sesja
+# ---------------------------------------------------------------------------
+# Ten plik definiuje ekran główny aplikacji. Zawiera klasy dla:
+# - Karty projektu (ProjectCard) – każdy projekt jest widoczny jako karta
+# - Karty ostatniej sesji (SessionCard) – informacja o ostatnim pomiarze
+# - Paska postępu z kropek (DotProgressBar)
+# - Głównego ekranu (HomeScreen) – zarządza kartami i układem
+#
+# CO TO JEST "WIDŻET"?
+# To gotowy element interfejsu, np. przycisk, etykieta, pole tekstowe.
+#---------------------------------------------------------------------------
+
 import os
 import json
 
@@ -20,16 +33,20 @@ from kivy.utils import get_color_from_hex
 
 from kivymd.app import MDApp
 
-_TEXT_ON_LIGHT = (0.102, 0.102, 0.102, 1)  # #1A1A1A
+# Kolory tekstu: ciemny na jasnym tle i biały na ciemnym
+_TEXT_ON_LIGHT = (0.102, 0.102, 0.102, 1)
 _TEXT_ON_DARK = (1, 1, 1, 1)
 
-GRID_COLUMNS = 2
-CARD_SIZE_HINT_X = 0.4
-# Emoji badge uses pos_hint top 1.25 and size emoji_size * 1.6 — sits above the card top.
+GRID_COLUMNS = 2       # Liczba kolumn w widoku siatki
+CARD_SIZE_HINT_X = 0.4 # Szerokość karty jako ułamek szerokości ekranu
+
+# Pomocnicze stałe do pozycjonowania emoji na karcie
 GRID_EMOJI_TOP_EXTRA = 0.25
 GRID_EMOJI_BADGE_SCALE = 1.6
 
 
+# Zamienia kolor zapisany w różnych formatach na jednolity zrozumiały dla Kivy.
+# Przyjmuje: zapis szesnastkowy (#FF00FF), listę [255,0,255], listę [0-1,0-1,0-1].
 def _normalize_rgba(color):
     if isinstance(color, str):
         return get_color_from_hex(color)
@@ -43,30 +60,48 @@ def _normalize_rgba(color):
     return tuple(channels[:4])
 
 
+# Oblicza względną jasność koloru – im wyższa wartość, tym jaśniejszy kolor.
+# Używane do automatycznego doboru: czarny tekst na jasnym tle, biały na ciemnym.
+# Wzór bierze pod uwagę, że ludzkie oko różnie odbiera kolory (np. zielony jest
+# jaśniejszy od niebieskiego dla oka).
 def _relative_luminance(rgba):
     r, g, b, *_ = _normalize_rgba(rgba)
 
+    # Przelicza składową koloru na wartość liniową – potrzebne do obliczenia jasności koloru.
     def linear(channel):
         return channel / 12.92 if channel <= 0.03928 else ((channel + 0.055) / 1.055) ** 2.4
 
     return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
 
 
+# Wyznacza kolor tekstu: biały lub czarny – taki który będzie czytelny na danym tle.
+# Używa standardu WCAG (Web Content Accessibility Guidelines).
 def contrasting_text_color(background):
-    """Pick light or dark text for readable contrast on background (WCAG luminance)."""
     lum = _relative_luminance(background)
     contrast_light = (1.0 + 0.05) / (lum + 0.05)
     contrast_dark = (lum + 0.05) / 0.05
     return _TEXT_ON_DARK if contrast_light >= contrast_dark else _TEXT_ON_LIGHT
+
+
 from kivymd.uix.card import MDCard
 from kivymd.uix.screen import MDScreen
 
+
+# ---------------------------------------------------------------------------
+# PASEK POSTĘPU Z KROPEK
+# ---------------------------------------------------------------------------
 class DotProgressBar(Widget):
+    # Pasek postępu złożony z kropek – zamiast tradycyjnego paska pokazuje
+    # serię kropek. Np. jeśli jest 5 kropek i 3 są wypełnione, oznacza to
+    # 60% postępu. Używane np. do pokazania postępu celów czasowych.
+    # Wypełnione kropki = zrobione, puste = jeszcze przed nami.
+    
     total_steps = NumericProperty(5)
     current_step = NumericProperty(2)
     active_color = ColorProperty([0.08, 0.08, 0.08, 1])
     inactive_color = ColorProperty([1, 1, 1, 1])
 
+    # Przygotowuje pasek postępu – ustawia, że pasek ma się przerysowywać, gdy zmieni się jego położenie, rozmiar, liczba kroków lub kolory.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.bind(
@@ -79,10 +114,14 @@ class DotProgressBar(Widget):
         )
 
     def update_canvas(self, *args):
+        # Rysuje kropki na pasku postępu.
+        # Kropki wypełnione (aktywny kolor) = zrobione kroki.
+        # Kropki puste (nieaktywny kolor) = pozostałe kroki.
+        # Dodatkowo rysuje linię łączącą kropki – też w odpowiednim kolorze.
+        # Jeśli jest tylko 1 kropka, rysuje tylko ją (bez linii).
         self.canvas.clear()
         if self.width < 1 or self.total_steps < 1:
             return
-
         active = tuple(self.active_color)
         inactive = tuple(self.inactive_color)
         start_x = self.x + dp(5)
@@ -90,7 +129,6 @@ class DotProgressBar(Widget):
         line_y = self.center_y
         step = max(0, min(int(self.current_step), int(self.total_steps)))
         line_w = dp(2)
-
         with self.canvas:
             if self.total_steps > 1:
                 spacing = (end_x - start_x) / (self.total_steps - 1)
@@ -108,12 +146,20 @@ class DotProgressBar(Widget):
                     Ellipse(pos=(dot_x, dot_y), size=(dp(12), dp(12)))
             else:
                 Color(*(active if step > 0 else inactive))
-                Ellipse(
-                    pos=(start_x - dp(6), line_y - dp(6)),
-                    size=(dp(12), dp(12)),
-                )
+                Ellipse(pos=(start_x - dp(6), line_y - dp(6)), size=(dp(12), dp(12)))
 
+
+# ---------------------------------------------------------------------------
+# KARTA PROJEKTU
+# ---------------------------------------------------------------------------
 class ProjectCard(MDCard):
+    # Karta reprezentująca JEDEN projekt na ekranie głównym.
+    # Wygląda jak kolorowy prostokąt z nazwą projektu i emoji.
+    # Można:
+    # - Kliknąć – otwiera szczegóły projektu
+    # - Przeciągnąć (w trybie swobodnym) – zmienić pozycję na ekranie
+    # - Automatycznie ułożyć w siatkę (w trybie siatki)
+    
     uid = StringProperty("")
     title = StringProperty("")
     image_source = StringProperty("")
@@ -127,6 +173,7 @@ class ProjectCard(MDCard):
     emoji_right_hint = NumericProperty(1.05)
     emoji_right_hint_png = NumericProperty(1.05)
 
+    # Sprawdza, czy emoji pochodzi z pliku PNG – jeśli tak, zwraca inne ustawienie pozycji niż dla zwykłej ikony.
     def _get_effective_emoji_right_hint(self):
         src = (self.emoji_source or "").lower()
         if src.endswith(".png"):
@@ -141,22 +188,27 @@ class ProjectCard(MDCard):
 
     interactive = BooleanProperty(True)
 
+    # Przygotowuje nową kartę projektu – zapamiętuje ustawienia początkowe i dobiera kolor tekstu pasujący do tła karty.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._long_press_ev = None
         self._shake_anim = None
         self._update_title_text_color()
 
+    # Wywołuje się automatycznie po zmianie koloru tła karty – wtedy trzeba też dobrać kolor napisu.
     def on_card_color(self, *_args):
         self._update_title_text_color()
 
+    # Dobiera kolor napisu (czarny lub biały) tak, żeby był dobrze widoczny na tle karty.
     def _update_title_text_color(self):
         self.title_text_color = contrasting_text_color(self.card_color)
 
+    # Sprawdza, czy karty mogą być swobodnie przesuwane (tryb swobodny, a nie siatka).
     def _free_layout_enabled(self):
         app = MDApp.get_running_app()
         return app is None or not app.grid_layout
 
+    # Reaguje na dotknięcie karty. Jeśli karta jest w trybie swobodnym, uruchamia licznik – przytrzymanie palca przez sekundę włącza tryb przeciągania.
     def on_touch_down(self, touch):
         if not self.interactive:
             return False
@@ -171,6 +223,9 @@ class ProjectCard(MDCard):
         return super().on_touch_down(touch)
 
     def stop_drag_animation(self):
+        # Zatrzymuje animację "drżenia" karty, która sygnalizuje,
+        # że karta jest w trybie przeciągania. Anuluje zaplanowane
+        # zdarzenia i płynnie ustawia kąt nachylenia na 0 (prosto).
         if self._long_press_ev:
             Clock.unschedule(self._long_press_ev)
             self._long_press_ev = None
@@ -179,6 +234,7 @@ class ProjectCard(MDCard):
             self._shake_anim = None
         Animation(angle=0, d=0.1).start(self)
 
+    # Włącza tryb przeciągania karty – karta może swobodnie poruszać się po ekranie i zaczyna lekko drżeć, żeby zasygnalizować gotowość do przesunięcia.
     def _start_drag_mode(self, touch):
         if not self._free_layout_enabled():
             return
@@ -187,6 +243,7 @@ class ProjectCard(MDCard):
         self._shake_anim.repeat = True
         self._shake_anim.start(self)
 
+    # Reaguje na przesuwanie palca po ekranie. Jeśli karta jest w trybie przeciągania, przesuwa się razem z palcem.
     def on_touch_move(self, touch):
         if not self.interactive:
             return False
@@ -201,6 +258,7 @@ class ProjectCard(MDCard):
             return True
         return super().on_touch_move(touch)
 
+    # Reaguje na podniesienie palca z ekranu. Jeśli karta była przeciągana – zapisuje nowe położenie. Jeśli to było zwykłe kliknięcie – otwiera szczegóły projektu.
     def on_touch_up(self, touch):
         if not self.interactive:
             return False
@@ -225,15 +283,18 @@ class ProjectCard(MDCard):
             return True
         return super().on_touch_up(touch)
 
+    # Otwiera ekran ze szczegółami tego projektu – przekazuje nazwę i identyfikator, żeby ekran wiedział, które dane pokazać.
     def open_project_info(self):
         app = MDApp.get_running_app()
         info = app.root.get_screen("project_info")
-        # ``project_uid`` is the lookup key for all per-project state. Set it
-        # BEFORE the title so the title-change handler sees the new uid.
+        # ``project_uid`` to unikalny identyfikator, po którym szukamy
+        # wszystkich danych tego projektu. Ustaw go PRZED tytułem,
+        # żeby reszta kodu od razu wiedziała, z którym projektem ma do czynienia.
         info.project_uid = self.uid or ""
         info.project_title = self.title
         app.root.current = "project_info"
 
+    # Zapisuje aktualne położenie karty do pliku, aby po ponownym uruchomieniu aplikacji karta wróciła w to samo miejsce.
     def save_position(self):
         if not self._free_layout_enabled():
             return
@@ -252,9 +313,10 @@ class ProjectCard(MDCard):
                 except (IOError, json.JSONDecodeError):
                     pass
 
-            # Card positions are keyed by uid so duplicate-titled projects no
-            # longer overwrite each other. Legacy title keys migrate during
-            # active_timer.migrate_legacy_state_to_uids on startup.
+            # Położenie kart jest zapisywane według unikalnego identyfikatora (uid),
+            # a nie według nazwy. Dzięki temu dwa projekty o tej samej nazwie
+            # nie nadpisują sobie nawzajem pozycji. Stare dane (zapisane według
+            # nazwy) są konwertowane przy starcie w migrate_legacy_state_to_uids.
             key = self.uid or self.title
             data[key] = {'x': rel_x, 'top': rel_y}
 
@@ -264,11 +326,18 @@ class ProjectCard(MDCard):
             print(f"Position saved for {self.title} ({key}): x={rel_x:.2f}, top={rel_y:.2f}")
 
 class SessionCard(MDCard):
+    # Karta pokazująca informację o OSTATNIO zakończonej sesji czasowej.
+    # Wyświetla: nazwę projektu, czas trwania i kiedy sesja się zakończyła
+    # (np. "Dzisiaj", "Wczoraj" lub data). Jeśli nie ma żadnej sesji –
+    # pokazuje pustą kartę z informacją "Brak ostatniej sesji".
+    
     has_session = BooleanProperty(False)
     project_name = StringProperty("")
     emoji_source = StringProperty("folder-outline")
     when_label = StringProperty("")
     duration_text = StringProperty("Czas:  00:00:00")
+
+    # Wywołuje się po utworzeniu karty ostatniej sesji na ekranie. Podłącza mechanizm, który ustawia ikonę tuż obok tekstu z nazwą projektu.
     def on_kv_post(self, base_widget):
         super().on_kv_post(base_widget)
         label = self.ids.session_project_title
@@ -279,8 +348,11 @@ class SessionCard(MDCard):
         )
         Clock.schedule_once(lambda _dt: self._sync_session_title_row(label), 0)
 
+    # Oblicza "rzeczywistą" szerokość tekstu – taką jaką miałby bez ograniczeń.
+    # Używane do pozycjonowania ikony dokładnie obok tekstu.
+    # "CoreLabel" – to narzędzie wbudowane w Kivy (silnik graficzny aplikacji), które pozwala
+    # zmierzyć tekst, zanim zostanie wyświetlony na ekranie.
     def _title_text_width(self, label):
-        """Rendered text width (not the full label box — texture_size uses full width)."""
         if not label.text:
             return 0
         core = CoreLabel(
@@ -295,7 +367,10 @@ class SessionCard(MDCard):
         return core.texture.size[0]
 
     def _sync_session_title_row(self, label, *_args):
-        """Full-width title (same as Czas row); icon sits ~10dp left of the text."""
+        # Ustawia pozycję ikony (emoji) dokładnie obok tekstu nazwy projektu
+        # w karcie ostatniej sesji. Oblicza rzeczywistą szerokość tekstu
+        # (używając CoreLabel – narzędzia Kivy do pomiaru tekstu bez rysowania)
+        # i umieszcza ikonę tuż za tekstem, z małym odstępem.
         icon = self.ids.get("session_project_icon")
         if icon is None:
             return
@@ -307,6 +382,8 @@ class SessionCard(MDCard):
         icon.y = label.y + (label.height - icon.height) * 0.5
         icon.x = label.right - text_w - gap - icon.width
 
+    # Wypełnia kartę danymi z ostatniej sesji.
+    # Jeśli nie ma sesji (session = None) – pokazuje komunikat "Brak ostatniej sesji".
     def apply_last_session(self, session):
         if not session:
             self.has_session = False
@@ -326,9 +403,20 @@ class SessionCard(MDCard):
             Clock.schedule_once(lambda _dt, lbl=label: self._sync_session_title_row(lbl), 0)
 
 
+# ---------------------------------------------------------------------------
+# GŁÓWNY EKRAN (HOME SCREEN)
+# ---------------------------------------------------------------------------
 class HomeScreen(MDScreen):
+    # GŁÓWNY EKRAN APLIKACJI – to co użytkownik widzi po uruchomieniu.
+    # Zawiera:
+    # - Listę projektów (każdy jako karta ProjectCard)
+    # - Kartę ostatniej sesji (SessionCard)
+    # - Przyciski do zmiany trybu widoku (siatka / swobodny)
+    # Zarządza ładowaniem, układaniem i odświeżaniem kart projektów.
+
     _last_grid_container_width = 0
 
+    # Wywołuje się po utworzeniu ekranu głównego. Ustawia nasłuchiwanie zmian rozmiaru pojemnika na projekty i trybu widoku.
     def on_kv_post(self, base_widget):
         super().on_kv_post(base_widget)
         container = self.ids.projects_container
@@ -338,12 +426,21 @@ class HomeScreen(MDScreen):
             app.bind(grid_layout=lambda *_a: self._on_layout_mode_changed())
 
     def _on_layout_mode_changed(self):
+        # Gdy użytkownik zmieni tryb układu (siatka ↔ swobodny),
+        # przełączamy widok kart. W trybie siatki karty są automatycznie
+        # rozmieszczone w dwóch kolumnach. W trybie swobodnym karty
+        # wracają do pozycji zapamiętanych przez użytkownika.
         if MDApp.get_running_app().grid_layout:
             self.apply_grid_layout()
         else:
             self.restore_card_positions()
 
     def _on_projects_container_resize(self, container, size):
+        # Gdy zmienia się rozmiar pojemnika na projekty (np. po obrocie
+        # telefonu) – przeliczamy układ kart. W trybie siatki odświeżamy
+        # pozycje kart, żeby dopasowały się do nowej szerokości.
+        # W trybie swobodnym sprawdzamy czy to pierwsze uruchomienie
+        # i jeśli tak – przywracamy zapisane pozycje.
         w = size[0]
         if w < 1:
             return
@@ -358,13 +455,16 @@ class HomeScreen(MDScreen):
             Clock.schedule_once(lambda _dt: self.restore_card_positions(), 0)
 
     def _project_cards(self):
+        # Zwraca wszystkie karty projektów znajdujące się w pojemniku,
+        # posortowane alfabetycznie po nazwie projektu. Dzięki temu
+        # w trybie siatki projekty są wyświetlane w kolejności A-Z.
         container = self.ids.projects_container
         cards = [c for c in container.children if isinstance(c, ProjectCard)]
         cards.sort(key=lambda c: c.title.lower())
         return cards
 
+    # Odstępy dla układu dwukolumnowego; top_pad robi miejsce na znaczek emoji nad każdą kartą.
     def _grid_layout_metrics(self, container, cards):
-        """Spacing for 2-column grid; top_pad clears the emoji badge above each card."""
         margin_x = dp(16)
         gutter = dp(12)
         row_gap = dp(16)
@@ -382,11 +482,12 @@ class HomeScreen(MDScreen):
         top_pad = base_top + badge_above
         return card_w, card_h, top_pad, margin_x, gutter, row_gap
 
+    # Planuje pierwsze ułożenie kart na ekranie – wykona się przy najbliższej okazji, gdy ekran będzie już w pełni gotowy.
     def schedule_initial_layout(self):
         Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
 
+    # Uruchamia układ siatki lub swobodny, gdy kontener projektów ma już ustalony rozmiar na ekranie – dopiero wtedy można prawidłowo rozłożyć karty.
     def apply_initial_layout(self):
-        """Run grid or free layout once the projects container has a real width."""
         container = self.ids.projects_container
         if container.width < 1:
             Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
@@ -398,12 +499,17 @@ class HomeScreen(MDScreen):
             self.restore_card_positions()
 
     def apply_grid_layout(self):
-        """Place project cards in a fixed 2-column grid."""
+        # Układa karty projektów w dwóch kolumnach (widok siatki).
+        # Oblicza:
+        # - Szerokość każdej kolumny na podstawie dostępnej przestrzeni
+        # - Wysokość kart (proporcjonalnie do szerokości)
+        # - Odstępy między kartami (marginesy)
+        # - Pozycję emoji na karcie (przesunięcie do góry)
+        # Jeśli pojemnik jest za wąski – czeka i próbuje ponownie za chwilę.
         container = self.ids.projects_container
         if container.width < 1:
             Clock.schedule_once(lambda _dt: self.apply_grid_layout(), 0)
             return
-
         cards = self._project_cards()
         if not cards:
             container.height = dp(200)
@@ -439,19 +545,21 @@ class HomeScreen(MDScreen):
             card.top = y_cursor
 
     def refresh_last_session(self):
+        # Odświeża kartę ostatniej sesji na ekranie głównym.
+        # Pobiera najnowszą sesję z pliku i wypełnia nią kartę.
+        # Jeśli nie ma żadnej sesji – pokazuje pustą kartę.
         card = self.ids.last_session_card
         if card is not None:
             card.apply_last_session(get_last_session())
 
+    # Po wejściu na ekran – odśwież ostatnią sesję i zaplanuj układ.
     def on_enter(self, *_args):
-        # Delayed refresh covers home entering before project_info.on_leave records.
         schedule_home_last_session_refresh()
         self.schedule_initial_layout()
+    # Wczytuje zapisane projekty z pliku i dodaje ich karty na ekran główny.
     def load_projects(self):
-        """Loads project definitions from storage and adds them to the UI."""
         app = MDApp.get_running_app()
         storage_path = os.path.join(app.user_data_dir, 'projects.json')
-
         if os.path.exists(storage_path):
             try:
                 with open(storage_path, 'r') as f:
@@ -466,6 +574,11 @@ class HomeScreen(MDScreen):
                 print(f"Error loading projects: {e}")
 
     def restore_card_positions(self):
+        # Przywraca zapisane pozycje kart w trybie swobodnym.
+        # Odczytuje plik card_positions.json i ustawia każdą kartę
+        # w miejscu, w którym użytkownik ją wcześniej umieścił.
+        # Jeśli dla danej karty nie ma zapisanej pozycji – umieszcza
+        # ją w domyślnym miejscu (lewy górny róg, 10% od brzegów).
         app = MDApp.get_running_app()
         if app.grid_layout:
             return
@@ -473,7 +586,6 @@ class HomeScreen(MDScreen):
         if container.width < 1:
             Clock.schedule_once(lambda _dt: self.restore_card_positions(), 0)
             return
-
         storage_path = os.path.join(app.user_data_dir, "card_positions.json")
         data = {}
         if os.path.exists(storage_path):
@@ -482,11 +594,8 @@ class HomeScreen(MDScreen):
                     data = json.load(f)
             except (OSError, json.JSONDecodeError) as e:
                 print(f"Error restoring positions: {e}")
-
         for card in self._project_cards():
             card.stop_drag_animation()
-            # Prefer the uid key (new format); fall back to title for unmigrated
-            # installs the first time the new code runs.
             pos = None
             if card.uid and card.uid in data:
                 pos = data[card.uid]
@@ -499,10 +608,14 @@ class HomeScreen(MDScreen):
                 }
             else:
                 card.pos_hint = {"x": 0.1, "top": 0.9}
-
         self.update_container_height()
 
     def add_project_card(self, title, image, emoji, color, x_pos, y_top, uid=""):
+        # Dodaje nową kartę projektu na ekran główny.
+        # Tworzy nowy ProjectCard z podanymi danymi (nazwa, obrazek, emoji,
+        # kolor tła, pozycja) i dodaje go do pojemnika z projektami.
+        # Po dodaniu aktualizuje układ (siatkę lub wysokość pojemnika)
+        # w zależności od aktualnego trybu widoku.
         container = self.ids.projects_container
         new_card = ProjectCard(
             uid=uid or "",
@@ -517,11 +630,13 @@ class HomeScreen(MDScreen):
         else:
             self.update_container_height()
 
+    # Dopasowuje wysokość pojemnika (projects_container) do pozycji kart.
+    # W widoku siatki – oblicza wysokość na podstawie liczby wierszy.
+    # W widoku swobodnym – znajduje najwyższą kartę i dodaje margines.
     def update_container_height(self):
         container = self.ids.projects_container
         cards = self._project_cards()
         app = MDApp.get_running_app()
-
         if app.grid_layout and cards and container.width > 0:
             card_w, card_h, top_pad, _mx, _gut, row_gap = self._grid_layout_metrics(
                 container, cards
@@ -530,7 +645,6 @@ class HomeScreen(MDScreen):
             grid_h = top_pad + rows * card_h + max(0, rows - 1) * row_gap + dp(150)
             container.height = max(self.height, grid_h)
             return
-
         min_h = self.height
         for child in container.children:
             if child.top > min_h:

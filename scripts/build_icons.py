@@ -1,24 +1,26 @@
-"""Build the app icon set + splash (presplash) image from a source image.
-
-Source: ``assets/icon/source.png`` (a photographic shot of the icon on a dark
-background — typically a screenshot or render). The script:
-
-1. Classifies each pixel as "icon" (saturated purple or near-white chart) vs
-   "background" (dark grey film grain) and finds the bounding box of icon
-   pixels.
-2. Crops a centered square around that bbox.
-3. Builds an alpha mask from the same classifier, smoothed for anti-aliasing.
-   The natural rounded corners of the source icon survive into the mask.
-4. Saves ``icon.png`` (512×512) plus power-of-two and Android launcher sizes.
-5. Writes ``icon_adaptive_fg.png`` and ``icon_adaptive_bg.png`` for use with
-   ``icon.adaptive_foreground.filename`` / ``icon.adaptive_background.filename``
-   in ``buildozer.spec`` (API 26+ adaptive icons).
-6. Writes ``presplash.png`` — a transparent 1024×1024 canvas with the masked
-   icon centered at ~47% of canvas width, intended to be shown on top of the
-   ``android.presplash_color`` background.
-
-Re-run after replacing ``assets/icon/source.png``.
-"""
+#!/usr/bin/env python3
+# ---------------------------------------------------------------------------
+# SKRYPT: Generowanie ikon aplikacji
+# ---------------------------------------------------------------------------
+# Ten skrypt tworzy wszystkie wersje ikony aplikacji (różne rozmiary)
+# oraz obraz powitalny (presplash) z jednego pliku źródłowego.
+# 
+# CO ROBISZC Z IKONĄ?
+# Aplikacja potrzebuje ikon w różnych rozmiarach dla różnych urządzeń
+# i sklepów z aplikacjami. Ten skrypt automatycznie tworzy wszystkie
+# potrzebne wersje z jednego pliku graficznego.
+# ---------------------------------------------------------------------------
+# 
+# Źródło: assets/icon/source.png (zdjęcie ikony na ciemnym tle)
+# 
+# Skrypt:
+# 1. Znajduje gdzie jest ikona (fioletowy kształt) a gdzie tło
+# 2. Przycina do kwadratu wokół ikony
+# 3. Tworzy przezroczyste tło (alfa)
+# 4. Zapisuje ikonę w wielu rozmiarach
+# 5. Tworzy warstwy dla adaptacyjnych ikon (Android 8+)
+# 6. Tworzy obraz powitalny (presplash.png)
+# ---------------------------------------------------------------------------
 
 import os
 import sys
@@ -31,33 +33,29 @@ _ROOT = os.path.dirname(_HERE)
 _ICON_DIR = os.path.join(_ROOT, "assets", "icon")
 _SOURCE = os.path.join(_ICON_DIR, "source.png")
 
-# Sizes commonly requested by Android launchers + a 1024 for stores. We keep
-# the full set so different toolchains can pick what they need.
+# Rozmiary ikon do wygenerowania
 _SIZES = [1024, 512, 192, 144, 96, 72, 48]
 
-# Brand purple, used as solid background for the adaptive-icon background
-# layer. Sampled from the source after lifting the film-grain texture.
-_BRAND_PURPLE = (94, 53, 177, 255)  # ~#5e35b1, the app's theme_session_bg
+# Kolor tła dla adaptacyjnych ikon (fioletowy)
+_BRAND_PURPLE = (94, 53, 177, 255)
 
 
 def _is_icon_pixel(r, g, b, a):
-    """Classify a pixel as belonging to the icon vs the photographic
-    background.
-
-    The source has a dark grey/black film-grain background and a deeply
-    saturated purple icon body with a white chart graphic. Purple has G much
-    lower than R and B; the chart is near-white.
-    """
+    # Sprawdza czy piksel należy do ikony (a nie do tła).
+    # Tło jest ciemnoszare/czarne, ikona jest fioletowa lub biała.
     if a < 128:
         return False
     if r > 150 and g > 150 and b > 150:
-        return True
+        return True  # Biały wykres
     if (r - g) > 12 and (b - g) > 12 and (r + b) > 50:
-        return True
+        return True  # Fioletowy kształt
     return False
 
 
 def _bbox_of_icon(img):
+    # Znajduje prostokąt który otacza ikonę (odrzuca tło).
+    # Przeszukuje wszystkie piksele obrazu i znajduje współrzędne
+    # skrajnych pikseli ikony (min_x, min_y, max_x, max_y).
     w, h = img.size
     px = img.load()
     min_x, min_y, max_x, max_y = w, h, 0, 0
@@ -81,6 +79,8 @@ def _bbox_of_icon(img):
 
 
 def _square_crop(img, bbox, pad_px=4):
+    # Przycina obrazek do kwadratu wokół ikony.
+    # Wylicza środek prostokąta i tworzy kwadrat o boku równym najdłuższemu wymiarowi.
     min_x, min_y, max_x, max_y = bbox
     cx = (min_x + max_x) / 2.0
     cy = (min_y + max_y) / 2.0
@@ -93,6 +93,8 @@ def _square_crop(img, bbox, pad_px=4):
 
 
 def _alpha_from_classifier(cropped):
+    # Tworzy maskę przezroczystości – ikona widoczna, tło przezroczyste.
+    # Działa na przeciętnie piksele, wykrywając które należą do ikony.
     w, h = cropped.size
     mask = Image.new("L", (w, h), 0)
     mp = mask.load()
@@ -105,10 +107,8 @@ def _alpha_from_classifier(cropped):
 
 
 def _extract_chart_layer(cropped):
-    """Return an RGBA image whose alpha tracks only the white chart graphic.
-
-    Used for the adaptive-icon foreground layer.
-    """
+    # Wyodrębnia tylko biały wykres z ikony (do warstwy przedniej adaptacyjnej ikony).
+    # Adaptacyjne ikony to nowy format na Androidzie 8+, gdzie ikonę można animować.
     w, h = cropped.size
     out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     op = out.load()
@@ -117,16 +117,15 @@ def _extract_chart_layer(cropped):
         for x in range(w):
             r, g, b, a = cp[x, y]
             if a >= 128 and r > 150 and g > 150 and b > 150:
-                # Re-render as a flat white so the foreground looks crisp
-                # against the purple background layer.
                 op[x, y] = (255, 255, 255, 255)
-    # Soft edges.
     alpha = out.split()[3].filter(ImageFilter.GaussianBlur(radius=0.8))
     out.putalpha(alpha)
     return out
 
 
 def _save_sizes(img, prefix, sizes):
+    # Zapisuje obrazek w wielu rozmiarach.
+    # Najpierw skaluje do największego rozmiaru, potem zmniejsza.
     largest = img.resize((max(sizes), max(sizes)), Image.LANCZOS)
     for s in sizes:
         out_path = os.path.join(_ICON_DIR, f"{prefix}_{s}.png")
@@ -134,6 +133,7 @@ def _save_sizes(img, prefix, sizes):
         print(f"  wrote {os.path.relpath(out_path, _ROOT)} ({s}x{s})")
 
 
+# Główna funkcja budująca ikony.
 def build():
     if not os.path.exists(_SOURCE):
         raise SystemExit(
@@ -157,8 +157,7 @@ def build():
     masked = cropped.copy()
     masked.putalpha(mask)
 
-    # Upsample once to 1024 for the highest fidelity, then downsample each
-    # target size from that master to avoid stacked resampling artifacts.
+    # Najpierw przeskaluj do 1024, potem zmniejszaj – lepsza jakość
     master = masked.resize((1024, 1024), Image.LANCZOS)
 
     print("writing classic icon set:")
@@ -167,15 +166,8 @@ def build():
     print(f"  wrote {os.path.relpath(icon_png, _ROOT)} (512x512)")
     _save_sizes(masked, "icon", _SIZES)
 
-    # Adaptive icon foreground = chart layer centered with a safe-zone margin
-    # (~25% so the chart sits inside the 66% Android safe area on all mask
-    # shapes — circle, squircle, teardrop). The background is a solid purple
-    # square that Android will mask into whatever launcher shape is active.
     print("writing adaptive icon layers:")
     chart = _extract_chart_layer(cropped)
-    # Chart already sits inside the cropped icon body, occupying roughly the
-    # central 60–70% area. We embed it onto a 1024 transparent canvas to
-    # match the adaptive-foreground spec.
     fg = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
     chart_resized = chart.resize((1024, 1024), Image.LANCZOS)
     fg.alpha_composite(chart_resized)
@@ -189,11 +181,6 @@ def build():
     print(f"  wrote {os.path.relpath(bg_path, _ROOT)} (1024x1024)")
 
     print("writing splash (presplash) image:")
-    # 1024×1024 transparent canvas with the icon centered at ~47% of the
-    # canvas width. On a typical portrait phone screen, buildozer's
-    # presplash widget scales the image to fit the screen width, so the icon
-    # ends up at roughly half the screen width — a clean "branded splash"
-    # composition with the presplash_color showing around it.
     presplash = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
     icon_size = 480
     centered_icon = masked.resize((icon_size, icon_size), Image.LANCZOS)
@@ -209,6 +196,6 @@ if __name__ == "__main__":
         build()
     except SystemExit:
         raise
-    except Exception as exc:  # noqa: BLE001 - friendly CLI
+    except Exception as exc:
         print(f"icon build failed: {exc!r}", file=sys.stderr)
         sys.exit(1)

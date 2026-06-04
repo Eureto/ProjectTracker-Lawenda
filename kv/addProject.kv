@@ -1,15 +1,44 @@
+# Plik KV definiuje interfejs ekranu dodawania nowego projektu.
+# Zawiera definicje własnych widgetów oraz układ całego ekranu.
 #:import utils kivy.utils
 #:import ProjectCard screens.home.ProjectCard
 
-# Section: Custom clickable container combining Button logic with Box Layout
-<ClickableBoxLayout@ButtonBehavior+BoxLayout>:
+# ---------------------------------------------------------------------------
+# DEFINICJE PRZYCISKÓW (klikalnych kontenerów)
+# ---------------------------------------------------------------------------
+# Poniższe dwie linie tworzą nowe "szablony" (klasy) które łączą w sobie
+# cechy przycisku (można kliknąć) z cechami pudełka (układa dzieci w rzędzie).
+# Dzięki temu możemy mieć klikalne obszary, które same porządkują swoje wnętrze.
+#
+# "ButtonBehavior" – dodaje możliwość klikania. "BoxLayout" – układa elementy
+# obok siebie w poziomie lub pionie. "AnchorLayout" – układa element w konkretnym
+# punkcie (np. na środku, z lewej, z prawej).
+#
+# Składnia "<NowaNazwa@Klasa1+Klasa2>:" oznacza: stwórz nowy szablon o nazwie
+# "NowaNazwa", który dziedziczy cechy z obu klas.
 
-# Section: Custom clickable container combining Button logic with Anchor Layout
+<ClickableBoxLayout@ButtonBehavior+BoxLayout>:
 <ClickableAnchorLayout@ButtonBehavior+AnchorLayout>:
 
-# ──────────────────────────────────────────────
-# Reusable: Project Name Text Input
-# ──────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# WIELOKROTNEGO UŻYTKU: Pole do wpisywania nazwy projektu
+# ---------------------------------------------------------------------------
+# Ten szablon definiuje wygląd pola tekstowego – czyli miejsce, gdzie
+# użytkownik wpisuje na przykład tytuł projektu. Ma zaokrąglone rogi
+# i ikonkę po prawej stronie.
+#
+# "BoxLayout" – układa elementy obok siebie w poziomie (domyślnie) lub pionie.
+# Tutaj mamy: pole tekstowe po lewej i ikonę po prawej.
+#
+# "size_hint_y: None" – mówi: nie nadawaj wysokości automatycznie (procentowo),
+# użyj konkretnej wartości z "height".
+# "dp(54)" – wysokość 54 pikseli niezależnych od rozdzielczości ekranu (dp =
+# density-independent pixels, czyli piksele które wyglądają tak samo na każdym
+# ekranie).
+# "spacing" – odstęp między elementami wewnątrz pudełka.
+# "canvas.before:" – rysuje tło PRZED zawartością. Działa jak "podkładka".
+# "RoundedRectangle" – prostokąt z zaokrąglonymi rogami.
+
 <ProjectTextInput@BoxLayout>:
     size_hint_y: None
     height: dp(54)
@@ -26,31 +55,43 @@
             size: self.size
             radius: [dp(12)]
 
+    # Pole do wpisywania tekstu przez użytkownika
     TextInput:
         text: root.text
         hint_text: root.hint_text
-        background_color: 0, 0, 0, 0
+        background_color: 0, 0, 0, 0   # Przezroczyste tło (widoczny jest canvas.before)
         foreground_color: utils.get_color_from_hex("#222222")
         hint_text_color: utils.get_color_from_hex("#AAAAAA")
         font_size: sp(16)
-        multiline: False
+        multiline: False   # Tylko jedna linia tekstu
         padding_y: [self.height / 2.0 - (self.line_height / 2.0) * len(self._lines), 0]
         cursor_color: utils.get_color_from_hex("#8A4AF3")
-        on_text: root.text = self.text
+        on_text: root.text = self.text   # Gdy tekst się zmienia, aktualizuj właściwość "text" szablonu
 
+    # "AnchorLayout" – umieszcza ikonę po prawej stronie (anchor_x: prawo/lewo/center,
+    # anchor_y: góra/dół/center). Działa jak "przypnij do ściany".
     AnchorLayout:
         size_hint_x: None
         width: dp(30)
         MDIcon:
             icon: root.icon_text
-            adaptive_size: True
+            adaptive_size: True   # Automatyczny rozmiar dopasowany do ikony
             theme_text_color: "Custom"
             text_color: utils.get_color_from_hex("#AAAAAA")
             icon_size: sp(22)
 
-# ──────────────────────────────────────────────
-# Reusable: Square tile button (Zdjęcie / Kolor / Emoji)
-# ──────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# WIELOKROTNEGO UŻYTKU: Kafelek (przycisk z ikoną i napisem)
+# ---------------------------------------------------------------------------
+# Ten szablon to kwadratowy przycisk używany do wyboru zdjęcia, koloru
+# lub emoji projektu. Ma zaokrąglone rogi, ikonę i podpis pod spodem.
+#
+# "orientation: vertical" – elementy są ułożone jeden pod drugim (napis na górze,
+# ikona na dole).
+# "Label" – tekst (etykieta). "halign: center" – wyrównanie w poziomie do środka.
+# "valign: middle" – wyrównanie w pionie do środka.
+# "text_size: self.size" – ogranicza obszar tekstu do rozmiaru etykiety.
+
 <ProjectTileButton@ButtonBehavior+BoxLayout>:
     orientation: "vertical"
     size_hint_y: None
@@ -86,9 +127,13 @@
             text_color: utils.get_color_from_hex("#555555")
             icon_size: sp(26)
 
-# ──────────────────────────────────────────────
-# Emoji picker button (used inside dialog)
-# ──────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# PRZYCISK EMOJI (używany w oknie wyboru emoji)
+# ---------------------------------------------------------------------------
+# Mały kwadratowy przycisk, który po naciśnięciu wybiera emoji dla projektu.
+# "state == 'down'" – sprawdza czy przycisk jest aktualnie wciśnięty.
+# Jeśli tak, tło staje się lekko przezroczyste (efekt kliknięcia).
+
 <EmojiButton>:
     size_hint: None, None
     size: dp(60), dp(60)
@@ -100,9 +145,18 @@
             size: self.size
             radius: [dp(8)]
 
-# ──────────────────────────────────────────────
-# Add Project Screen
-# ──────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# EKRAN DODAWANIA PROJEKTU (główna zawartość tego pliku)
+# ---------------------------------------------------------------------------
+# Poniżej znajduje się definicja całego ekranu, na którym użytkownik
+# może dodać nowy projekt. Ekran składa się z formularza: nazwa projektu,
+# wybór zdjęcia/koloru/emoji, podgląd karty projektu, oraz przycisk
+# zapisu na dole.
+#
+# "canvas.before:" w ekranie – maluje fioletowe tło na całym ekranie.
+# "Rectangle" – wypełnia cały obszar kolorem. "pos: self.pos, size: self.size"
+# oznacza: pozycja i rozmiar takie jak element nadrzędny.
+
 <AddProjectScreen>:
     canvas.before:
         Color:
@@ -111,18 +165,30 @@
             pos: self.pos
             size: self.size
 
-    # ── Main vertical layout ──
+    # "MDBoxLayout" – pudełko z biblioteki KivyMD (Material Design). Układa
+    # elementy w pionie ("orientation: vertical").
+    # "padding" – odstęp od krawędzi (lewy, górny, prawy, dolny).
+    # "spacing: 0" – brak odstępu między elementami.
     MDBoxLayout:
         orientation: "vertical"
         padding: dp(24), dp(44), dp(24), dp(0)
         spacing: dp(0)
 
-        # ── Header ──
+        # ── Górny pasek z tytułem i przyciskiem powrotu ──
+        # "BoxLayout" – układa elementy w poziomie. Strzałka powrotu po lewej,
+        # tytuł na środku, pusto po prawej (dla symetrii).
+        # "Widget" – pusty element, który zajmuje miejsce (używany jako odstępnik).
         BoxLayout:
             size_hint_y: None
             height: dp(60)
             spacing: dp(0)
 
+            # Strzałka powrotu – klikalny obszar z ikoną "<"
+            # "anchor_x: left" – umieść ikonę po lewej stronie
+            # "on_release" – zdarzenie które wykonuje się, gdy użytkownik
+            #   puści przycisk (release = puszczenie po kliknięciu).
+            # "app.root.current = 'home'" – przełącza na ekran główny.
+            # "adaptive_size: True" – ikona automatycznie dopasowuje rozmiar.
             ClickableAnchorLayout:
                 size_hint_x: None
                 width: dp(56)
@@ -135,6 +201,9 @@
                     font_size: sp(50)
                     adaptive_size: True
 
+            # Tytuł strony – wyśrodkowany w poziomie i pionie
+            # "text_size: self.size" – ogranicza tekst do rozmiaru etykiety
+            # (dzięki temu "halign: center" działa prawidłowo).
             Label:
                 text: "Dodawanie projektu"
                 font_size: sp(20)
@@ -144,23 +213,38 @@
                 valign: "middle"
                 text_size: self.size
 
+            # Pusty odstępnik po prawej (symetryczny do strzałki)
             Widget:
                 size_hint_x: None
                 width: dp(56)
 
-        # ── Scrollable body ──
+        # ── Przewijana zawartość formularza ──
+        # "ScrollView" – kontener który można przewijać. Gdy zawartość jest
+        # dłuższa niż ekran, użytkownik może przesuwać palcem.
+        # "do_scroll_x: False" – wyłącz przewijanie w poziomie.
+        # "size_hint_y: 1" – zajmij całą dostępną wysokość.
+        # "bar_width: 0" – ukryj pasek przewijania.
         ScrollView:
             do_scroll_x: False
             size_hint_y: 1
             bar_width: 0
 
+            # "adaptive_height: True" – wysokość automatycznie dopasowuje się
+            # do zawartości (im więcej elementów, tym wyższy).
+            # "padding: [0, dp(24), 0, dp(120)]" – dodatkowy odstęp na dole,
+            # żeby przycisk zapisu nie zasłaniał ostatnich pól.
             MDBoxLayout:
                 orientation: "vertical"
                 adaptive_height: True
                 spacing: dp(18)
                 padding: [0, dp(24), 0, dp(120)]
 
-                # ── Preview card ──
+                # ── Podgląd karty projektu ──
+                # Na górze formularza pokazujemy małą kartę, która zmienia
+                # swój wygląd w miarę jak użytkownik wypełnia pola.
+                # "anchor_x: center, anchor_y: center" – karta jest wyśrodkowana.
+                # "size_hint: None, None" – nie używaj procentowego rozmiaru,
+                # tylko konkretne wartości "width" i "height".
                 BoxLayout:
                     orientation: "vertical"
                     size_hint_y: None
@@ -190,7 +274,7 @@
                             emoji_right_hint: 1.25
                             emoji_right_hint_png: 1.05
 
-                    # "Podgląd" label below card
+                    # Napis "Podgląd" pod kartą
                     Label:
                         text: "Podgląd"
                         font_size: sp(14)
@@ -201,13 +285,18 @@
                         valign: "middle"
                         text_size: self.size
 
-                # ── Project name input ──
+                # ── Pole do wpisania nazwy projektu ──
+                # Używa wcześniej zdefiniowanego szablonu ProjectTextInput.
+                # "id" – unikalna nazwa, dzięki której Python może odczytać
+                # wartość z tego pola (np. self.ids.project_name_input.text).
                 ProjectTextInput:
                     id: project_name_input
                     hint_text: "Nazwa Projektu"
                     icon_text: "close-circle-outline"
 
-                # ── Three tile buttons ──
+                # ── Trzy przyciski wyboru: zdjęcie, kolor, emoji ──
+                # Ułożone obok siebie w poziomie.
+                # "on_release" wywołuje funkcje w Pythonie.
                 BoxLayout:
                     size_hint_y: None
                     height: dp(80)
@@ -228,7 +317,12 @@
                         icon_text: "emoticon-happy-outline"
                         on_release: root.select_emoji()
 
-    # ── Floating confirm button (circle) ──
+    # ── Przycisk zapisu (okrągły, unosi się nad dolną krawędzią ekranu) ──
+    # "pos_hint" – pozycjonowanie procentowe względem rodzica.
+    # {"center_x": 0.5} – środek poziomy na 50% szerokości.
+    # {"y": 0.04} – dolna krawędź na 4% wysokości od dołu.
+    # "Ellipse" – rysuje owal/koło (tutaj: fioletowe kółko).
+    # "clickable" – cały obszar można kliknąć.
     ClickableAnchorLayout:
         size_hint: None, None
         size: dp(68), dp(68)
