@@ -1,3 +1,12 @@
+# ---------------------------------------------------------------------------
+# EKRAN DODAWANIA NOWEGO PROJEKTU
+# ---------------------------------------------------------------------------
+# Ten plik zawiera logikę ekranu, na którym użytkownik tworzy nowy projekt.
+# Użytkownik może: wpisać nazwę, wybrać zdjęcie, kolor tła i emoji.
+# Po naciśnięciu przycisku zapisu, projekt jest zapisywany do pliku
+# projects.json i pojawia się na ekranie głównym.
+# ---------------------------------------------------------------------------
+
 import os
 import json
 import unicodedata
@@ -31,144 +40,148 @@ from kivy.factory import Factory
 from kivy.uix.scrollview import ScrollView
 from kivy.uix.widget import Widget
 
-# Section: Custom button for the RecycleView using standard Image for maximum Android compatibility
+
+# ---------------------------------------------------------------------------
+# PRZYCISK EMOJI – mały kwadracik z obrazkiem emoji
+# ---------------------------------------------------------------------------
 class EmojiButton(RectangularRippleBehavior, ButtonBehavior, Image):
+    # Klikalny kwadracik z obrazkiem emoji – pojawia się w oknie wyboru emoji,
+    # gdy użytkownik chce ustawić ikonę projektu. Każdy przycisk zawiera
+    # jeden znak emoji i po kliknięciu informuje ekran, które emoji wybrano.
+    
     screen = ObjectProperty(None)
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.nocache = True  # Tell Kivy not to store 4000 textures in RAM
+        self.nocache = True  # Nie przechowuj w pamięci podręcznej (oszczędność RAM)
         self.size_hint = (None, None)
         self.size = (dp(60), dp(60))
         self.allow_stretch = True
         self.keep_ratio = True
-        self.mipmap = False  # Disable mipmap to prevent pixelation
+        self.mipmap = False
 
+    # Po kliknięciu przycisku emoji – przekazuje wybrane emoji do ekranu.
+    # "screen" to referencja do AddProjectScreen, która obsługuje wybór.
     def on_release(self):
         if self.screen:
             self.screen._on_emoji_selected(self.source)
 
 Factory.register('EmojiButton', cls=EmojiButton)
 
+
+# ---------------------------------------------------------------------------
+# METADANE EMOJI – wyszukiwanie emoji po nazwie lub kodzie
+# ---------------------------------------------------------------------------
 class EmojiMetadata:
-    """Builds a searchable index of emojis from unicode filenames."""
+    # Pomaga wyszukiwać emoji po nazwie (np. "uśmiech") lub kodzie szesnastkowym.
     
+    # Odczytuje z nazwy pliku kod znaku Unicode.
+    # Np. z pliku "u1F600.png" odczytuje kod "1F600" (znak 😀).
+    #
+    # CO TO JEST UNICODE?
+    # To standard który przypisuje każdemu znakowi (literze, emoji) 
+    # niepowtarzalny numer. Np. "A" to U+0041, a 😀 to U+1F600.
+    # "kod szesnastkowy" (hex) – system liczbowy używający cyfr 0-9 i liter A-F.
+    # Np. 1F600 w systemie szesnastkowym = 128512 w dziesiętnym.
     @staticmethod
     def extract_unicode_codepoint(filename):
-        """
-        Extracts unicode codepoint from filenames like 'uni271D.png' or 'u1F197.png'
-        Returns tuple: (hex_string, character, name) or (None, None, None)
-        """
-        base = os.path.splitext(filename)[0]  # Remove .png
+        base = os.path.splitext(filename)[0]
         
         hex_value = None
         if base.startswith('uni') and len(base) > 3:
-            hex_value = base[3:]  # uni271D -> 271D
+            hex_value = base[3:]
         elif base.startswith('u') and len(base) > 1:
-            hex_value = base[1:]  # u1F197 -> 1F197
+            hex_value = base[1:]
         
         if not hex_value:
             return None, None, None
         
         try:
-            # Convert hex to unicode character
             codepoint = int(hex_value, 16)
             char = chr(codepoint)
-            
-            # Try to get unicode name
             try:
                 name = unicodedata.name(char).lower()
             except ValueError:
-                # Some codepoints don't have names, use category
                 category = unicodedata.category(char)
                 name = f"category_{category}".lower()
-            
             return hex_value.lower(), char, name
         except (ValueError, OverflowError):
             return None, None, None
     
+    # Buduje listę wszystkich dostępnych emoji z podanego folderu.
+    # Każdy wpis zawiera: ścieżkę do pliku, kod szesnastkowy, znak, nazwę i słowa kluczowe.
+    # Słowa kluczowe umożliwiają wyszukiwanie (np. "uśmiech" znajdzie 😀).
     @staticmethod
     def build_emoji_index(emoji_dir):
-        """
-        Builds a searchable index: 
-        Returns list of dicts with: {source, hex, char, name, keywords}
-        """
         if not os.path.exists(emoji_dir):
             return []
-        
         emoji_index = []
         for filename in sorted([f for f in os.listdir(emoji_dir) if f.lower().endswith(".png")]):
             hex_val, char, name = EmojiMetadata.extract_unicode_codepoint(filename)
-            
             if hex_val:
-                # Build keywords for searching: hex value + name parts
                 keywords = [hex_val] + (name.split('_') if name else [])
-                
                 emoji_index.append({
                     'source': os.path.join(emoji_dir, filename),
                     'hex': hex_val,
                     'char': char,
                     'name': name or '',
                     'keywords': keywords,
-                    'screen': None  # Will be set later
+                    'screen': None
                 })
-        
         return emoji_index
     
+    # Filtruje emoji po wyszukiwanej frazie (np. po nazwie lub kodzie szesnastkowym).
+    # Jeśli nie ma frazy – zwraca pierwsze 200 emoji (żeby nie pokazywać tysięcy).
     @staticmethod
     def filter_emojis(emoji_index, search_term):
-        """
-        Filters emoji_index by search term (hex or name keywords).
-        Returns filtered list.
-        """
         if not search_term or not search_term.strip():
-            return emoji_index[:200]  # Return first 200 if no filter
-        
+            return emoji_index[:200]
         search_term = search_term.lower().strip()
         filtered = []
-        
         for emoji in emoji_index:
-            # Search in hex value
             if search_term in emoji['hex']:
                 filtered.append(emoji)
-            # Search in name keywords
             elif any(search_term in keyword for keyword in emoji['keywords']):
                 filtered.append(emoji)
-        
         return filtered
 
 
+# ---------------------------------------------------------------------------
+# GŁÓWNY EKRAN DODAWANIA PROJEKTU
+# ---------------------------------------------------------------------------
 class AddProjectScreen(Screen):
-    selected_color = ColorProperty([0.7, 0.5, 1, 1]) # Default soft purple
+    selected_color = ColorProperty([0.7, 0.5, 1, 1])  # Domyślny fiolet
     selected_icon = StringProperty("emoticon-happy-outline")
     selected_image_path = StringProperty("")
-    _emoji_index = [] # Full searchable index (built once)
-    _filtered_emojis = [] # Current filtered results
-    _search_input = None  # Reference to search box
-    _recycle_view = None  # Reference to RecycleView
+    _emoji_index = []
+    _filtered_emojis = []
+    _search_input = None
+    _recycle_view = None
 
     def on_enter(self):
-        # Required for Android to access the gallery/file system at runtime
+        # Gdy użytkownik wchodzi na ekran dodawania projektu – prosimy
+        # o pozwolenia dostępu do plików (Android wymaga tego do galerii)
+        # i resetujemy podgląd karty projektu do stanu początkowego.
         if platform == 'android':
             from android.permissions import request_permissions, Permission
             request_permissions([Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
-        
-        # Initialize search timer
         self._search_timer = None
         self._reset_preview_card()
 
+    # -----------------------------------------------------------------------
+    # WYBÓR EMOJI – otwiera okno z siatką emoji i wyszukiwarką
+    # -----------------------------------------------------------------------
+    # Otwiera okno wyboru emoji z paskiem wyszukiwania i siatką obrazków.
+    # Najpierw czyści pamięć podręczną obrazków (Cache.remove), żeby zwolnić RAM.
     def select_emoji(self):
-        """Opens a custom emoji picker dialog with search."""
-        # Clear image cache to free GPU memory
         Cache.remove('kv.image')
         Cache.remove('kv.texture')
 
-        # Build emoji index once
         if not self._emoji_index:
             emoji_dir = ensure_emoji_assets()
             self._emoji_index = EmojiMetadata.build_emoji_index(emoji_dir)
             print(f"[EmojiPicker] Built index with {len(self._emoji_index)} emojis")
 
-        # Start with first 100 emojis
         self._filtered_emojis = self._emoji_index[:100]
 
         # Create main container
@@ -190,7 +203,6 @@ class AddProjectScreen(Screen):
         self._search_input.bind(text=self._on_search_text)
         container.add_widget(self._search_input)
         
-        # ScrollView wrapper
         scroll = ScrollView(size_hint_y=1, do_scroll_x=False)
         
         # Wrapper to center the grid
@@ -202,11 +214,10 @@ class AddProjectScreen(Screen):
             spacing=0
         )
         grid_wrapper.bind(minimum_height=grid_wrapper.setter('height'))
-        
-        # Calculate dynamic columns based on screen width
+
         emoji_size = dp(60)
         emoji_spacing = dp(5)
-        available_width = Window.width * 0.9 - dp(20)  # Account for dialog margin and padding
+        available_width = Window.width * 0.9 - dp(20)
         cols = max(3, int(available_width / (emoji_size + emoji_spacing)))
         
         # GridLayout with dynamic columns
@@ -220,14 +231,11 @@ class AddProjectScreen(Screen):
         )
         self._emoji_grid.bind(minimum_height=self._emoji_grid.setter('height'))
         
-        # Add emojis to grid
         self._populate_emoji_grid(self._filtered_emojis)
         
-        # Add centered grid to wrapper
-        grid_wrapper.add_widget(Widget(size_hint_x=1))  # Left spacer
+        grid_wrapper.add_widget(Widget(size_hint_x=1))
         grid_wrapper.add_widget(self._emoji_grid)
-        grid_wrapper.add_widget(Widget(size_hint_x=1))  # Right spacer
-        
+        grid_wrapper.add_widget(Widget(size_hint_x=1))
         scroll.add_widget(grid_wrapper)
         container.add_widget(scroll)
         
@@ -242,24 +250,25 @@ class AddProjectScreen(Screen):
         )
         self.emoji_dialog.open()
         
-        # Request focus on the search input after dialog opens
         def focus_search(dt):
             self._search_input.focus = True
-        
         Clock.schedule_once(focus_search, 0.1)
 
     def _on_search_text(self, instance, value):
-        """Called when search text changes - debounce with flag."""
-        # Simply store the current text and let the scheduled callback check it
+        # Gdy użytkownik wpisuje coś w polu wyszukiwania emoji – nie filtrujemy
+        # od razu (bo to spowalniałoby przy każdym znaku). Zamiast tego
+        # czekamy 0.5 sekundy po ostatnim wpisanym znaku, żeby dopiero
+        # wtedy przefiltrować listę. To daje płynniejsze działanie.
         if not hasattr(self, '_search_scheduled'):
             self._search_scheduled = False
-    
         if not self._search_scheduled:
             self._search_scheduled = True
             Clock.schedule_once(self._delayed_filter, 0.5)
 
     def _delayed_filter(self, dt=None):
-        """Perform the actual filtering on the main thread."""
+        # Wykonuje właściwe filtrowanie emoji po upływie opóźnienia.
+        # Pobiera tekst z paska wyszukiwania, przekazuje do EmojiMetadata
+        # i odświeża siatkę emoji tak, żeby pokazywała tylko pasujące wyniki.
         self._search_scheduled = False
         search_term = self._search_input.text
         filtered = EmojiMetadata.filter_emojis(self._emoji_index, search_term)
@@ -267,15 +276,22 @@ class AddProjectScreen(Screen):
         print(f"[EmojiPicker] Filtered to {len(filtered)} emojis")
     
     def _on_emoji_selected(self, emoji_val):
+        # Gdy użytkownik kliknie na jakieś emoji: zapisujemy wybór,
+        # zamykamy okno dialogowe z emoji i czyścimy pole wyszukiwania
+        # (żeby przy następnym otwarciu było puste).
         self.selected_icon = resolve_emoji_source(emoji_val)
         if hasattr(self, 'emoji_dialog'):
             self.emoji_dialog.dismiss()
-        # Clear search for next time
         if self._search_input:
             self._search_input.text = ""
 
+    # -----------------------------------------------------------------------
+    # WYBÓR ZDJĘCIA
+    # -----------------------------------------------------------------------
     def select_photo(self):
-        # Opens the native Android Gallery/File picker
+        # Otwiera systemowy wybór plików/galerię, żeby użytkownik mógł
+        # wybrać zdjęcie z telefonu. Pokazuje tylko obrazy (png, jpg, jpeg).
+        # Po wybraniu zdjęcia wywołuje _on_image_selected.
         filechooser.open_file(
             title="Select Project Image",
             filters=[("Images", "*.png", "*.jpg", "*.jpeg")],
@@ -284,10 +300,13 @@ class AddProjectScreen(Screen):
 
     def _on_image_selected(self, selection):
         if selection:
-            # Android callbacks often run outside the main thread.
             Clock.schedule_once(lambda _dt: self._apply_selected_photo(selection[0]), 0)
 
     def _apply_selected_photo(self, path):
+        # Przetwarza wybrane przez użytkownika zdjęcie: zmniejsza je do
+        # rozmiaru odpowiedniego dla karty projektu (żeby nie zajmowało
+        # za dużo miejsca) i zapisuje w prywatnym folderze aplikacji.
+        # Jeśli przetworzenie się nie uda – używa oryginalnego pliku.
         app = MDApp.get_running_app()
         cache_dir = os.path.join(app.user_data_dir, "project_images")
         try:
@@ -297,17 +316,22 @@ class AddProjectScreen(Screen):
         self._update_image_preview(path)
 
     def _update_image_preview(self, path):
-        # Briefly clear path to force Kivy to reload the image widget
+        # Aktualizuje podgląd wybranego zdjęcia na karcie projektu.
+        # Najpierw czyści starą ścieżkę (żeby odświeżyć obrazek),
+        # a po chwili ustawia nową – to wymusza przeładowanie obrazka
+        # na ekranie.
         self.selected_image_path = ""
-        
-        # Tiny delay ensures the property change is broadcasted 
-        # before we set the real path, forcing a refresh on Android.
         def reapply_path(dt):
             self.selected_image_path = path
             print(f"Image updated in preview: {path}")
         Clock.schedule_once(reapply_path, 0.1)
 
     def _reset_preview_card(self):
+        # Przywraca kartę podglądu projektu do stanu wyjściowego.
+        # Zatrzymuje ewentualne animacje (drżenie karty z trybu
+        # przeciągania), ustawia domyślny rozmiar i pozycję na środku.
+        # To ważne, żeby przy ponownym otwarciu formularza karta
+        # wyglądała jak nowa.
         card = self.ids.preview_card
         card.interactive = False
         if card._long_press_ev:
@@ -325,6 +349,9 @@ class AddProjectScreen(Screen):
             card.parent.do_layout()
 
     def _clear_image_preview(self):
+        # Usuwa wybrane zdjęcie z podglądu i czyści pamięć podręczną
+        # (żeby nie zajmowała miejsca w RAM). Przechodzi przez wszystkie
+        # elementy karty i usuwa z nich obrazek.
         path = self.selected_image_path
         if path:
             Cache.remove("kv.image", path)
@@ -339,24 +366,28 @@ class AddProjectScreen(Screen):
                     widget.reload()
 
     def _clear_form(self):
+        # Czyści cały formularz dodawania projektu: nazwę, emoji, kolor
+        # i zdjęcie. Przywraca wszystko do domyślnych wartości,
+        # gotowe do wpisania kolejnego nowego projektu.
         self.ids.project_name_input.text = ""
         self.selected_icon = "emoticon-happy-outline"
         self.selected_color = [0.7, 0.5, 1, 1]
         self._clear_image_preview()
         self._reset_preview_card()
 
+    # -----------------------------------------------------------------------
+    # ZAPISYWANIE PROJEKTU
+    # -----------------------------------------------------------------------
+    # Zapisuje dane nowego projektu do pliku projects.json i dodaje
+    # jego kartę na ekranie głównym. Po zapisie wraca do ekranu głównego.
     def save_project(self):
-        """Saves the project data to disk and adds it to the Home Screen."""
         app = MDApp.get_running_app()
         project_name = self.ids.project_name_input.text.strip()
 
         if not project_name:
-            return # Could add a Toast here for "Name required"
+            return
 
         project_data = {
-            # Stable per-project ID used to key all timer/goal/details state.
-            # New in the post-uid refactor — projects.json entries without a
-            # ``uid`` are migrated on startup by active_timer.ensure_project_uids.
             "uid": f"proj-{uuid.uuid4().hex}",
             "title": project_name,
             "color": list(self.selected_color),
@@ -364,6 +395,7 @@ class AddProjectScreen(Screen):
             "image": self.selected_image_path
         }
 
+        # Odczytaj istniejące projekty, dodaj nowy, zapisz
         storage_path = os.path.join(app.user_data_dir, 'projects.json')
         projects = []
         if os.path.exists(storage_path):
@@ -377,6 +409,7 @@ class AddProjectScreen(Screen):
         with open(storage_path, 'w') as f:
             json.dump(projects, f)
 
+        # Dodaj kartę projektu na ekranie głównym
         home_screen = app.root.get_screen('home')
         home_screen.add_project_card(
             project_name, self.selected_image_path, self.selected_icon,
@@ -384,12 +417,14 @@ class AddProjectScreen(Screen):
             uid=project_data["uid"],
         )
 
-        # 3. Cleanup and Navigation
         self._clear_form()
         app.root.current = "home"
 
     def select_color(self):
-        """Pick a project color from the curated swatch palette."""
+        # Otwiera okno z paletą kolorów, gdzie użytkownik może wybrać
+        # kolor tła dla swojego projektu. Przekazuje aktualnie wybrany
+        # kolor (żeby go podświetlić w palecie) i funkcję, która
+        # zostanie wywołana po kliknięciu nowego koloru.
         open_palette_picker(
             default_color=tuple(self.selected_color),
             on_pick=self._apply_picked_color,
@@ -399,13 +434,13 @@ class AddProjectScreen(Screen):
         self.selected_color = color
 
     def _populate_emoji_grid(self, emoji_list):
-        """Populate grid with emoji buttons."""
-        # Check if count is same - skip if nothing changed
+        # Wypełnia siatkę widoczną w oknie wyboru emoji – dla każdego emoji
+        # z listy tworzy przycisk (EmojiButton). Jeśli lista się nie zmieniła
+        # (ma tyle samo elementów co wcześniej) – pomija odświeżanie,
+        # żeby nie migotać ekranem przy każdym wpisaniu litery.
         if len(self._emoji_grid.children) == len(emoji_list):
             return
-    
         self._emoji_grid.clear_widgets()
-
         for emoji in emoji_list:
             btn = EmojiButton(
                 source=emoji['source'],

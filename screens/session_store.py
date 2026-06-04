@@ -1,4 +1,14 @@
-"""Persist tracked time sessions and expose last-session / statistics aggregates."""
+# ---------------------------------------------------------------------------
+# PRZECHOWYWANIE SESJI CZASOWYCH I STATYSTYKI
+# ---------------------------------------------------------------------------
+# Ten plik odpowiada za zapisywanie i odczytywanie "sesji" – czyli
+# zakończonych pomiarów czasu (np. "dzisiaj pracowałem 30 minut nad
+# projektem X"). Służy też do obliczania statystyk dla ekranu statystyk.
+#
+# CO TO JEST "SESJA"?
+# To pojedynczy okres mierzonego czasu. Za każdym razem gdy użytkownik
+# uruchomi stoper, a potem go zatrzyma, powstaje jedna sesja.
+# ---------------------------------------------------------------------------
 
 import datetime
 import json
@@ -17,6 +27,8 @@ def _projects_path():
     return os.path.join(MDApp.get_running_app().user_data_dir, "projects.json")
 
 
+# Wczytuje wszystkie zapisane sesje z pliku sessions.json.
+# Jeśli plik nie istnieje lub jest uszkodzony – zwraca pustą listę.
 def load_sessions():
     path = _sessions_path()
     if not os.path.exists(path):
@@ -31,6 +43,8 @@ def load_sessions():
     return []
 
 
+# Zapisuje listę sesji do pliku sessions.json.
+# "os.makedirs(exist_ok=True)" – utwórz folder do zapisu jeśli nie istnieje.
 def save_sessions(sessions):
     path = _sessions_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -39,6 +53,10 @@ def save_sessions(sessions):
 
 
 def find_project_meta(project_title):
+    # Szuka projektu po nazwie w pliku projects.json i zwraca jego dane.
+    # Zwraca: emoji, kolor tła, zdjęcie itp. – wszystko co jest potrzebne
+    # do wyświetlenia karty projektu. Jeśli nie znajdzie – zwraca pusty słownik.
+    # Używane np. przy tworzeniu statystyk, żeby pokazać kolor projektu.
     path = _projects_path()
     if not os.path.exists(path):
         return {}
@@ -53,14 +71,14 @@ def find_project_meta(project_title):
     return {}
 
 
-def record_session(
-    project_title,
-    duration_seconds,
-    started_at=None,
-    ended_at=None,
-    project_uid="",
-):
-    """Append a completed tracking session (newest first)."""
+# Dodaje nową sesję na początek listy (najnowsze pierwsze).
+# Parametry:
+#   project_title – nazwa projektu
+#   duration_seconds – czas trwania w sekundach
+#   started_at / ended_at – opcjonalne daty rozpoczęcia i zakończenia
+#   project_uid – identyfikator projektu (jeśli znany)
+# Funkcja odświeża też ekran główny i statystyki po dodaniu.
+def record_session(project_title, duration_seconds, started_at=None, ended_at=None, project_uid=""):
     if not project_title or duration_seconds < 1:
         return None
 
@@ -85,6 +103,7 @@ def record_session(
     sessions = load_sessions()
     sessions.insert(0, entry)
     save_sessions(sessions)
+    # Odśwież ekran główny i statystyki (mogą być widoczne)
     schedule_home_last_session_refresh()
     schedule_statistics_refresh()
     return entry
@@ -95,6 +114,10 @@ def _project_details_path():
 
 
 def load_project_details():
+    # Wczytuje z pliku project_details.json wszystkie szczegóły projektów:
+    # notatki, cele czasowe, listę celów (checklistę) i etapy.
+    # Zwraca słownik gdzie kluczem jest nazwa (lub UID) projektu.
+    # Jeśli plik nie istnieje lub jest uszkodzony – zwraca pusty słownik.
     path = _project_details_path()
     if not os.path.exists(path):
         return {}
@@ -108,8 +131,11 @@ def load_project_details():
     return {}
 
 
+# Zwraca datę początku okresu dla statystyk.
+# "Dzień" – początek dzisiejszego dnia (00:00:00).
+# "Tydzień" – początek bieżącego tygodnia (poniedziałek 00:00:00).
+# "Miesiąc" – pierwszy dzień miesiąca (00:00:00).
 def period_range_start(period_label):
-    """Inclusive start datetime for Dzień / Tydzień / Miesiąc (local time)."""
     now = datetime.datetime.now()
     if period_label == "Dzień":
         return now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -120,7 +146,11 @@ def period_range_start(period_label):
 
 
 def _goal_period_key(reset_mode):
-    """Match project_info goal period keys for day / week / all-time."""
+    # Tworzy "identyfikator okresu" dla celu czasowego na podstawie trybu resetowania.
+    # Np. dla trybu "codziennie" zwróci datę typu "2026-06-04",
+    # dla "co tydzień" zwróci "2026-W23" (rok i numer tygodnia).
+    # Dzięki temu wiemy, w którym okresie cel został zalogowany
+    # i czy trzeba go zresetować (gdy okres się zmienił).
     now = datetime.datetime.now()
     if reset_mode == "daily":
         return now.date().isoformat()
@@ -131,6 +161,11 @@ def _goal_period_key(reset_mode):
 
 
 def _parse_goal_reset_mode(value):
+    # Zamienia tekstowy opis trybu resetowania celu na jednolitą stałą.
+    # Przykłady: "daily", "dziennie", "day" → "daily" (codziennie)
+    #            "weekly", "tygodniowo" → "weekly" (co tydzień)
+    #            "never", "none" → "never" (nigdy nie resetuj)
+    # Jeśli nie rozpozna wartości – domyślnie ustawia "weekly".
     if not value:
         return "weekly"
     v = str(value).lower()
@@ -144,10 +179,11 @@ def _parse_goal_reset_mode(value):
 
 
 def _goal_logged_for_period(period_label, goal):
-    """
-    Goal car time for the selected statistics window.
-    Nested like sessions: day ⊆ week ⊆ month.
-    """
+    # Sprawdza ile czasu z danego celu czasowego należy do wybranego okresu
+    # statystyk (Dzień/Tydzień/Miesiąc). Cel może być resetowany codziennie,
+    # co tydzień lub nigdy – to wpływa na to, w których statystykach się pojawi.
+    # Np. cel tygodniowy pokaże się tylko w statystykach "Tydzień" i "Miesiąc",
+    # ale nie w "Dzień".
     logged = int(float(goal.get("logged_seconds", 0)))
     if logged <= 0:
         return 0
@@ -157,9 +193,7 @@ def _goal_logged_for_period(period_label, goal):
     week_key = _goal_period_key("weekly")
 
     if rm == "never":
-        # All-time goal counter — only attribute to the widest window (month).
         return logged if period_label == "Miesiąc" else 0
-
     if rm == "daily":
         if pk != day_key:
             return 0
@@ -168,19 +202,20 @@ def _goal_logged_for_period(period_label, goal):
         if period_label == "Tydzień":
             return logged
         return logged
-
     if rm == "weekly":
         if pk != week_key:
             return 0
         if period_label == "Dzień":
             return 0
         return logged
-
     return 0
 
 
 def goal_seconds_by_project(period_label):
-    """Sum car-goal logged time per project for the active calendar period."""
+    # Przechodzi przez wszystkie projekty i sumuje czas spędzony na celach czasowych
+    # w wybranym okresie (Dzień/Tydzień/Miesiąc). Wynik to słownik, gdzie kluczem
+    # jest nazwa projektu, a wartością łączna liczba sekund z celów czasowych.
+    # Te dane są dodawane do zwykłych sesji w statystykach.
     totals = {}
     for project_title, blob in load_project_details().items():
         if not project_title or project_title == "_":
@@ -194,7 +229,10 @@ def goal_seconds_by_project(period_label):
 
 
 def format_statistics_duration(seconds):
-    """Show seconds when under a minute; otherwise M:SS or H:MM:SS (matches project timer)."""
+    # Zamienia liczbę sekund na tekst zrozumiały dla człowieka.
+    # Np. 3661 → "1:01:01" (1 godzina, 1 minuta, 1 sekunda).
+    # Jeśli czas jest krótszy niż minuta – pokazuje tylko sekundy ("45 s").
+    # Jeśli krótszy niż godzina – pokazuje minuty i sekundy ("30:15").
     s = max(0, int(seconds))
     if s < 60:
         return f"{s} s"
@@ -209,7 +247,15 @@ def format_statistics_total(seconds):
     return f"suma: {format_statistics_duration(seconds)}"
 
 
+# ---------------------------------------------------------------------------
+# FUNKCJE DO ODŚWIEŻANIA EKRANÓW
+# ---------------------------------------------------------------------------
+
 def schedule_statistics_refresh():
+    # Odświeża ekran statystyk, ale z małym opóźnieniem.
+    # To ważne, bo gdy dopiero co zapisaliśmy nową sesję, plik może być
+    # jeszcze niegotowy do odczytu. Wywołujemy odświeżenie kilka razy
+    # (po 0, 0.05 i 0.15 sekundy) żeby na pewno dane się załadowały.
     app = MDApp.get_running_app()
     if not app or not getattr(app, "root", None):
         return
@@ -224,7 +270,9 @@ def schedule_statistics_refresh():
 
 
 def schedule_home_last_session_refresh():
-    """Refresh home session card after navigation / screen transitions."""
+    # Odświeża kartę "ostatnia sesja" na ekranie głównym.
+    # Robi to z opóźnieniem, żeby plik z sesjami zdążył się zapisać
+    # zanim spróbujemy go odczytać. Podobnie jak w przypadku statystyk. 
     app = MDApp.get_running_app()
     if not app or not getattr(app, "root", None):
         return
@@ -238,6 +286,8 @@ def schedule_home_last_session_refresh():
         Clock.schedule_once(lambda _dt, h=home: h.refresh_last_session(), delay)
 
 
+# Zwraca ostatnią (najnowszą) sesję z pliku, lub None jeśli nie ma żadnej.
+# Uzupełnia dane o emoji i kolorze z metadanych projektu.
 def get_last_session():
     sessions = load_sessions()
     if not sessions:
@@ -252,6 +302,7 @@ def get_last_session():
     return session
 
 
+# Formatuje liczbę sekund w formacie HH:MM:SS (np. "01:30:00" = 1 godzina 30 minut).
 def format_duration_hms(seconds):
     s = max(0, int(seconds))
     h, r = divmod(s, 3600)
@@ -259,8 +310,10 @@ def format_duration_hms(seconds):
     return f"{h:02d}:{m:02d}:{sec:02d}"
 
 
+# Tworzy polską etykietę opisującą kiedy sesja się zakończyła.
+# Jeśli dzisiaj – "Dzisiaj". Jeśli wczoraj – "Wczoraj".
+# W przeciwnym razie – dzień i miesiąc (np. "3 cze").
 def format_when_label(iso_dt):
-    """Polish relative label for session end time."""
     if not iso_dt:
         return ""
     if isinstance(iso_dt, str):
@@ -286,6 +339,11 @@ def format_when_label(iso_dt):
 
 
 def _parse_ended(session):
+    # Wyciąga datę zakończenia sesji z jej danych.
+    # Najpierw sprawdza pole "ended_at" (kiedy się zakończyła),
+    # a jeśli go nie ma – używa "started_at" (kiedy się zaczęła).
+    # To zabezpieczenie dla starszych wersji pliku, które nie miały
+    # osobnego pola zakończenia. Jeśli daty są nieprawidłowe – zwraca None.
     raw = session.get("ended_at") or session.get("started_at")
     if not raw:
         return None
@@ -296,7 +354,10 @@ def _parse_ended(session):
 
 
 def sessions_in_period(sessions, period_label):
-    """Filter sessions by statistics period: Dzień / Tydzień / Miesiąc."""
+    # Filtruje listę sesji – zostawia tylko te, które zakończyły się
+    # w wybranym okresie (dzisiaj, w tym tygodniu, w tym miesiącu).
+    # Dzięki temu statystyki pokazują tylko aktualne dane,
+    # a nie całą historię od początku używania aplikacji.
     start = period_range_start(period_label)
     out = []
     for s in sessions:
@@ -307,12 +368,10 @@ def sessions_in_period(sessions, period_label):
 
 
 def _merge_project_meta(row):
-    """Fill icon/color from projects.json when missing on stored sessions.
-
-    Always rewrites the icon through resolve_emoji_source so that PNG entries
-    stored as legacy in-repo paths (e.g. assets/Emoji_PNG/foo.png) point at the
-    runtime-extracted location after the emoji-zip packaging refactor.
-    """
+    # Sprawdza czy w danych projektu (przygotowanych do statystyk) są wszystkie
+    # potrzebne informacje: emoji i kolor. Jeśli brakuje – uzupełnia je
+    # z pliku projects.json. To zabezpieczenie na wypadek gdyby projekt
+    # został zmieniony po zapisaniu sesji (np. zmiana emoji).
     meta = find_project_meta(row["title"])
     if meta:
         if meta.get("icon"):
@@ -325,8 +384,10 @@ def _merge_project_meta(row):
     return row
 
 
+# Grupuje sesje po projektach i sumuje czas dla każdego projektu.
+# Dodaje też czas z celów czasowych (goal_seconds_by_project).
+# Zwraca posortowaną listę (najwięcej czasu na początku).
 def aggregate_by_project(sessions, period_label):
-    """Return list of dicts: title, emoji_source, color, total_seconds (all projects)."""
     totals = {}
     for s in sessions:
         title = (s.get("project_title") or "").strip() or "?"
@@ -342,6 +403,7 @@ def aggregate_by_project(sessions, period_label):
             }
         totals[title]["total_seconds"] += sec
 
+    # Dodaj czas z celów czasowych
     for title, sec in goal_seconds_by_project(period_label).items():
         if title not in totals:
             meta = find_project_meta(title)
@@ -360,8 +422,12 @@ def aggregate_by_project(sessions, period_label):
     return rows
 
 
+# Główna funkcja dla ekranu statystyk.
+# Przygotowuje trzy rzeczy:
+#   1. "pie" – lista kolorów i procentów dla wykresu kołowego
+#   2. "detail" – lista szczegółów (nazwa, ikona, czas) dla tabeli
+#   3. "total" – łączny czas we wszystkich projektach
 def statistics_from_sessions(period_label):
-    """Build pie chart data, detail rows, and total seconds for StatisticsScreen."""
     sessions = sessions_in_period(load_sessions(), period_label)
     rows = aggregate_by_project(sessions, period_label)
     total = sum(r["total_seconds"] for r in rows)

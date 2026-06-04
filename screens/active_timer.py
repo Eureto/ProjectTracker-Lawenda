@@ -1,12 +1,8 @@
-"""Shared active timer state for the UI process and Android foreground service.
-
-State files are keyed by a stable per-project ``uid`` (a UUID4 string) rather
-than by the user-visible title. This lets two projects share the same display
-name without sharing timers, goals, or recorded sessions. Legacy installs
-(pre-uid) are migrated transparently the first time the new code runs via
-``migrate_legacy_state_to_uids``.
-"""
-
+# Zarządzanie aktywnym timerem (stoperem) projektu.
+# Ten plik przechowuje informacje o tym, który projekt jest aktualnie mierzony oraz które cele czasowe są włączone.
+# Dane są zapisywane w plikach JSON w prywatnym folderze aplikacji, więc przetrwają zamknięcie i ponowne otwarcie aplikacji.
+# JSON to prosty format tekstowy, przypominający słownik, łatwy do odczytu i zapisu przez program.
+# UID (unikalny identyfikator) zapewnia, że każdy projekt ma własny numer – nawet przy takiej samej nazwie nie dochodzi do mieszania danych.
 import datetime
 import json
 import os
@@ -14,25 +10,26 @@ import tempfile
 import uuid
 
 
-ACTIVE_TIMER_FILE = "active_timer.json"
-ACTIVE_GOALS_FILE = "active_goals.json"
-PROJECT_DETAILS_FILE = "project_details.json"
-PROJECTS_FILE = "projects.json"
-SESSIONS_FILE = "sessions.json"
-CARD_POSITIONS_FILE = "card_positions.json"
+# Nazwy plików, w których przechowujemy dane
+ACTIVE_TIMER_FILE = "active_timer.json"      # Aktualnie działający stoper
+ACTIVE_GOALS_FILE = "active_goals.json"      # Aktywne cele czasowe
+PROJECT_DETAILS_FILE = "project_details.json" # Szczegóły projektu (notatki, cele itp.)
+PROJECTS_FILE = "projects.json"               # Lista wszystkich projektów
+SESSIONS_FILE = "sessions.json"               # Historia sesji (zakończonych pomiarów)
+CARD_POSITIONS_FILE = "card_positions.json"   # Pozycje kart na ekranie głównym
 
 
 _BASE_DIR_OVERRIDE = None
 
 
 def set_base_dir(path):
-    """Force a specific storage directory (used by the Android service process)."""
+    # Ustawia folder do zapisu danych (używane przez usługę na Androidzie).
     global _BASE_DIR_OVERRIDE
     _BASE_DIR_OVERRIDE = path or None
 
 
 def _android_files_dir():
-    """Resolve getFilesDir() from either PythonActivity (UI) or PythonService (service)."""
+    # Próbuje znaleźć prywatny folder aplikacji na Androidzie.
     try:
         from jnius import autoclass
     except Exception:
@@ -52,31 +49,33 @@ def _android_files_dir():
 
 
 def default_base_dir():
-    """Return the app-private storage directory in both UI and Android service processes."""
+    # Zwraca domyślny folder do zapisu danych aplikacji.
     if _BASE_DIR_OVERRIDE:
         return _BASE_DIR_OVERRIDE
-
     try:
         from kivymd.app import MDApp
-
         app = MDApp.get_running_app()
         if app is not None and getattr(app, "user_data_dir", ""):
             return app.user_data_dir
     except Exception:
         pass
-
     android_dir = _android_files_dir()
     if android_dir:
         return android_dir
-
     return os.environ.get("PROJECTTRACKER_USER_DATA_DIR") or os.getcwd()
 
+
+# ---------------------------------------------------------------------------
+# FUNKCJE POMOCNICZE DO ODCZYTU / ZAPISU PLIKÓW
+# ---------------------------------------------------------------------------
 
 def _path(filename, base_dir=None):
     return os.path.join(base_dir or default_base_dir(), filename)
 
 
 def _read_json(filename, default, base_dir=None):
+    # Wczytuje plik JSON w bezpieczny sposób. Jeśli plik nie istnieje lub jest
+    # uszkodzony, zwraca domyślną wartość, taką jak pusta lista lub słownik.
     path = _path(filename, base_dir)
     if not os.path.exists(path):
         return default
@@ -89,6 +88,9 @@ def _read_json(filename, default, base_dir=None):
 
 
 def _write_json(filename, data, base_dir=None):
+    # Zapisuje dane do pliku JSON w bezpieczny sposób. Najpierw zapisuje je
+    # do tymczasowego pliku, a potem podmienia oryginał – to chroni przed
+    # utratą danych, gdyby zapis się nie powiódł.
     path = _path(filename, base_dir)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=f".{filename}.", dir=os.path.dirname(path))
@@ -105,6 +107,7 @@ def _write_json(filename, data, base_dir=None):
 
 
 def _remove(filename, base_dir=None):
+    # Usuwa plik, jeśli istnieje.
     try:
         os.remove(_path(filename, base_dir))
     except FileNotFoundError:
@@ -118,6 +121,8 @@ def _now():
 
 
 def _to_datetime(value):
+    # Konwertuje podaną wartość (ciąg znaków lub obiekt datetime) na obiekt
+    # datetime. Jeśli podano już datetime, zwraca je bez zmian.
     if isinstance(value, datetime.datetime):
         return value
     if not value:
@@ -128,7 +133,13 @@ def _to_datetime(value):
         return None
 
 
+# ---------------------------------------------------------------------------
+# OBLICZANIE CZASU
+# ---------------------------------------------------------------------------
+
 def elapsed_from_state(state, now=None):
+    # Oblicza łączny czas w sekundach, który upłynął od momentu uruchomienia
+    # stopera do teraz, wliczając czas z poprzednich uruchomień.
     started = _to_datetime((state or {}).get("started_at"))
     if started is None:
         return int(float((state or {}).get("base_elapsed_seconds", 0)))
@@ -138,6 +149,7 @@ def elapsed_from_state(state, now=None):
 
 
 def running_seconds(state, now=None):
+    # Oblicza liczbę sekund, które upłynęły od ostatniego uruchomienia stopera.
     started = _to_datetime((state or {}).get("started_at"))
     if started is None:
         return 0
@@ -145,12 +157,15 @@ def running_seconds(state, now=None):
     return max(0, int((now - started).total_seconds()))
 
 
+# ---------------------------------------------------------------------------
+# TIMER (STOPER) GŁÓWNEGO PROJEKTU
+# ---------------------------------------------------------------------------
+
 def read_project_timer(base_dir=None):
+    # Odczytuje aktualny stan stopera projektu.
     data = _read_json(ACTIVE_TIMER_FILE, {}, base_dir)
     if not isinstance(data, dict):
         return {}
-    # Legacy active_timer.json entries only carry ``project_title``; resolve a
-    # uid lazily so callers comparing by uid still match the running project.
     if data.get("project_title") and not data.get("project_uid"):
         meta = _project_meta_by_title(data.get("project_title"), base_dir)
         if meta.get("uid"):
@@ -176,15 +191,19 @@ def start_project_timer(
 
 
 def clear_project_timer(base_dir=None):
+    # Zatrzymuje i usuwa plik przechowujący stan stopera projektu.
     _remove(ACTIVE_TIMER_FILE, base_dir)
 
 
+# ---------------------------------------------------------------------------
+# CELE CZASOWE (z samochodzikiem)
+# ---------------------------------------------------------------------------
+
 def read_goals(base_dir=None):
+    # Odczytuje listę aktualnie aktywnych celów czasowych.
     data = _read_json(ACTIVE_GOALS_FILE, [], base_dir)
     if not isinstance(data, list):
         return []
-    # Same legacy backfill as read_project_timer: older goal rows only stored
-    # the project title.
     changed = False
     for goal in data:
         if isinstance(goal, dict) and goal.get("project_title") and not goal.get("project_uid"):
@@ -201,6 +220,7 @@ def read_goals(base_dir=None):
 
 
 def read_goal(uid, base_dir=None):
+    # Zwraca pojedynczy cel czasowy na podstawie jego unikalnego identyfikatora.
     for goal in read_goals(base_dir):
         if goal.get("uid") == uid:
             return goal
@@ -208,6 +228,7 @@ def read_goal(uid, base_dir=None):
 
 
 def upsert_goal(goal_state, base_dir=None):
+    # Dodaje nowy cel czasowy lub aktualizuje istniejący.
     uid = goal_state.get("uid")
     if not uid:
         return goal_state
@@ -246,6 +267,7 @@ def start_goal(
 
 
 def remove_goal(uid, base_dir=None):
+    # Usuwa określony cel czasowy.
     goals = [g for g in read_goals(base_dir) if g.get("uid") != uid]
     if goals:
         _write_json(ACTIVE_GOALS_FILE, goals, base_dir)
@@ -253,14 +275,16 @@ def remove_goal(uid, base_dir=None):
         _remove(ACTIVE_GOALS_FILE, base_dir)
 
 
+# ---------------------------------------------------------------------------
+# SZCZEGÓŁY PROJEKTU (notatki, cele, etapy)
+# ---------------------------------------------------------------------------
+
 def _read_project_details(base_dir=None):
     data = _read_json(PROJECT_DETAILS_FILE, {}, base_dir)
     return data if isinstance(data, dict) else {}
 
-
 def _write_project_details(data, base_dir=None):
     _write_json(PROJECT_DETAILS_FILE, data, base_dir)
-
 
 def _read_projects(base_dir=None):
     data = _read_json(PROJECTS_FILE, [], base_dir)
@@ -268,6 +292,7 @@ def _read_projects(base_dir=None):
 
 
 def _project_meta_by_uid(project_uid, base_dir=None):
+    # Znajduje metadane projektu na podstawie jego unikalnego identyfikatora (UID).
     if not project_uid:
         return {}
     for project in _read_projects(base_dir):
@@ -277,6 +302,7 @@ def _project_meta_by_uid(project_uid, base_dir=None):
 
 
 def _project_meta_by_title(project_title, base_dir=None):
+    # Znajduje metadane projektu na podstawie jego nazwy (tytułu).
     if not project_title:
         return {}
     for project in _read_projects(base_dir):
@@ -286,6 +312,7 @@ def _project_meta_by_title(project_title, base_dir=None):
 
 
 def _project_meta(project_uid=None, project_title=None, base_dir=None):
+    # Szuka metadanych projektu – najpierw po UID, a jeśli go nie ma, po tytule.
     meta = _project_meta_by_uid(project_uid, base_dir) if project_uid else {}
     if not meta and project_title:
         meta = _project_meta_by_title(project_title, base_dir)
@@ -293,25 +320,18 @@ def _project_meta(project_uid=None, project_title=None, base_dir=None):
 
 
 def _details_key(state_or_meta):
-    """Pick the per-project storage key — uid wins over title (legacy data)."""
+    # Określa klucz (UID lub tytuł) używany do przechowywania danych projektu.
     if not isinstance(state_or_meta, dict):
         return "_"
-    return (
-        state_or_meta.get("project_uid")
-        or state_or_meta.get("uid")
-        or state_or_meta.get("project_title")
-        or "_"
-    )
+    return state_or_meta.get("project_uid") or state_or_meta.get("uid") or state_or_meta.get("project_title") or "_"
 
 
-def record_session(
-    project_title,
-    duration_seconds,
-    started_at=None,
-    ended_at=None,
-    base_dir=None,
-    project_uid="",
-):
+# ---------------------------------------------------------------------------
+# ZAPISYWANIE SESJI (zakończonego pomiaru czasu)
+# ---------------------------------------------------------------------------
+
+def record_session(project_title, duration_seconds, started_at=None, ended_at=None, base_dir=None, project_uid=""):
+    # Zapisuje zakończoną sesję pomiaru czasu, czyli jeden odcinek czasu.
     if not project_title or int(duration_seconds) < 1:
         return None
     ended = _to_datetime(ended_at) or _now()
@@ -336,6 +356,7 @@ def record_session(
 
 
 def finalize_project_timer(base_dir=None, now=None):
+    # Zatrzymuje stoper, zapisuje sesję i czyści przechowywany stan.
     state = read_project_timer(base_dir)
     if not state:
         return None
@@ -369,6 +390,7 @@ def finalize_project_timer(base_dir=None, now=None):
 
 
 def finalize_goal(uid, base_dir=None, now=None):
+    # Zatrzymuje cel czasowy i zapisuje jego aktualny stan.
     goal = read_goal(uid, base_dir)
     if not goal:
         return None
@@ -399,25 +421,24 @@ def finalize_goal(uid, base_dir=None, now=None):
 
 
 def has_active_items(base_dir=None):
+    # Sprawdza, czy istnieje aktywny stoper lub aktywny cel czasowy.
     return bool(read_project_timer(base_dir) or read_goals(base_dir))
 
 
 # ---------------------------------------------------------------------------
-# Project UID migration
+# MIGRACJA DANYCH – nadawanie UID starym projektom
 # ---------------------------------------------------------------------------
-
+# Kiedyś projekty były identyfikowane tylko po nazwie (tytule). To powodowało
+# problemy gdy dwa projekty miały tę samą nazwę – ich dane się mieszały.
+# Dlatego teraz każdy projekt ma swój unikalny numer (UID). Poniższe funkcje
+# nadają UID istniejącym projektom i przenoszą ich dane z kluczy nazwowych
+# na klucze UID.
 
 def _new_uid():
     return f"proj-{uuid.uuid4().hex}"
 
-
 def ensure_project_uids(base_dir=None):
-    """Backfill ``uid`` on every project in projects.json.
-
-    Returns the updated list. Idempotent: a no-op once every project already
-    has a uid. The list is written back to disk only if at least one entry
-    needed a new uid, to avoid spurious file rewrites on every launch.
-    """
+    # Dodaje brakujące UID do wszystkich projektów. Wywoływane automatycznie przy starcie.
     projects = _read_projects(base_dir)
     if not isinstance(projects, list):
         return []
@@ -434,14 +455,7 @@ def ensure_project_uids(base_dir=None):
 
 
 def migrate_legacy_state_to_uids(base_dir=None):
-    """Re-key title-keyed state files to uid keys.
-
-    When multiple projects share a title the first occurrence in projects.json
-    wins ownership of the legacy blob; duplicates start with fresh state. This
-    is the best we can do because pre-uid data simply didn't distinguish
-    them — which is exactly what made the duplicates share timers in the
-    first place.
-    """
+    # Przenosi dane z kluczy opartych na tytule na klucze oparte na UID.
     projects = ensure_project_uids(base_dir)
     title_to_uid = {}
     for project in projects:
@@ -484,8 +498,6 @@ def _migrate_project_details(base_dir, title_to_uid, valid_uids):
             migrated[uid] = blob
             changed = True
         else:
-            # Orphan title with no matching project — keep the entry on the
-            # off chance the project comes back, but stash under its title.
             migrated[key] = blob
     if changed:
         _write_json(PROJECT_DETAILS_FILE, migrated, base_dir)
@@ -551,11 +563,6 @@ def _migrate_card_positions(base_dir, title_to_uid, valid_uids):
 
 
 def _migrate_sessions(base_dir, title_to_uid):
-    """Backfill ``project_uid`` on legacy sessions.
-
-    Sessions stay title-keyed for statistics aggregation — adding a uid is just
-    a hint for future per-project filtering.
-    """
     path = _path(SESSIONS_FILE, base_dir)
     if not os.path.exists(path):
         return

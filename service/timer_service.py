@@ -1,9 +1,17 @@
-"""Android foreground service that owns persistent running-timer notifications."""
-
 # ---------------------------------------------------------------------------
-# Helper functions
+# USŁUGA TIMERA NA ANDROIDZIE – powiadomienia o aktywnym stoperze
 # ---------------------------------------------------------------------------
-# Convert ARGB components to a signed integer used for notification colors.
+# Ten plik działa jako osobna "usługa" na Androidzie. Gdy użytkownik
+# uruchomi stoper i zminimalizuje aplikację, ta usługa utrzymuje
+# powiadomienie na pasku statusu, informujące że czas jest mierzony.
+# Dzięki temu użytkownik wie, że stoper działa, nawet nie patrząc
+# na aplikację.
+#
+# CO TO JEST "FOREGROUND SERVICE"?
+# To specjalny rodzaj usługi na Androidzie, która pokazuje stałe
+# powiadomienie. System wie, że to ważne, i nie zabija jej, nawet
+# gdy potrzebuje więcej pamięci.
+# ---------------------------------------------------------------------------
 
 import os
 import sys
@@ -11,27 +19,32 @@ import time
 import traceback
 import zlib
 
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from screens import active_timer
 
-
+# Identyfikatory dla powiadomień
 PACKAGE = "org.stokrotka.stokrotka"
 CHANNEL_ID = "running_timers"
-ACTION_STOP_TIMER = f"{PACKAGE}.STOP_TIMER"
-ACTION_STOP_GOAL = f"{PACKAGE}.STOP_GOAL"
-TIMER_NOTIFICATION_ID = 1001
-GOAL_NOTIFICATION_BASE_ID = 1100
-PLACEHOLDER_NOTIFICATION_ID = 999
+ACTION_STOP_TIMER = f"{PACKAGE}.STOP_TIMER"  # Akcja: zatrzymaj stoper
+ACTION_STOP_GOAL = f"{PACKAGE}.STOP_GOAL"    # Akcja: zatrzymaj cel czasowy
+TIMER_NOTIFICATION_ID = 1001                  # ID powiadomienia stopera
+GOAL_NOTIFICATION_BASE_ID = 1100              # Numer początkowy dla celów (każdy dostaje swój numer)
+PLACEHOLDER_NOTIFICATION_ID = 999             # Tymczasowe powiadomienie podczas uruchamiania
 TAG = "ProjectTrackerSvc"
-IDLE_GRACE_SECONDS = 6
+IDLE_GRACE_SECONDS = 6  # Po 6 sekundach bez aktywności zatrzymaj usługę
+
+# Kolor akcentu (fioletowy) dla powiadomień
+ACCENT_COLOR = _argb(0xFF, 0x8A, 0x2B, 0xE2)
 
 
-# Convert ARGB components to a signed integer color value.
 def _argb(a, r, g, b):
+    # Konwertuje cztery składniki koloru (Alpha, Czerwony, Zielony, Niebieski) 
+    # z zakresu 0-255 na jedną liczbę całkowitą, która reprezentuje ten kolor 
+    # w formacie używanym przez system Android. Jest to potrzebne ponieważ 
+    # Android API wymaga kolorów w tej specjalnej postaci liczbowej.
     val = (a << 24) | (r << 16) | (g << 8) | b
     if val >= 0x80000000:
         val -= 0x100000000
@@ -43,30 +56,45 @@ ACCENT_COLOR = _argb(0xFF, 0x8A, 0x2B, 0xE2)
 
 # Log a message to both stdout and Android logcat (if available).
 def _logcat(message):
+    # Zapisuje wiadomość zarówno w konsoli (print) jak i w logach systemowych Android (logcat) 
+    # do celów debugowania. Dzięki temu deweloper może śledzić działanie aplikacji 
+    # zarówno podczas testowania na komputerze jak i na urządzeniu Android.
     print(f"{TAG}: {message}", flush=True)
     try:
         from jnius import autoclass
-
         autoclass("android.util.Log").i(TAG, str(message))
     except Exception:
         pass
 
 
-# Format a duration in seconds as HH:MM:SS string.
 def _format_seconds(seconds):
+    # Konwertuje liczbę sekund na czytelny format czasu HH:MM:SS (godziny:minuty:sekundy).
+    # Na przykład: 3661 sekund zostanie przekonwertowane na "01:01:01" (1 godzina, 1 minuta, 1 sekunda).
     seconds = int(max(0, seconds))
     h, rem = divmod(seconds, 3600)
     m, s = divmod(rem, 60)
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-# Compute a stable notification ID for a goal based on its UID.
 def _goal_notification_id(uid):
+    # Generuje unikalny numer powiadomienia dla celu czasowego na podstawie jego UID (unikalnego identyfikatora).
+    # Używa algorytmu CRC32 do stworzenia rozproszenia liczb, dzięki czemu różne cele otrzymują 
+    # różne numery powiadomień, co pozwala systemowi Android na właściwe zarządzanie nimi.
     return GOAL_NOTIFICATION_BASE_ID + (zlib.crc32(uid.encode("utf-8")) % 8000)
 
 
-# Calculate progress metrics for a goal (label, percent, logged, target).
 def _goal_progress(goal):
+    # Oblicza postęp realizacji celu czasowego.
+    # Zwraca cztery wartości:
+    #   1. label - opis celu (nazwa lub tekst celu)
+    #   2. pct - procent ukończenia celu (0-100)
+    #   3. logged - już zalogowany czas w sekundach
+    #   4. target - docelowy czas celu w sekundach
+    # 
+    # Przykład zwracanych wartości: ("Nauka angielskiego", 75, 3600, 4800)
+    # oznacza, że cel "Nauka angielskiego" jest ukończony w 75%,
+    # użytkownik już spędził na nim 3600 sekund (1 godzina),
+    # a całkowity zaplanowany czas to 4800 sekund (1 godzina 20 minut).
     logged = float(goal.get("base_logged_seconds", 0.0)) + active_timer.running_seconds(goal)
     target = max(1.0, float(goal.get("target_seconds", 1.0)))
     pct = int(round(100.0 * logged / target))
@@ -74,16 +102,29 @@ def _goal_progress(goal):
     return label, pct, int(logged), int(target)
 
 
-# Produce a short textual representation of a goal's progress.
 def _goal_text(goal):
+    # Tworzy czytelny tekst opisujący postęp celu w formacie:
+    # "Opis celu - XX% (HH:MM:SS)"
+    # gdzie XX to procent ukończenia, a HH:MM:SS to już spędzony czas.
+    # 
+    # Przykład: "Nauka hiszpańskiego - 45% (02:30:15)"
     label, pct, logged, _ = _goal_progress(goal)
     return f"{label} - {pct}% ({_format_seconds(logged)})"
 
 
-# Service class that manages Android foreground notifications for timers and goals.
 class TimerNotificationService:
-    # Initialize the service, set up notification channel and placeholder.
+    # Usługa która zarządza powiadomieniami o aktywnym stoperze projektu oraz celach czasowych.
+    # Jej głównym zadaniem jest wyświetlanie stałego powiadomienia w pasku statusu Androida,
+    # które informuje użytkownika o aktualnie mierzonej aktywności (stopercie lub celach czasowych).
+    # Dzięki temu użytkownik wie, że czas jest mierzony nawet gdy aplikacja jest zminimalizowana
+    # lub nie jest widoczna na ekranie.
+    
     def __init__(self):
+        # Inicjalizuje usługę poprzez:
+        #   1. Ładowanie potrzebnych klas Androida przez JNI
+        #   2. Tworzenie kanału powiadomień (wymagane w Android 8.0+)
+        #   3. Ustawianie folderu do zapisu danych (takiego samego jak używa główna aplikacja)
+        #   4. Rejestrację odbiornika szerokiastreamowego do obsługi przycisków w powiadomieniach
         from jnius import autoclass
 
         self.autoclass = autoclass
@@ -119,6 +160,7 @@ class TimerNotificationService:
         self._seen_active = False
         self._large_icon = self._load_large_icon()
 
+        # Ustaw folder do zapisu danych (taki sam jak aplikacja)
         try:
             base_dir = self.service.getFilesDir().getAbsolutePath()
             active_timer.set_base_dir(base_dir)
@@ -136,6 +178,9 @@ class TimerNotificationService:
 
     # Load the app's large icon bitmap for notifications.
     def _load_large_icon(self):
+        # Wczytuje dużą ikonę aplikacji z zasobów Androida, która będzie wyświetlana
+        # w powiadomieniu jako większe obrazki. Jeśli BitmapFactory nie jest dostępna
+        # (co może się zdarzyć w niektórych środowiskach testowych), zwraca None.
         if self.BitmapFactory is None:
             return None
         try:
@@ -146,8 +191,10 @@ class TimerNotificationService:
             _logcat(f"large icon load failed: {exc!r}")
             return None
 
-    # Create the Android notification channel (API 26+).
     def _create_channel(self):
+        # Tworzy kanał powiadomień, który jest wymagany w Androidzie 8.0 (API level 26) i nowszych.
+        # Kanał powiadomień pozwala użytkownikowi na kontrolowanie ustawień powiadomień
+        # dla tej konkretnej aplikacji (jak ważność, dźwięk, itp.).
         if self.sdk_int < 26:
             return
         channel = self.NotificationChannel(
@@ -162,15 +209,28 @@ class TimerNotificationService:
             pass
         self.manager.createNotificationChannel(channel)
 
-    # Determine appropriate PendingIntent flags based on SDK version.
+    def _jstr(self, value):
+        # Konwertuje string Pythona na obiekt string Javy, który jest wymagany
+        # przy wywoływaniu metod Androida przez JNI (Java Native Interface).
+        # Jest to konieczne ponieważ Android API pracuje ze stringami Javy,
+        # a nie ze stringami Pythona.
+        return self.JavaString(str(value or ""))
+
     def _pending_flags(self):
+        # Zwraca odpowiednie flagi dla PendingIntent w zależności od wersji SDK Androida.
+        # FLAG_UPDATE_CURRENT zapewnia aktualizację istniejącego intencji.
+        # FLAG_IMMUTABLE (dla API 23+) sprawia, że PendingIntent jest niezmienialny
+        # ze względów bezpieczeństwa.
         flags = self.PendingIntent.FLAG_UPDATE_CURRENT
         if self.sdk_int >= 23:
             flags |= self.PendingIntent.FLAG_IMMUTABLE
         return flags
 
-    # Build an intent that launches the main activity with the project title.
     def _activity_intent(self, project_title):
+        # Tworzy intencję (intention) która po kliknięciu w powiadomienie
+        # otwiera główną aplikację na ekranie wybranego projektu.
+        # Intent to obiekt Androida używany do uruchamiania aktywności
+        # lub przekazywania danych między komponentami aplikacji.
         intent = self.Intent(self.context, self.PythonActivity)
         intent.setFlags(
             self.Intent.FLAG_ACTIVITY_CLEAR_TOP | self.Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -178,16 +238,20 @@ class TimerNotificationService:
         intent.putExtra("project", project_title or "")
         return intent
 
-    # Build an intent that triggers a stop action (timer or goal).
     def _stop_intent(self, action, uid=""):
+        # Tworzy intencję która po kliknięciu przycisku 'Zatrzymaj' w powiadomieniu
+        # wysyła sygnał do usługi aby zatrzymać stoper lub cel czasowy.
+        # Action określa jaką akcję wykonać (zatrzymanie stopera czy celu),
+        # a UID identyfikuje konkretny cel czasowy (jeśli dotyczy).
         intent = self.Intent(self._jstr(action))
         intent.setPackage(self._jstr(self.package_name))
         if uid:
             intent.putExtra(self._jstr("uid"), self._jstr(uid))
         return intent
 
-    # Return a Notification.Builder appropriate for the SDK version.
     def _builder(self):
+        # Tworzy odpowiedni obiekt Notification.Builder w zależności od wersji SDK Androida.
+        # W Androidzie 8.0 (API level 26) i nowszych należy podać kanał powiadomień.
         if self.sdk_int >= 26:
             return self.NotificationBuilder(self.context, CHANNEL_ID)
         return self.NotificationBuilder(self.context)
@@ -263,6 +327,11 @@ class TimerNotificationService:
 
     # Build a placeholder notification shown while the service starts.
     def _placeholder_notification(self):
+        # Tworzy tymczasowe powiadomienie widoczne na pasku statusu tylko
+        # podczas uruchamiania usługi, zanim zacznie działać właściwy stoper.
+        # To mignięcie trwa ułamek sekundy – potem jest zastępowane
+        # prawdziwym powiadomieniem z czasem projektu.
+        # Wyświetla: ikonę aplikacji, tytuł "Lawenda" i napis "Trwa uruchamianie stopera..."
         builder = self._builder()
         builder.setSmallIcon(self.icon)
         if self._large_icon is not None:
@@ -330,6 +399,12 @@ class TimerNotificationService:
 
     # Start or update the foreground service with the given notification.
     def _start_foreground(self, notification_id, notification):
+        # Uruchamia usługę Android na pierwszym planie ("foreground service").
+        # To specjalny rodzaj usługi, która pokazuje stałe powiadomienie
+        # na pasku statusu – system wie, że to ważne, i nie zabija jej.
+        # Jeśli usługa już działa z innym ID powiadomienia – anuluje stare
+        # i zastępuje nowym. Dzięki temu zawsze mamy tylko jedno aktywne
+        # powiadomienie dla stopera lub celu.
         if self._foreground_id == notification_id:
             try:
                 self.manager.notify(notification_id, notification)
@@ -348,8 +423,11 @@ class TimerNotificationService:
                 pass
         self._foreground_id = notification_id
 
-    # Stop the foreground service and clear its notification.
     def _stop_foreground(self):
+        # Zatrzymuje usługę pierwszoplanową i usuwa jej powiadomienie.
+        # Android wymaga specjalnego wywołania (stopForeground) żeby
+        # poinformować system, że usługa nie jest już ważna.
+        # Czyści też zapamiętane ID powiadomienia.
         try:
             if self.sdk_int >= 24:
                 self.service.stopForeground(1)
@@ -364,8 +442,14 @@ class TimerNotificationService:
                 pass
             self._foreground_id = None
 
-    # Register a BroadcastReceiver to handle stop actions from notifications.
     def _register_stop_receiver(self):
+        # Rejestruje "nasłuchiwacz" (BroadcastReceiver), który wyłapuje
+        # kliknięcia przycisku "Zatrzymaj" w powiadomieniach Androida.
+        # Gdy użytkownik kliknie "Zatrzymaj" w powiadomieniu:
+        # - Dla stopera: zatrzymuje pomiar czasu projektu
+        # - Dla celu czasowego: zatrzymuje śledzenie konkretnego celu
+        # BroadcastReceiver to mechanizm Androida do odbierania sygnałów
+        # między różnymi częściami systemu i aplikacji.
         try:
             from android.broadcast import BroadcastReceiver
         except Exception as exc:
@@ -401,7 +485,6 @@ class TimerNotificationService:
             _logcat(f"BroadcastReceiver.start failed: {exc!r}")
             self._receiver = None
 
-    # Unregister the previously registered BroadcastReceiver.
     def _unregister_stop_receiver(self):
         if self._receiver is None:
             return
@@ -413,6 +496,14 @@ class TimerNotificationService:
 
     # Perform a single update cycle: refresh notifications for timer and goals.
     def _tick_once(self):
+        # Odświeża wszystkie powiadomienia na pasku statusu.
+        # Sprawdza:
+        # 1. Czy jest aktywny stoper projektu? Jeśli tak – aktualizuje
+        #    jego powiadomienie z nowym czasem.
+        # 2. Czy są aktywne cele czasowe? Dla każdego aktualizuje
+        #    osobne powiadomienie.
+        # 3. Czy jakiś cel został zakończony? Usuwa jego powiadomienie.
+        # Wywoływane co 1 sekundę przez główną pętlę usługi.
         timer_state = active_timer.read_project_timer()
         goals = active_timer.read_goals()
         active_ids = []
@@ -439,11 +530,16 @@ class TimerNotificationService:
         for old_id in self._last_goal_ids - set(active_ids):
             self.manager.cancel(old_id)
         self._last_goal_ids = {nid for nid in active_ids if nid != TIMER_NOTIFICATION_ID}
-
         return bool(active_ids)
 
-    # Main loop of the service; periodically updates notifications until idle.
     def run(self):
+        # Główna pętla usługi – działa w tle na Androidzie.
+        # Co sekundę:
+        # 1. Odświeża powiadomienia (wywołuje _tick_once)
+        # 2. Jeśli są aktywne timery – kontynuuje działanie
+        # 3. Jeśli nie ma aktywnych timerów przez 6 sekund –
+        #    zatrzymuje się (żeby nie marnować baterii)
+        # Dzięki temu usługa działa tylko gdy jest potrzebna.
         _logcat("service started")
         try:
             while True:
@@ -475,13 +571,16 @@ class TimerNotificationService:
                         except Exception:
                             pass
                         return
-
                 time.sleep(1)
         finally:
             self._unregister_stop_receiver()
 
 
 def main():
+    # Punkt wejścia dla usługi Androida – to jest wywoływane przez
+    # system Android gdy uruchamia usługę w tle. Tworzy obiekt
+    # TimerNotificationService i uruchamia jego główną pętlę.
+    # Jeśli coś pójdzie nie tak – zapisuje błąd do logów.
     try:
         TimerNotificationService().run()
     except Exception:

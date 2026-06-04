@@ -1,31 +1,18 @@
-"""Full-screen map picker for selecting a time-goal geofence (center + radius).
-
-The map center is always the geofence center; the user pans the map to place
-the circle and zooms to size it. The visual circle is a fixed fraction of the
-map viewport, so the radius (in meters) is determined entirely by the current
-zoom level. Hard-capped at 1000 m.
-
-When `kivy_garden.mapview` is not installed (desktop dev without the optional
-dep), the screen renders a fallback message so the rest of the app still works.
-
-Caller protocol:
-    picker = MDApp.get_running_app().root.get_screen("geofence_picker")
-    picker.configure(
-        initial_lat=lat, initial_lon=lon, initial_radius_m=100.0,
-        return_screen="project_info",
-        on_done=lambda result: ...
-    )
-    MDApp.get_running_app().root.current = "geofence_picker"
-
-`on_done(result)` is called exactly once when the user leaves the picker.
-``result`` is a dict with an `action` field:
-    {"action": "save",   "geofence": {"lat": ..., "lon": ..., "radius_m": ..., "zoom": ...}}
-    {"action": "clear"}    # user wants no geofence
-    {"action": "cancel"}   # user backed out, leave existing value untouched
-"""
+# ---------------------------------------------------------------------------
+# WYBÓR LOKALIZACJI (GEOFENCE) – mapa do wyznaczania obszaru
+# ---------------------------------------------------------------------------
+# Ten ekran pozwala użytkownikowi wybrać miejsce na mapie i promień
+# wokół niego (geofence). Służy do automatycznego mierzenia czasu
+# gdy użytkownik znajduje się w wybranym miejscu.
+#
+# CO TO JEST GEOFENCE?
+# To wirtualne ogrodzenie – obszar na mapie. Gdy telefon użytkownika
+# znajduje się w tym obszarze, aplikacja może automatycznie uruchomić
+# stoper. Np. użytkownik wybiera swoją siłownię jako geofence, a stoper
+# włącza się sam gdy przyjdzie na trening.
+# ---------------------------------------------------------------------------
 
 import math
-
 from kivy.clock import Clock
 from kivy.logger import Logger
 from kivy.metrics import dp, sp
@@ -37,6 +24,7 @@ def _log(message):
         Logger.info("GeofencePicker: %s", message)
     except Exception:
         pass
+    
 from kivy.properties import NumericProperty, ObjectProperty, StringProperty
 from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.behaviors import ButtonBehavior
@@ -52,47 +40,33 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDIcon, MDLabel
 from kivymd.uix.screen import MDScreen
 
-# Shared rounded action button used across all bottom sheets and dialogs so
-# this picker matches the rest of the app visually.
 from screens.project_info import RoundedSheetButton
 
 
 class _TapAnchor(ButtonBehavior, AnchorLayout):
-    """Tappable AnchorLayout — Python-side equivalent of the
-    ``ClickableAnchorLayout`` factory class defined in ``addProject.kv``,
-    so we don't have to depend on KV loading order from a Python-built
-    screen."""
-
+    # Klikalny AnchorLayout – odpowiednik ClickableAnchorLayout w Pythonie.
+    # AnchorLayout pozwala pozycjonować element w konkretnym miejscu (np. lewy górny róg).
     pass
 
+
+# Próba importu mapy (kivy_garden.mapview) – jeśli nie jest zainstalowana,
+# aplikacja pokaże komunikat zamiast mapy.
 try:
     from kivy_garden.mapview import MapView
     _MAPVIEW_AVAILABLE = True
     _MAPVIEW_IMPORT_ERROR = None
-except Exception as _exc:  # noqa: BLE001 - we surface the message in the UI
-    MapView = None  # type: ignore[assignment]
+except Exception as _exc:
+    MapView = None
     _MAPVIEW_AVAILABLE = False
     _MAPVIEW_IMPORT_ERROR = repr(_exc)
 
 
 if _MAPVIEW_AVAILABLE:
-
     class _SmoothMapView(MapView):
-        """MapView with truly continuous (non-snapping) pinch zoom.
-
-        Upstream ``kivy_garden.mapview.MapView`` animates back to the nearest
-        integer zoom level when the user lifts the last finger after a pinch
-        (see ``on_touch_up`` in ``view.py``), regardless of ``snap_to_zoom``.
-        That makes it impossible to stop the pinch at an intermediate zoom
-        level — which is exactly what the user wants.
-
-        We override ``on_touch_up`` to perform mapview's bookkeeping (ungrab
-        + decrement ``_touch_count`` + clear ``_pause``) but *not* trigger
-        the snap-back animation. The result: pinch zoom rests at exactly the
-        scale/zoom the user released at, and pan/scroll/double-tap all keep
-        working normally.
-        """
-
+        # MapView z płynnym (nie skaczącym) przybliżaniem.
+        # Standardowa mapa po zdjęciu palca przeskakuje do najbliższej
+        # liczby całkowitej przybliżenia. Ta wersja tego nie robi –
+        # przybliżenie zostaje tam, gdzie użytkownik je ustawił.
         def on_touch_up(self, touch):
             if touch.grab_current == self:
                 touch.ungrab(self)
@@ -100,22 +74,15 @@ if _MAPVIEW_AVAILABLE:
                 if self._touch_count == 0:
                     self._pause = False
                 return True
-            # Not grabbed by us — fall through to default dispatch so
-            # children (e.g. internal scatter) still see the event.
             return Widget.on_touch_up(self, touch)
-
-    # Keep the previous name working so the rest of the module needs no
-    # changes.
     _StableMapView = _SmoothMapView
-
 else:
-    _StableMapView = None  # type: ignore[assignment]
+    _StableMapView = None
 
 
 class _TouchBarrierBox(MDBoxLayout):
-    """MDBoxLayout that blocks touches inside its bounds from reaching widgets
-    beneath it. Children still receive events normally."""
-
+    # Pudełko które blokuje dotknięcia przed dotarciem do elementów pod spodem.
+    # Dzieci wewnątrz wciąż działają normalnie, ale przyciski pod spodem są niewidoczne dla dotknięć.
     def on_touch_down(self, touch):
         handled = super().on_touch_down(touch)
         if handled:
@@ -123,7 +90,6 @@ class _TouchBarrierBox(MDBoxLayout):
         if self.collide_point(*touch.pos):
             return True
         return False
-
     def on_touch_move(self, touch):
         handled = super().on_touch_move(touch)
         if handled:
@@ -131,7 +97,6 @@ class _TouchBarrierBox(MDBoxLayout):
         if self.collide_point(*touch.pos):
             return True
         return False
-
     def on_touch_up(self, touch):
         handled = super().on_touch_up(touch)
         if handled:
@@ -141,35 +106,30 @@ class _TouchBarrierBox(MDBoxLayout):
         return False
 
 
-# Warsaw fallback so the map at least shows tiles before we know the user's
-# location.
+# Domyślne współrzędne Warszawy (gdy nie można ustalić lokalizacji)
 _DEFAULT_LAT = 52.2297
 _DEFAULT_LON = 21.0122
-_DEFAULT_ZOOM = 17  # ≈100 m radius at the default viewport fraction
+_DEFAULT_ZOOM = 17
 _DEFAULT_RADIUS_M = 100.0
-_MAX_RADIUS_M = 1000.0
+_MAX_RADIUS_M = 1000.0  # Maksymalny promień geofence
 
-# Diameter of the on-screen circle as a fraction of the shorter map edge.
-# 1.0 means the circle visually spans the full width of the map on portrait
-# screens. Radius in meters is derived from this pixel diameter and the
-# current zoom/lat, so changing the zoom is how the user picks the area
-# size; the 1000 m cap clamps the radius (and shrinks the visual circle)
-# at low zoom levels.
+# Średnica wizualnego koła jako ułamek krótszego boku mapy
 _VIEWPORT_FRACTION = 1.0
 
-# Soft bounds; mapview's source maxes out around 19.
-_MIN_ZOOM = 12.0
-_MAX_ZOOM = 19.0
+_MIN_ZOOM = 12.0  # Minimalne przybliżenie
+_MAX_ZOOM = 19.0  # Maksymalne przybliżenie
 
 
 def _meters_per_pixel(lat_deg, zoom):
-    """Web Mercator meters/pixel at the given latitude and zoom level."""
+    # Oblicza ile metrów przypada na jeden piksel mapy.
+    # Wartość zależy od szerokości geograficznej (lat_deg) i aktualnego przybliżenia (zoom).
+    # Im bliżej równika (lat_deg=0) i wyższe zoom, tym mniej metrów na piksel.
     return 156543.03392 * math.cos(lat_deg * math.pi / 180.0) / (2.0 ** float(zoom))
 
 
 def _zoom_for_radius(radius_m, lat_deg, viewport_short_px):
-    """Inverse of the radius-from-zoom mapping; used only when re-opening
-    the picker with a previously saved radius but no zoom."""
+    # Oblicza jakie przybliżenie jest potrzebne, aby koło o zadanym promieniu
+    # w metrach zajmowało całą szerąkość mapy. Większy promień = mniejsze przybliżenie.
     if radius_m <= 0 or viewport_short_px <= 0:
         return _DEFAULT_ZOOM
     visual_d = viewport_short_px * _VIEWPORT_FRACTION
@@ -182,8 +142,10 @@ def _zoom_for_radius(radius_m, lat_deg, viewport_short_px):
     return max(_MIN_ZOOM, min(_MAX_ZOOM, math.log2(base / target_mpp)))
 
 
+# Odczytuje płynną (niecałkowitą) wartość przybliżenia mapy.
+# Standardowo zoom to liczba całkowita, ale mapa może mieć dodatkowy atrybut scale,
+# który pozwala na płynne przybliżanie (np. 15.3 zamiast 15).
 def _effective_zoom(mapview):
-    """Read a smooth zoom value from MapView, honoring its internal scale."""
     z = float(getattr(mapview, "zoom", _DEFAULT_ZOOM))
     scale = getattr(mapview, "scale", None)
     if scale is None or float(scale) <= 0:
@@ -195,12 +157,12 @@ def _effective_zoom(mapview):
 
 
 class GeofenceCircleOverlay(Widget):
-    """Translucent ring centered on the parent widget; size set externally.
-
-    Explicitly forwards all touch events so the underlying MapView still
-    receives pan/zoom gestures unobstructed.
-    """
-
+    # Półprzezroczyste koło nakładane na mapę – wizualnie pokazuje
+    # wybrany obszar (geofence). Celowo nie reaguje na dotknięcia,
+    # żeby można było normalnie przesuwać i przybliżać mapę pod spodem.
+    # Użytkownik widzi to jako kolorowe koło z obwódką i celownikiem
+    # na środku.
+    
     ring_color = ObjectProperty((0.55, 0.31, 0.78, 1.0))
     fill_color = ObjectProperty((0.55, 0.31, 0.78, 0.18))
     diameter_px = NumericProperty(dp(120))
@@ -227,6 +189,13 @@ class GeofenceCircleOverlay(Widget):
         return False
 
     def _redraw(self, *_args):
+        # Rysuje wypełnione koło z obwódką na środku mapy.
+        # 1. Wypełnienie: przezroczysty fiolet (żeby widzieć mapę pod spodem)
+        # 2. Obwódka: cienka fioletowa linia dookoła
+        # 3. Celownik: małe białe kółko z fioletową obwódką w samym środku
+        #    – pokazuje dokładnie środek wybranego obszaru.
+        # Rozmiar koła jest ograniczony do mniejszego z: zadanego diametru
+        # lub rozmiaru widoku (minus mały margines).
         self.canvas.clear()
         if self.width < 1 or self.height < 1 or self.diameter_px < 2:
             return
@@ -239,7 +208,7 @@ class GeofenceCircleOverlay(Widget):
             Ellipse(pos=(cx - d / 2.0, cy - d / 2.0), size=(d, d))
             Color(*self.ring_color)
             Line(circle=(cx, cy, d / 2.0), width=dp(2))
-            # Center crosshair dot.
+            # Celownik na środku
             Color(1, 1, 1, 0.95)
             Ellipse(pos=(cx - dp(4), cy - dp(4)), size=(dp(8), dp(8)))
             Color(*self.ring_color)
@@ -247,12 +216,16 @@ class GeofenceCircleOverlay(Widget):
 
 
 class GeofencePickerScreen(MDScreen):
-    """Map screen for picking a geofence center + radius for a time goal."""
+    # Ekran z mapą do wyboru miejsca i promienia geofence.
+    # Użytkownik widzi mapę, może ją przesuwać i przybliżać/oddalać,
+    # a aplikacja oblicza aktualny promień wybranego obszaru.
+    # Obsługa GPS: próbuje znaleźć bieżącą pozycję telefonu i na nią
+    # wyśrodkować mapę.
 
     return_screen = StringProperty("home")
     radius_text = StringProperty(f"{int(_DEFAULT_RADIUS_M)} m")
 
-    _on_done = None  # callback(result_dict)
+    _on_done = None
     _initial_lat = _DEFAULT_LAT
     _initial_lon = _DEFAULT_LON
     _initial_zoom = float(_DEFAULT_ZOOM)
@@ -270,21 +243,14 @@ class GeofencePickerScreen(MDScreen):
         self._radius_label = None
         self._build_ui()
 
-    # --- Public API -----------------------------------------------------
-
-    def configure(
-        self,
-        initial_lat=None,
-        initial_lon=None,
-        initial_radius_m=None,
-        initial_zoom=None,
-        return_screen="project_info",
-        on_done=None,
-    ):
-        """Set the next-open state. Call BEFORE switching screens."""
-        self._initial_location_explicit = (
-            initial_lat is not None and initial_lon is not None
-        )
+    def configure(self, initial_lat=None, initial_lon=None, initial_radius_m=None, initial_zoom=None, return_screen="project_info", on_done=None):
+        # Przygotowuje ekran geofence przed jego otwarciem.
+        # Ustawia: początkową pozycję na mapie (szerokość/długość geo.),
+        # promień, przybliżenie (zoom) oraz ekran do którego wrócić
+        # po zapisaniu. Wywołaj TĘ funkcję PRZED przełączeniem na ten ekran.
+        # "on_done" to funkcja która zostanie wywołana z wynikiem
+        # (współrzędne i promień lub anulowanie).
+        self._initial_location_explicit = (initial_lat is not None and initial_lon is not None)
         self._initial_lat = float(initial_lat) if initial_lat is not None else _DEFAULT_LAT
         self._initial_lon = float(initial_lon) if initial_lon is not None else _DEFAULT_LON
         self._initial_radius_m = (
@@ -302,14 +268,14 @@ class GeofencePickerScreen(MDScreen):
         self._on_done = on_done
         self._location_acquired = False
 
-    # --- Lifecycle ------------------------------------------------------
-
     def on_pre_enter(self, *_args):
+        # Tuż przed pojawieniem się ekranu geofence: ustawiamy mapę
+        # na odpowiedniej pozycji i odpowiednim przybliżeniu.
+        # Jeśli nie ma zapisanej lokalizacji – próbujemy znaleźć
+        # bieżącą pozycję telefonu przez GPS.
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             self._kickoff_location_acquisition()
             return
-        # Determine the starting zoom: prefer explicit one, otherwise derive
-        # from the previously saved radius once we know the viewport size.
         target_zoom = self._initial_zoom
         if not self._initial_zoom_explicit:
             short_px = min(self._mapview.width, self._mapview.height)
@@ -318,25 +284,17 @@ class GeofencePickerScreen(MDScreen):
                     self._initial_radius_m, self._initial_lat, short_px
                 )
         self._set_smooth_zoom(target_zoom)
-        # Use center_on rather than assigning lat/lon directly: assigning the
-        # properties does not recompute the viewport offsets, so the view
-        # stays wherever it last was. center_on() sets delta_x/delta_y and
-        # resets the scatter, which is what actually moves the visible map.
         self._center_map_on(self._initial_lat, self._initial_lon)
         Clock.schedule_once(lambda _dt: self._refresh_overlay(), 0)
-        # If the picker was opened without an existing geofence, try to
-        # auto-center on the device's current location.
         self._kickoff_location_acquisition()
 
     def on_leave(self, *_args):
         self._stop_gps()
 
-    # --- Current-location acquisition ----------------------------------
-
     def _kickoff_location_acquisition(self):
-        """If no saved geofence was provided, request the device location and
-        recenter the map on the first GPS fix. No-op when a saved location
-        was passed in or when plyer/GPS isn't usable on this platform."""
+        # Jeśli użytkownik nie podał konkretnej lokalizacji (np. edytuje
+        # istniejący geofence) – próbujemy znaleźć bieżącą pozycję telefonu
+        # przez GPS. Na Androidzie najpierw prosimy o pozwolenie.
         if self._initial_location_explicit:
             _log("skip GPS bootstrap (geofence already saved)")
             self._set_status("")
@@ -351,28 +309,18 @@ class GeofencePickerScreen(MDScreen):
 
     def _request_location_permission_then_start(self):
         used_callback = False
+        # Prosi użytkownika o zgodę na dostęp do lokalizacji (wymagane
+        # na Androidzie 6+). Jeśli użytkownik zezwoli – uruchamia GPS.
+        # Jeśli nie – pokazuje komunikat "Brak uprawnień GPS".
         try:
             from android.permissions import Permission, request_permissions
-
             def _cb(perms, results):
                 _log(f"permission callback: perms={list(perms)} results={list(results)}")
                 if results and any(results):
                     Clock.schedule_once(lambda _dt: self._start_gps(), 0)
                 else:
-                    Clock.schedule_once(
-                        lambda _dt: self._set_status("Brak uprawnień GPS"),
-                        0,
-                    )
-
-            request_permissions(
-                [
-                    Permission.ACCESS_FINE_LOCATION,
-                    Permission.ACCESS_COARSE_LOCATION,
-                ],
-                _cb,
-            )
-            used_callback = True
-            _log("request_permissions called with callback")
+                    Clock.schedule_once(lambda _dt: self._set_status("Brak uprawnień GPS"), 0)
+            request_permissions([Permission.ACCESS_FINE_LOCATION, Permission.ACCESS_COARSE_LOCATION], _cb)
         except Exception as exc:
             _log(f"request_permissions with callback failed: {exc!r}")
         if not used_callback:
@@ -407,7 +355,6 @@ class GeofencePickerScreen(MDScreen):
             _log(f"plyer import failed: {exc!r}")
             self._set_status("Brak GPS (plyer)")
             return
-
         try:
             gps.configure(
                 on_location=self._on_gps_location,
@@ -428,7 +375,6 @@ class GeofencePickerScreen(MDScreen):
             return
         try:
             from plyer import gps
-
             gps.stop()
             _log("plyer.gps stopped")
         except Exception as exc:
@@ -439,6 +385,10 @@ class GeofencePickerScreen(MDScreen):
         _log(f"gps status: {status_type} {status_message}")
 
     def _on_gps_location(self, **kwargs):
+        # Gdy GPS znajdzie naszą pozycję – przesuwamy mapę w to miejsce.
+        # Otrzymujemy współrzędne (szerokość i długość geograficzną)
+        # i po krótkim opóźnieniu (żeby Kivy zdążył przerysować) 
+        # ustawiamy środek mapy na tych współrzędnych.
         lat = kwargs.get("lat")
         lon = kwargs.get("lon")
         _log(f"gps fix: lat={lat} lon={lon} acc={kwargs.get('accuracy')}")
@@ -463,22 +413,13 @@ class GeofencePickerScreen(MDScreen):
             _log(f"centered map on user location: {lat}, {lon}")
         self._refresh_overlay()
         self._set_status("")
-        # One fix is enough — release the GPS hardware.
         self._stop_gps()
 
     def _center_map_on(self, lat, lon):
-        """Move the visible map center to (lat, lon).
-
-        Setting ``mapview.lat`` / ``mapview.lon`` directly only updates the
-        properties — it does NOT recompute the viewport offsets, so the
-        rendered map stays where it was. ``MapView.center_on(lat, lon)``
-        does the right thing (sets delta_x/delta_y, resets scatter pos,
-        then assigns lat/lon).
-
-        The map may not be fully laid out yet on the very first enter; in
-        that case ``center_on`` is a no-op for the visual, so we retry on
-        the next frame.
-        """
+        # Przesuwa środek mapy na podane współrzędne geograficzne.
+        # Jeśli mapa jest jeszcze za mała (nie ma rozmiaru) – czeka
+        # i próbuje ponownie za chwilę. To zabezpieczenie na sytuację
+        # gdy funkcja jest wywołana zanim mapa została w pełni utworzona.
         mv = self._mapview
         if mv is None:
             return False
@@ -487,8 +428,6 @@ class GeofencePickerScreen(MDScreen):
         except Exception as exc:
             _log(f"center_on failed: {exc!r}")
             return False
-        # If width/height aren't set yet, center_on math is degenerate; try
-        # again once the layout completes.
         if mv.width <= 1 or mv.height <= 1:
             Clock.schedule_once(
                 lambda _dt: self._retry_center_map_on(lat, lon), 0
@@ -498,10 +437,7 @@ class GeofencePickerScreen(MDScreen):
     def _retry_center_map_on(self, lat, lon):
         mv = self._mapview
         if mv is None or mv.width <= 1 or mv.height <= 1:
-            # Still not laid out; try once more next frame.
-            Clock.schedule_once(
-                lambda _dt: self._retry_center_map_on(lat, lon), 0
-            )
+            Clock.schedule_once(lambda _dt: self._retry_center_map_on(lat, lon), 0)
             return
         try:
             mv.center_on(float(lat), float(lon))
@@ -510,18 +446,23 @@ class GeofencePickerScreen(MDScreen):
             _log(f"retry center_on failed: {exc!r}")
 
     def _set_status(self, text):
-        """Update the small status line in the bottom panel (creates it
-        on first call). Safe to call from the main thread only."""
+        # Aktualizuje tekst w pasku statusu na dole ekranu.
+        # Np. "Lokalizuję..." podczas szukania GPS, lub pusty tekst
+        # gdy wszystko jest gotowe. Jeśli tekst jest pusty – ukrywa
+        # pasek (przezroczystość 0).
         if getattr(self, "_status_lbl", None) is None:
             return
         self._status_lbl.text = text or ""
         self._status_lbl.opacity = 1.0 if text else 0.0
 
-    # --- UI construction -----------------------------------------------
-
     def _build_ui(self):
+        # Buduje cały interfejs ekranu geofence:
+        # - Mapę (lub placeholder jeśli mapa nie jest dostępna)
+        # - Nakładkę z przezroczystym kołem
+        # - Górny pasek z przyciskiem powrotu i tytułem
+        # - Dolny panel z: promieniem, statusem, zoomem i przyciskami
+        # Jeśli mapa nie jest dostępna – pokazuje komunikat o błędzie.
         root = FloatLayout()
-
         if _MAPVIEW_AVAILABLE:
             self._mapview = _StableMapView(
                 lat=self._initial_lat,
@@ -576,7 +517,6 @@ class GeofencePickerScreen(MDScreen):
 
         root.add_widget(self._build_header())
         root.add_widget(self._build_bottom_panel())
-
         self.add_widget(root)
 
     @staticmethod
@@ -732,7 +672,6 @@ class GeofencePickerScreen(MDScreen):
         )
         hint.bind(size=lambda lbl, *_: setattr(lbl, "text_size", lbl.size))
         zoom_row.add_widget(hint)
-
         btn_zoom_in = self._make_zoom_button("+", direction=1)
         zoom_row.add_widget(btn_zoom_in)
         panel.add_widget(zoom_row)
@@ -763,7 +702,6 @@ class GeofencePickerScreen(MDScreen):
         )
         clear_btn.bind(on_release=lambda *_a: self._clear_and_return())
         button_row.add_widget(clear_btn)
-
         button_row.add_widget(Widget(size_hint_x=1))
 
         save_btn = RoundedSheetButton(
@@ -775,11 +713,14 @@ class GeofencePickerScreen(MDScreen):
         )
         save_btn.bind(on_release=lambda *_a: self._save_and_return())
         button_row.add_widget(save_btn)
-
         panel.add_widget(button_row)
         return panel
 
     def _make_zoom_button(self, glyph, direction):
+        # Tworzy przycisk do przybliżania (+) lub oddalania (-) mapy.
+        # "glyph" to symbol na przycisku, "direction" to kierunek:
+        # 1 = przybliż, -1 = oddal.
+        # Przytrzymanie przycisku powoduje płynne przybliżanie.
         app = MDApp.get_running_app()
         bg = list(
             get_color_from_hex(
@@ -807,15 +748,15 @@ class GeofencePickerScreen(MDScreen):
     _ZOOM_TAP_STEP = 0.18
 
     def _zoom_press_start(self, direction):
-        """Begin continuous smooth zoom in the given direction (+1 or -1)."""
-        # Cancel any in-flight zoom from a previous press.
+        # Gdy użytkownik przytrzyma przycisk zoomu – zaczynamy płynnie
+        # przybliżać lub oddalać mapę. Od razu robimy jeden skok
+        # (0.18 poziomu zoomu), a potem kontynuujemy co klatkę animacji
+        # (60 razy na sekundę) z mniejszym przyrostem (0.035).
         self._zoom_press_stop()
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return
         self._zoom_direction = int(1 if direction > 0 else -1)
-        # One immediate small step so a quick tap still produces visible zoom.
-        self._apply_smooth_zoom_delta(self._zoom_direction * self._ZOOM_TAP_STEP)
-        # Then ramp continuously at 60Hz while the button is held.
+        self._apply_smooth_zoom_delta(self._zoom_direction * 0.18)
         self._zoom_clock = Clock.schedule_interval(self._zoom_tick, 1.0 / 60.0)
 
     def _zoom_tick(self, _dt):
@@ -839,39 +780,35 @@ class GeofencePickerScreen(MDScreen):
             self._zoom_clock = None
 
     def _apply_smooth_zoom_delta(self, d):
-        """Apply a fractional zoom delta via the inner Scatter's scale.
-
-        ``d`` is in "octaves" — scatter.scale *= 2**d. mapview's on_transform
-        callback automatically promotes/demotes the integer ``zoom`` when
-        scale crosses 2.0 or 1.0, so we get truly continuous zoom across
-        integer boundaries without touch-up snapping.
-        """
+        # Stosuje płynną zmianę przybliżenia mapy.
+        # Sprawdza czy nie wyjeżdżamy poza dozwolony zakres (zoom 12-19).
+        # Próbuje najpierw użyć diff_scale_at (płynna zmiana), a jeśli
+        # się nie uda – zmienia zoom skokowo (awaryjnie).
+        # Po zmianie odświeża nakładkę koła.
         mv = self._mapview
         if mv is None or abs(d) < 1e-6:
             return
-        # Don't push beyond our soft cap on either side.
         eff = _effective_zoom(mv)
         if d > 0 and eff >= _MAX_ZOOM:
             return
         if d < 0 and eff <= _MIN_ZOOM:
             return
-        cx = mv.center_x
-        cy = mv.center_y
+        cx, cy = mv.center_x, mv.center_y
         try:
             mv.diff_scale_at(float(d), cx, cy)
         except Exception:
-            # Fall back to integer zoom step if the API isn't available.
             try:
                 mv.zoom = int(round(float(mv.zoom) + (1 if d > 0 else -1)))
             except Exception:
                 pass
-        # diff_scale_at may not fire a Kivy property binding we listen to, so
-        # refresh the overlay explicitly each step.
         self._refresh_overlay()
 
-    # --- Overlay sizing -------------------------------------------------
-
     def _current_radius_m(self):
+        # Oblicza aktualny promień geofence w metrach na podstawie tego
+        # jak bardzo mapa jest przybliżona. Im bardziej oddalona mapa,
+        # tym większy obszar koła w rzeczywistości.
+        # Wzór: promień = (widoczny obszar / 2) * metry na piksel
+        # Maksymalny promień to 1000 metrów.
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return _DEFAULT_RADIUS_M
         short_px = min(self._mapview.width, self._mapview.height)
@@ -887,6 +824,11 @@ class GeofencePickerScreen(MDScreen):
         return max(1.0, min(_MAX_RADIUS_M, radius_m))
 
     def _refresh_overlay(self):
+        # Odświeża nakładkę koła i etykietę z promieniem.
+        # Gdy użytkownik przesuwa mapę lub zmienia zoom, koło musi
+        # zmienić swój rozmiar (bo ten sam obszar w metrach to inna
+        # liczba pikseli na ekranie przy różnym przybliżeniu).
+        # Aktualizuje też tekst z promieniem (np. "150 m").
         if not _MAPVIEW_AVAILABLE or self._mapview is None or self._overlay is None:
             return
         short_px = min(self._mapview.width, self._mapview.height)
@@ -897,22 +839,31 @@ class GeofencePickerScreen(MDScreen):
         mpp = _meters_per_pixel(lat, zoom)
         if mpp <= 0:
             return
-        # Target radius from the fixed viewport fraction, then clamp at the
-        # 1000 m cap. When clamped, the visual circle shrinks to honor the
-        # real cap (so the user sees "you've hit the maximum").
         target_radius_m = (short_px * _VIEWPORT_FRACTION / 2.0) * mpp
         actual_radius_m = max(1.0, min(_MAX_RADIUS_M, target_radius_m))
         diameter_px = max(dp(12), (2.0 * actual_radius_m) / mpp)
-
         self._overlay.pos = self._mapview.pos
         self._overlay.size = self._mapview.size
         self._overlay.diameter_px = diameter_px
-
         self.radius_text = f"{int(round(actual_radius_m))} m"
         if self._radius_label is not None:
             self._radius_label.text = self.radius_text
 
-    # --- Save / cancel --------------------------------------------------
+    @staticmethod
+    def _safe_set(obj, attr, value):
+        try:
+            setattr(obj, attr, value)
+        except Exception:
+            pass
+
+    def _set_smooth_zoom(self, zoom):
+        if not _MAPVIEW_AVAILABLE or self._mapview is None:
+            return
+        z = max(_MIN_ZOOM, min(_MAX_ZOOM, float(zoom)))
+        try:
+            self._mapview.zoom = z
+        except Exception:
+            self._mapview.zoom = int(round(z))
 
     def _current_result(self):
         if not _MAPVIEW_AVAILABLE or self._mapview is None:

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Strip the forced ``gradlew clean`` from python-for-android.
-
-p4a's ``toolchain.py`` hard-codes ``shprint(gradlew, "clean", gradle_task, ...)``
-which throws away the Gradle incremental build cache on every APK build. For
-day-to-day iteration (Python / .kv edits only) the clean is unnecessary and
-costs ~5-10 s plus warm-cache loss. This script removes the "clean" arg in
-place; it is idempotent and safe to re-run.
-
-Triggered from the Makefile after ``prepare``. If the toolchain file is missing
-(fresh checkout, no buildozer run yet) the script exits silently with code 0.
-"""
+# ---------------------------------------------------------------------------
+# SKRYPT: Przyspieszenie budowania aplikacji na Androida
+# ---------------------------------------------------------------------------
+# Python-for-Android (p4a) domyślnie czyści cały projekt przed każdym
+# budowaniem (gradlew clean). To trwa 5-10 sekund i usuwa pamięć podręczną,
+# przez co kolejne budowanie trwa dłużej.
+#
+# Ten skrypt modyfikuje plik p4a, aby pomijał "clean" – przydatne gdy
+# zmieniamy tylko kod Pythona lub pliki .kv, a nie strukturę Gradle.
+# Skrypt jest bezpieczny – można go uruchamiać wielokrotnie.
+# ---------------------------------------------------------------------------
 
 import os
 import sys
@@ -20,6 +20,7 @@ TOOLCHAIN_REL = os.path.join(
     "pythonforandroid", "toolchain.py",
 )
 
+# Tekst który znajdujemy (z "clean") i na co zmieniamy (bez "clean")
 ORIGINAL = 'output = shprint(gradlew, "clean", gradle_task, _tail=20,'
 PATCHED = 'output = shprint(gradlew, gradle_task, _tail=20,  # patched: skip clean'
 

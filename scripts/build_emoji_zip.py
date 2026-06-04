@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Build assets/Emoji_PNG.zip only when the source PNGs changed."""
+# ---------------------------------------------------------------------------
+# SKRYPT: Pakowanie emoji do pliku ZIP
+# ---------------------------------------------------------------------------
+# Ten skrypt tworzy plik ZIP z obrazkami emoji (PNG). Na Androidzie
+# aplikacja nie może czytać folderu assets/ bezpośrednio, dlatego emoji
+# są spakowane. Skrypt uruchamia się tylko wtedy, gdy pliki PNG uległy
+# zmianie – sprawdza daty modyfikacji.
+# ---------------------------------------------------------------------------
 
 import os
 import sys
@@ -7,10 +14,11 @@ import tempfile
 import zipfile
 
 
-SRC = os.path.join("assets", "Emoji_PNG")
-DST = os.path.join("assets", "Emoji_PNG.zip")
+SRC = os.path.join("assets", "Emoji_PNG")          # Folder źródłowy z PNG
+DST = os.path.join("assets", "Emoji_PNG.zip")      # Plik wynikowy ZIP
 
 
+# Znajduje wszystkie pliki PNG w folderze źródłowym.
 def _png_files():
     out = []
     for root, _dirs, files in os.walk(SRC):
@@ -21,6 +29,7 @@ def _png_files():
     return out
 
 
+# Sprawdza czy plik ZIP jest aktualny (czy pliki PNG nie są nowsze).
 def _zip_is_current(files):
     if not os.path.exists(DST):
         return False
@@ -38,6 +47,7 @@ def main():
         print(f"[emoji-zip] {DST} is current ({len(files)} PNGs).")
         return 0
 
+    # Zapisz do pliku tymczasowego, potem podmień – bezpieczniej
     os.makedirs(os.path.dirname(DST), exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=".Emoji_PNG.", suffix=".zip", dir=os.path.dirname(DST))
     os.close(fd)

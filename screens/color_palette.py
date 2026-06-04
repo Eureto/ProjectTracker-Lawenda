@@ -1,13 +1,10 @@
-"""Lightweight swatch-grid color picker.
-
-A drop-in replacement for `MDColorPicker` that shows a curated 5-column grid
-of circular swatches grouped by mood: pastels, warm monochrome, cool
-analogous, contrast pop, and neutral / dark.
-
-Open via :func:`open_palette_picker(default_color, on_pick)` — ``on_pick`` is
-called with an ``[r, g, b, a]`` list when the user taps a swatch, and the
-dialog auto-dismisses.
-"""
+# ---------------------------------------------------------------------------
+# WYBÓR KOLORU PROJEKTU – paleta barw
+# ---------------------------------------------------------------------------
+# Gdy użytkownik kliknie "Kolor" w formularzu projektu, otwiera się okno
+# z pięcioma kolumnami kolorów: pastelowe, ciepłe, chłodne, kontrastowe
+# i neutralne. Każdy kolor to kółko – kliknięcie wybiera go.
+# ---------------------------------------------------------------------------
 
 from kivy.graphics import Color, Ellipse, Line
 from kivy.metrics import dp
@@ -23,8 +20,8 @@ from kivymd.uix.gridlayout import MDGridLayout
 from kivymd.uix.label import MDLabel
 
 
-# Five 10-color palettes. Laid out so each palette occupies one column of the
-# 5-column grid — i.e. column 0 is Pastele, column 1 is Ciepłe, etc.
+# Pięć palet kolorów, każda w osobnej kolumnie.
+# Nazwy: Pastele, Ciepłe, Chłodne, Kontrast, Neutralne.
 PALETTES = (
     ("Pastele", (
         "#F3E8FF", "#E0F2FE", "#DCFCE7", "#FEF9C3", "#FCE7F3",
@@ -49,8 +46,11 @@ PALETTES = (
 )
 
 
+# ---------------------------------------------------------------------------
+# PRZYCISK Z KOLOROWYM KÓŁKIEM
+# ---------------------------------------------------------------------------
 class PaletteSwatchButton(ButtonBehavior, Widget):
-    """A tappable circular color swatch with a ring when selected."""
+    """Klikalne kolorowe kółko – wybór koloru projektu."""
 
     swatch_color = ListProperty([1, 1, 1, 1])
     selected = BooleanProperty(False)
@@ -75,12 +75,13 @@ class PaletteSwatchButton(ButtonBehavior, Widget):
         cy = self.center_y
         with self.canvas:
             if self.selected:
+                # Biała obwódka wokół wybranego koloru
                 Color(1, 1, 1, 1)
                 Line(circle=(cx, cy, r + dp(3)), width=dp(2))
             Color(*self.swatch_color)
             Ellipse(pos=(cx - r, cy - r), size=(r * 2, r * 2))
-            # Hairline ring for very-light swatches so they don't vanish on
-            # the white dialog background.
+            # Dla bardzo jasnych kolorów dodaj cienką szarą obwódkę
+            # żeby nie zlewały się z białym tłem okna
             avg = sum(self.swatch_color[:3]) / 3.0
             if avg > 0.88:
                 Color(0, 0, 0, 0.18)
@@ -88,15 +89,23 @@ class PaletteSwatchButton(ButtonBehavior, Widget):
 
 
 def _colors_match(a, b):
+    # Porównuje dwa kolory i zwraca Prawdę jeśli są praktycznie identyczne.
+    # Różnica mniejsza niż 1% jest uznawana za nieistotną – to zabezpieczenie
+    # przed błędami zaokrągleń przy przeliczaniu kolorów między formatami.
+    # Używane do automatycznego podświetlenia aktualnie wybranego koloru
+    # w palecie, żeby użytkownik od razu widział który kolor jest zaznaczony.
     return all(abs(float(a[i]) - float(b[i])) < 0.01 for i in range(3))
 
 
+# ---------------------------------------------------------------------------
+# GŁÓWNA FUNKCJA – otwiera okno wyboru koloru
+# ---------------------------------------------------------------------------
+# Główna funkcja do otwierania okna wyboru koloru.
+# "default_color" – kolor który jest już wybrany (podświetli się na liście).
+# "on_pick" – funkcja, która zostanie wywołana po kliknięciu koloru.
+#   Dostaje kolor w formacie [r, g, b, a] (wartości 0-1).
+# "title" – tytuł okna (domyślnie "Wybierz kolor").
 def open_palette_picker(default_color, on_pick, title="Wybierz kolor"):
-    """Show the swatch grid and call ``on_pick([r, g, b, a])`` on selection.
-
-    ``default_color`` highlights the matching swatch (if any) so the user
-    can see which color is currently in use.
-    """
     default_rgba = list(default_color) if default_color else [1, 1, 1, 1]
     if len(default_rgba) == 3:
         default_rgba.append(1.0)
@@ -157,6 +166,7 @@ def open_palette_picker(default_color, on_pick, title="Wybierz kolor"):
         dialog.dismiss()
         on_pick(rgba)
 
+    # Wypełnij siatkę kolorami – wiersz po wierszu
     max_rows = max(len(hexes) for _name, hexes in PALETTES)
     for row in range(max_rows):
         for _name, hexes in PALETTES:

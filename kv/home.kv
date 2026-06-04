@@ -3,18 +3,53 @@
 #:import ProjectCard screens.home.ProjectCard
 #:import SessionCard screens.home.SessionCard
 
-# Section: Custom clickable container combining Button logic with Box Layout
-<ClickableBoxLayout@ButtonBehavior+BoxLayout>:
+# ---------------------------------------------------------------------------
+# DEFINICJE PRZYCISKÓW (klikalnych kontenerów)
+# ---------------------------------------------------------------------------
+# Poniższe szablony łączą cechy przycisku (reaguje na kliknięcie)
+# z cechami pudełka (automatycznie układa elementy w środku).
+#
+# "ButtonBehavior" – dodaje możliwość klikania (reaguje na dotyk).
+# "BoxLayout" – układa elementy obok siebie (w poziomie lub pionie).
+# "AnchorLayout" – umieszcza element w konkretnym punkcie (np. środek, lewy górny róg).
 
-# Section: Custom clickable container combining Button logic with Anchor Layout
+<ClickableBoxLayout@ButtonBehavior+BoxLayout>:
 <ClickableAnchorLayout@ButtonBehavior+AnchorLayout>:
 
-# Section: Custom widget for displaying a sequence of dots as a progress bar
+# ---------------------------------------------------------------------------
+# PASEK POSTĘPU Z KROPEK
+# ---------------------------------------------------------------------------
+# Niestandardowy element graficzny – seria kropek pokazująca postępy
+# (np. ile kroków zostało wykonanych w danym zadaniu).
+# Używane np. w onboardingowych ekranach wprowadzających.
+
 <DotProgressBar>:
     size_hint_y: None
     height: dp(20)
 
-# Section: Visual representation of a single project card
+# ---------------------------------------------------------------------------
+# KARTA PROJEKTU (widoczna na ekranie głównym)
+# ---------------------------------------------------------------------------
+# Każdy projekt jest reprezentowany przez kartę. Karta zawiera:
+# - Obrazek lub kolor w tle
+# - Tytuł projektu na dole
+# - Emoji w prawym górnym rogu (przekręcone o -30 stopni)
+# Karta może być przeciągana (w trybie swobodnym) lub ułożona w siatkę.
+# Kliknięcie karty otwiera ekran szczegółów projektu.
+#
+# "size_hint: 0.4, None" – szerokość karty to 40% szerokości rodzica.
+# "height: self.width * self.height_multiplier" – wysokość zależy od szerokości
+# (proporcje karty).
+# "radius: [dp(24)]" – zaokrąglenie rogów (wszystkie rogi po 24dp).
+# "md_bg_color" – kolor tła karty (z KivyMD).
+# "elevation: 2" – cień pod kartą (im wyższa liczba, tym większy cień).
+# "Canvas.before:" z "PushMatrix/Rotate/PopMatrix" – obraca kartę podczas
+# przeciągania (animacja). Rotacja wokół środka karty.
+# "FitImage" – obrazek który wypełnia dostępne miejsce, zachowując proporcje.
+# "fit_mode: contain" – obrazek mieści się w całości (nie jest przycięty).
+# "shorten: True" – jeśli tytuł jest za długi, zostanie skrócony z trzema kropkami.
+# "shorten_from: right" – skracaj od prawej strony.
+
 <ProjectCard>:
     size_hint: 0.4, None
     height: self.width * self.height_multiplier
@@ -23,6 +58,7 @@
     elevation: 2
     padding: dp(10)
 
+    # Przygotowanie do obracania karty (animacja podczas przeciągania)
     canvas.before:
         PushMatrix
         Rotate:
@@ -33,7 +69,7 @@
 
     MDRelativeLayout:
 
-        # ── Full-card image (inset by padding, inner radius slightly smaller) ──
+        # Obrazek w tle karty (dopasowuje się do rozmiaru karty)
         FitImage:
             source: root.image_source
             size_hint: 1, 1
@@ -41,7 +77,8 @@
             fit_mode: "contain"
             radius: [dp(16), ]
 
-        # ── Title panel — full width, card color, bottom of image ──
+        # Panel z tytułem na dole karty
+        # "pos_hint: {'center_x': 0.5, 'y': 0}" – środek poziomo, dół na pozycji 0.
         MDBoxLayout:
             size_hint: 1, None
             height: dp(38)
@@ -66,7 +103,9 @@
                 shorten: True
                 shorten_from: "right"
 
-        # ── Emoji badge — top-right corner, rotated -30°, scaled up ──
+        # Odznaka z emoji w prawym górnym rogu (przekręcona o -30°)
+        # "pos_hint: {'right': 1.05, 'top': 1.25}" – prawa krawędź 5% poza kartą,
+        # góra 25% nad kartą (emoji wystaje poza kartę).
         MDIcon:
             icon: root.emoji_source
             size_hint: None, None
@@ -84,7 +123,18 @@
             canvas.after:
                 PopMatrix
 
-# Section: Last session — light outer frame, dark inner box (box-in-box)
+# ---------------------------------------------------------------------------
+# KARTA OSTATNIEJ SESJI (pudełko-w-pudełku)
+# ---------------------------------------------------------------------------
+# Na ekranie głównym, nad listą projektów, wyświetlana jest informacja
+# o ostatnio zakończonej sesji (jaki projekt, jak długo trwała).
+# Zewnętrzna ramka jest jasna, wewnętrzna ciemna – efekt "pudełko w pudełku".
+#
+# "MDCard" – karta z biblioteki KivyMD, z cieniem i zaokrągleniem.
+# "elevation: 4" – wysoki cień (karta unosi się wyżej).
+# "padding: [0, dp(12), 0, 0]" – tylko górny padding, żeby wewnętrzna karta
+# była "wpuszczona" od góry.
+
 <SessionCard>:
     size_hint: 0.9, None
     height: dp(129)
@@ -95,7 +145,9 @@
     orientation: "vertical"
     spacing: dp(8)
 
-    # Header sits in the light outer frame (above inner box)
+    # Górny pasek (jasny) z etykietą "Ostatnia sesja" i datą
+    # "Caption" – styl czcionki: mała, opisowa (podpis).
+    # "theme_text_color: Custom" – używamy własnego koloru, nie domyślnego.
     MDBoxLayout:
         orientation: "horizontal"
         size_hint_y: None
@@ -126,7 +178,9 @@
             text_color: utils.get_color_from_hex(app.theme_text_dark)
             size_hint_x: None
 
-    # Inner dark box — flush left/right/bottom with outer card
+    # Wewnętrzna karta (ciemna) – nazwa projektu, emoji i czas trwania
+    # "elevation: 0" – wewnętrzna karta nie ma cienia (nie unosi się).
+    # "FloatLayout" – elementy mogą swobodnie nachodzić na siebie.
     MDCard:
         orientation: "vertical"
         size_hint_x: 1
@@ -137,6 +191,8 @@
         padding: [dp(14), dp(9), dp(14), dp(14)]
         spacing: dp(10)
 
+        # Wiersz z nazwą projektu i emoji
+        # "FloatLayout" pozwala ustawić emoji dokładnie obok tekstu.
         FloatLayout:
             size_hint_x: 1
             size_hint_y: None
@@ -169,6 +225,7 @@
                 size: dp(28), dp(28)
                 opacity: 1 if root.has_session else 0.45
 
+        # Czas trwania ostatniej sesji
         MDLabel:
             text: root.duration_text if root.has_session else "Uruchom timer w projekcie"
             halign: "right"
@@ -185,7 +242,21 @@
             shorten: True
             shorten_from: "left"
 
-# Section: Main Dashboard Screen
+# ---------------------------------------------------------------------------
+# GŁÓWNY EKRAN – PULPIT (Home Screen)
+# ---------------------------------------------------------------------------
+# To jest pierwszy ekran, który widzi użytkownik po uruchomieniu aplikacji.
+# Zawiera:
+# - Nagłówek z nazwą "JUST DO IT"
+# - Kartę ostatniej sesji (jeśli jakaś istnieje)
+# - Przewijaną listę projektów (karty)
+# - Dolny pasek nawigacyjny z przyciskami i przyciskiem "+" do dodawania
+#
+# "MDFloatLayout" – jak FloatLayout (swobodne pozycjonowanie), ale z motywem KivyMD.
+# "canvas.after:" – rysuje linię POD nagłówkiem, po narysowaniu wszystkiego innego.
+# "Line" – rysuje linię (points: punkty połączenie, width: grubość).
+#----------------------------------------------------------------------------
+
 <HomeScreen>:
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
 
@@ -193,7 +264,7 @@
         orientation: 'vertical'
         spacing: dp(10)
         
-        # Spacer for system status bar
+        # Odstęp na pasek stanu telefonu (bateria, godzina, zasięg)
         Widget:
             size_hint_y: None
             height: dp(35) 
@@ -201,6 +272,7 @@
         MDFloatLayout:
             size_hint_y: None
             height: dp(70)
+            # Po narysowaniu wszystkiego – dodaj białą linię pod nagłówkiem
             canvas.after:
                 Color:
                     rgba: 1, 1, 1, 1
@@ -208,7 +280,7 @@
                     points: [self.x, self.y, self.right, self.y]
                     width: dp(1.5)
             
-            # App Branding/Title
+            # Nazwa aplikacji – wyśrodkowana
             MDLabel:
                 text: "JUST DO IT"
                 font_style: "H4"
@@ -218,7 +290,9 @@
                 theme_text_color: "Custom"
                 text_color: 1, 1, 1, 1
                 
-            # Layout/Grid toggle button
+            # Przycisk zmiany układu (siatka / swobodny)
+            # "MDIconButton" – okrągły przycisk z ikoną.
+            # Kolor zmienia się na żółty gdy siatka jest włączona.
             MDIconButton:
                 icon: "view-grid"
                 pos_hint: {'right': 0.98, 'center_y': 0.5}
@@ -226,12 +300,15 @@
                 text_color: (1, 1, 0, 1) if app.grid_layout else (1, 1, 1, 1)
                 on_release: app.toggle_layout_menu()
 
-        # Fixed SessionCard that stays on top of the list and doesn't scroll
+        # Karta ostatniej sesji (stała – nie przewija się)
+        # "pos_hint: {'center_x': 0.5}" – wyśrodkowana w poziomie.
         SessionCard:
             id: last_session_card
             pos_hint: {'center_x': 0.5}
 
-        # Main scrollable list of content
+        # Przewijana lista projektów
+        # "ScrollView" – kontener przewijany w pionie.
+        # "MDFloatLayout" – wewnątrz, aby karty można było swobodnie pozycjonować.
         ScrollView:
             do_scroll_x: False
             bar_width: 0
@@ -241,13 +318,23 @@
                 size_hint_y: None
                 height: dp(1)
                
-    # Section: Bottom Navigation and Global Actions
+    # -----------------------------------------------------------------------
+    # DOLNY PASEK NAWIGACYJNY (z przyciskami)
+    # -----------------------------------------------------------------------
+    # Zawiera ikony: dom (Home), pustą przestrzeń pod przycisk "+",
+    # oraz wykres (Statystyki). Przycisk "+" jest osobnym, unoszącym się
+    # elementem pomiędzy dwiema ikonami.
+    # 
+    # "pos_hint: {'center_x': 0.5, 'y': 0}" – wyśrodkowany, przylegający do dołu.
+    
     MDFloatLayout:
         size_hint: 1, None
         height: dp(60)
         pos_hint: {'center_x': 0.5, 'y': 0}
         
-        # Main Bottom Navbar — flush left/right/bottom; rounded top only
+        # Główny pasek – biały, z zaokrąglonymi górnymi rogami
+        # "radius: [dp(25), dp(25), 0, 0]" – tylko górne rogi zaokrąglone.
+        # Dzięki temu pasek wygląda jak "wyspa" przyklejona do dołu.
         MDCard:
             size_hint: 1, 1
             pos_hint: {'x': 0, 'y': 0}
@@ -256,7 +343,8 @@
             md_bg_color: 1, 1, 1, 1
             
             MDBoxLayout:
-                # We use three equal slots to distribute the icons to the centers of the outer thirds
+                # Trzy kolumny: lewa (dom), środkowa (pusta), prawa (wykres)
+                # "AnchorLayout" – umieszcza ikonę na środku każdej kolumny.
                 AnchorLayout:
                     anchor_x: 'center'
                     anchor_y: 'center'
@@ -264,7 +352,6 @@
                         icon: "home-outline"
                         icon_size: dp(30)
 
-                # Middle slot: Empty to provide space for the Floating Action Button
                 Widget:
 
                 AnchorLayout:
@@ -275,8 +362,11 @@
                         icon_size: dp(30)
                         on_release: app.root.current = "statistics"
 
-        # Section: Global Floating Action Button (Add Project/Session)
-        # We use ClickableAnchorLayout to center the icon perfectly within the rectangle
+        # Unoszący się przycisk "+" (dodawanie projektu)
+        # "size: dp(120), dp(56)" – szeroki, niski prostokąt.
+        # "pos_hint: {'center_x': 0.5, 'center_y': 0.67}" – na środku,
+        # 67% wysokości od dołu (unosi się nad paskiem).
+        # "canvas.before:" rysuje tło (fioletowy prostokąt z zaokrągleniem).
         ClickableAnchorLayout:
             size_hint: None, None
             size: dp(120), dp(56)

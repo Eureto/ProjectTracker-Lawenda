@@ -16,20 +16,30 @@
 #:import ZrobioneHeaderBar screens.project_info.ZrobioneHeaderBar
 
 # ---------------------------------------------------------------------------
-# UI Component Definitions
+# DEFINICJE ELEMENTÓW INTERFEJSU
 # ---------------------------------------------------------------------------
-# The following sections define custom widget templates used throughout the
-# ProjectInfo screen. Each template groups related UI elements and defines the
-# visual layout that will be rendered on screen.
+# Poniższe sekcje opisują poszczególne "szablony" (czyli gotowe elementy
+# wizualne) używane na ekranie szczegółów projektu. Każdy szablon grupuje
+# ze sobą kilka elementów (np. etykietę, przycisk, pole tekstowe), które
+# razem tworzą jeden logiczny blok.
+# ---------------------------------------------------------------------------
 
-# ProjectNoteRow – displays a single note with text and a delete button.
-
-# Section: Project Note Row
+# ---------------------------------------------------------------------------
+# WIERSZ NOTATKI – wyświetla treść notatki z przyciskiem usuwania
+# ---------------------------------------------------------------------------
+# "orientation: horizontal" – elementy są ułożone obok siebie: pole z tekstem
+# po lewej, przycisk "×" po prawej.
+# "size_hint_y: None" – wysokość nie jest procentowa tylko ustalana przez kod.
+# "spacing" – odstęp między elementami w pikselach.
 <ProjectNoteRow>:
     orientation: "horizontal"
     spacing: dp(10)
     size_hint_y: None
 
+    # Białe pudełko z zaokrąglonymi rogami – tło dla tekstu notatki
+    # "size_hint_x: 1" – zajmij całą dostępną szerokość (po odjęciu przycisku).
+    # "canvas.before:" – rysuje białe tło przed tekstem.
+    # "RoundedRectangle" – prostokąt z zaokrąglonymi rogami (tutaj 12dp każdy róg).
     MDBoxLayout:
         size_hint_x: 1
         size_hint_y: 1
@@ -42,12 +52,20 @@
                 size: self.size
                 radius: [dp(12), dp(12), dp(12), dp(12)]
 
+        # "ScrollView" – pozwala przewijać tekst notatki jeśli jest za długi.
+        # "do_scroll_x: False" – przewijanie tylko w pionie (nie w poziomie).
+        # "bar_width: 0" – ukryj pasek przewijania (design).
         ScrollView:
             id: note_scroll
             size_hint: 1, 1
             do_scroll_x: False
             bar_width: 0
 
+            # "MDLabel" – etykieta z tekstem notatki.
+            # "height: self.texture_size[1]" – wysokość dopasowana do treści
+            # (texture_size to rozmiar faktycznie narysowanego tekstu).
+            # "max_lines: 0" – brak limitu linii.
+            # "line_height: 1.2" – odstęp między liniami (1.2 = 120% czcionki).
             MDLabel:
                 id: note_label
                 text: root.display_text
@@ -63,6 +81,10 @@
                 max_lines: 0
                 line_height: 1.2
 
+    # Przycisk "×" do usunięcia notatki (fioletowe kółko)
+    # "background_normal: ''" i "background_color: 0,0,0,0" – usuwa domyślne
+    # tło przycisku, bo rysujemy własne (fioletowe koło przez canvas.before).
+    # "Ellipse" – rysuje owal/koło. "self.center_x/y" – środek przycisku.
     Button:
         id: delete_btn
         size_hint_x: None
@@ -82,7 +104,17 @@
                 pos: self.center_x - dp(18), self.center_y - dp(18)
                 size: dp(36), dp(36)
 
-# Section: Time Goal Track Row (shows a progress car button, timer, and goal info)
+# ---------------------------------------------------------------------------
+# WIERSZ Z CELAMI CZASOWYMI – pokazuje samochodzik, timer i informacje o celu
+# ---------------------------------------------------------------------------
+# Ten element wyświetla pasek postępu dla celu czasowego. Postęp jest
+# reprezentowany przez samochodzik jadący po linii od lewej do prawej.
+# Po osiągnięciu 100% samochodzik jeździ w tę i z powrotem.
+#
+# "RelativeLayout" – umożliwia swobodne pozycjonowanie dzieci względem siebie
+# (tutaj: samochodzik na linii, flaga na mecie, czas nad autem).
+# "pos_hint" – pozycjonowanie procentowe: {"right": 1} = prawa krawędź na 100%.
+
 <TimeGoalTrackRow>:
     orientation: "horizontal"
     spacing: dp(10)
@@ -94,11 +126,14 @@
         size_hint_x: 1
         spacing: dp(4)
 
+        # Pasek z samochodzikiem – "RelativeLayout" nakłada elementy na siebie
         RelativeLayout:
             id: goal_track
             size_hint_y: None
             height: dp(110)
 
+            # "canvas.before:" – rysuje czarną linię (drogę) pod samochodzikiem
+            # "Line" – linia między punktami (points: [x1,y1, x2,y2])
             canvas.before:
                 Color:
                     rgba: 0, 0, 0, 1
@@ -106,6 +141,10 @@
                     width: dp(2.5)
                     points: [dp(8), dp(16), self.width - dp(8), dp(16)]
 
+            # Samochodzik – zmienia obrazek gdy cel jest aktywny (jedzie) lub nieaktywny (śpi)
+            # "pos_hint: {"center_x": root.car_hint_x}" – pozycja X samochodzika
+            # zależy od postępu (0% = lewo, 100% = prawo).
+            # "Scale:" – odwraca samochodzik w poziomie (x: -1) gdy jedzie w lewo.
             CarProgressButton:
                 id: car_btn
                 source: root.car_source_active if root.tracking_active else root.car_source_idle
@@ -125,6 +164,8 @@
                 canvas.after:
                     PopMatrix
 
+            # Flaga na mecie (prawa strona) – ikona szachownicy
+            # "Scale: x: -1" – odwraca ikonę (bo domyślnie patrzy w lewo).
             MDIcon:
                 icon: "flag-checkered"
                 theme_text_color: "Custom"
@@ -141,6 +182,9 @@
                 canvas.after:
                     PopMatrix
 
+            # Czas jaki upłynął (wyświetlany nad samochodzikiem)
+            # "opacity: 1 if root.elapsed_text else 0" – widoczny tylko gdy
+            # minęła co najmniej 1 sekunda.
             MDLabel:
                 text: root.elapsed_text
                 opacity: 1 if root.elapsed_text else 0
@@ -158,6 +202,9 @@
                 pos_hint: {"center_x": root.car_hint_x}
                 y: car_btn.top - self.height - dp(2)
 
+        # Dolny pasek: nazwa celu i informacja o przedziale czasu (np. "1h / tydzień")
+        # "text_size: (dp(200), None)" – ogranicza szerokość tekstu do 200dp
+        # (zapewnia prawidłowe zawijanie i pozycjonowanie).
         BoxLayout:
             id: goal_caption_box
             orientation: "horizontal"
@@ -191,6 +238,7 @@
                 halign: "right"
                 valign: "middle"
 
+    # Prawa kolumna: procent postępu i przycisk usuwania
     MDBoxLayout:
         orientation: "vertical"
         size_hint_x: None
@@ -208,6 +256,8 @@
                 size_hint: None, None
                 size: dp(46), dp(48)
 
+                # Karta z procentem postępu (zmienia kolor na zielony po osiągnięciu 100%)
+                # "md_bg_color: root.percent_card_color" – kolor zmienia się dynamicznie.
                 MDCard:
                     id: percent_card
                     size_hint: None, None
@@ -226,6 +276,11 @@
                         font_size: sp(13)
                         bold: True
 
+                # Korona – pojawia się gdy cel jest ukończony
+                # "opacity: 1 if root.is_goal_complete else 0" – widoczna
+                # tylko gdy postęp osiągnął 100%.
+                # "nocache: True" – nie przechowuj w pamięci (obrazek może
+                # się zmieniać dynamicznie).
                 Image:
                     source: root.crown_source
                     opacity: 1 if root.is_goal_complete else 0
@@ -237,6 +292,7 @@
                     y: dp(30)
                     nocache: True
 
+        # Czerwony przycisk usuwania celu
         AnchorLayout:
             size_hint_y: None
             height: dp(44)
@@ -261,7 +317,13 @@
                         pos: self.pos
                         size: self.size
 
-# Section: Header Action Button (used for plus icons in headers)
+# ---------------------------------------------------------------------------
+# PRZYCISK "+" W NAGŁÓWKACH SEKCJI
+# ---------------------------------------------------------------------------
+# Mały przezroczysty przycisk z ikoną plusa, używany do dodawania nowych
+# elementów (notatek, celów, etapów).
+# "SectionHeaderAction@MDIconButton" – tworzy nowy szablon na bazie MDIconButton.
+
 <SectionHeaderAction@MDIconButton>:
     size_hint: None, None
     width: dp(48)
@@ -271,7 +333,14 @@
     icon_size: dp(24)
     md_bg_color: 0, 0, 0, 0
 
-# Section: "Zrobione" Header Bar (collapsible header for completed items)
+# ---------------------------------------------------------------------------
+# NAGŁÓWEK SEKCJI "ZROBIONE" (można go zwinąć/rozwinąć)
+# ---------------------------------------------------------------------------
+# Pasek z napisem "Zrobione" i strzałką (chevron). Kliknięcie rozwija
+# lub zwija listę ukończonych celów.
+# "Widget size_hint_x: 1" – pusty element który rozciąga się, odpychając
+# chevron do prawej strony (wypełniacz).
+
 <ZrobioneHeaderBar>:
     size_hint_y: None
     height: dp(28)
@@ -301,7 +370,13 @@
             icon_size: dp(24)
             size_hint: None, None
 
-# Section: Zrobione Section (container for completed checklist items)
+# ---------------------------------------------------------------------------
+# SEKCJA "ZROBIONE" – pojemnik na ukończone cele z listy celów
+# ---------------------------------------------------------------------------
+# Gdy użytkownik zaznaczy cel jako zrobiony, cel przenosi się tutaj.
+# Sekcję można zwinąć klikając w nagłówek.
+# "size_hint_y: None" – wysokość sekcji zależy od liczby celów w środku.
+
 <ZrobioneSection>:
     orientation: "vertical"
     spacing: dp(8)
@@ -316,7 +391,15 @@
         spacing: dp(14)
         size_hint_y: None
 
-# Section: Checklist Goal Row (displays a goal with index, text, and status button)
+# ---------------------------------------------------------------------------
+# WIERSZ Z CELEM Z LISTY CELÓW (z numerem, tekstem i przyciskiem statusu)
+# ---------------------------------------------------------------------------
+# Każdy cel na liście ma swój numer, opis tekstowy i kółko do oznaczania
+# jako zrobiony/niezrobiony.
+# "UnderlineTextBlock" – własny element: biały tekst z linią pod spodem.
+# "StatusCircleButton" – okrągły przycisk zmieniający stan (puste/kolorowe kółko).
+# "compact_rule: True" – mniejszy odstęp między tekstem a linią.
+
 <ChecklistGoalRow>:
     size_hint_y: None
     valign: "middle"
@@ -357,13 +440,20 @@
             size_hint: None, None
             size: dp(26), dp(26)
 
-# Section: Stage Item Row (timeline item with optional sub-step and status)
+# ---------------------------------------------------------------------------
+# WIERSZ ETAPU NA OSI CZASU (krok lub podkrok)
+# ---------------------------------------------------------------------------
+# Każdy etap na osi czasu to wiersz z: pionową linią (spiną), tekstem
+# i kółkiem statusu. Podkroki są wcięte i mają strzałkę zamiast kropki.
+# "is_sub" – czy to podkrok (True = mniejsza czcionka, strzałka zamiast kropki).
+# "is_first" – czy to pierwszy element (linia zaczyna się od góry).
+# "is_last" – czy to ostatni element (linia kończy się, a nie ciągnie dalej).
+
 <StageItemRow>:
     TimelineSpine:
         id: spine
     Widget:
-        # Spacer that nudges Podkrok text further from the spine so it sits
-        # to the right of the arrow head (drawn inside TimelineSpine).
+        # Odstęp który przesuwa tekst podkroku w prawo, aby był za strzałką
         id: sub_arrow
         size_hint_x: None
         width: dp(16) if root.is_sub else 0
@@ -376,20 +466,21 @@
             id: underline_block
             size_hint_x: 1
             text: root.display_text
-            # Krok labels are visually weightier than Podkrok labels.
             font_size: sp(13) if root.is_sub else sp(16)
-            # The trailing rule under the very last timeline item leaves a
-            # stray horizontal line between the section and the Dodaj-krok
-            # row, so suppress it.
             show_rule: not root.is_last
     StatusCircleButton:
         id: status_btn
-        # Match the highly-visible white style used in Lista celów (the
-        # previous purple ring blended into the section background).
         show_crown: False
         white_style: True
 
-# Section: Etapy Plus Row (adds a new step button in the timeline)
+# ---------------------------------------------------------------------------
+# WIERSZ "DODAJ KROK" – przycisk na dole osi czasu etapów
+# ---------------------------------------------------------------------------
+# Ten wiersz pojawia się na końcu listy etapów. Kliknięcie otwiera
+# formularz do dodania nowego kroku.
+# "EtapyPlusSpine" – rysuje linię z fioletowym kółkiem z plusem.
+# "connect_top" – czy rysować linię łączącą z poprzednim elementem.
+
 <EtapyPlusRow>:
     EtapyPlusSpine:
         id: plus_spine
@@ -407,7 +498,25 @@
         size_hint_x: 1
         text_size: self.size
 
-# Section: Project Info Screen (main screen layout with notes, timer, goals, etc.)
+# ---------------------------------------------------------------------------
+# EKRAN SZCZEGÓŁÓW PROJEKTU (główna zawartość tego pliku)
+# ---------------------------------------------------------------------------
+# To jest najważniejszy ekran w aplikacji. Zawiera:
+# - Notatki – lista notatek związanych z projektem
+# - Czas – stoper do mierzenia czasu pracy nad projektem
+# - Cele czasowe – paski postępu z samochodzikiem
+# - Lista celów – checklista zadań do zrobienia
+# - Etapy – oś czasu z krokami i podkrokami
+# Na dole znajduje się pasek nawigacyjny (taki sam jak na ekranie głównym)
+# z przyciskiem ustawień (trybik) zamiast "+".
+#
+# "FloatLayout" – nakłada na siebie elementy. Tutaj: główna zawartość
+# (przewijana) i dolny pasek (na stałe na dole).
+# "padding: [dp(18), dp(28), dp(18), dp(67)]" – odstępy od krawędzi,
+# w tym 67dp na dole dla paska nawigacyjnego.
+# "texture_size[1]" – wysokość tekstu po narysowaniu (używana do
+# dynamicznego ustawiania wysokości etykiety tytułu).
+
 <ProjectInfoScreen>:
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
 
@@ -417,6 +526,9 @@
             size_hint: 1, 1
             padding: [dp(18), dp(28), dp(18), dp(67)]
 
+            # Nazwa projektu na górze ekranu
+            # "height: self.texture_size[1] + dp(4)" – wysokość dopasowana
+            # do faktycznie narysowanego tekstu (tekst może być krótki lub długi).
             MDLabel:
                 text: root.project_title or "Projekt"
                 font_size: sp(17)
@@ -434,11 +546,19 @@
                 size_hint_y: None
                 height: dp(10)
 
+            # Przewijana zawartość – wszystkie sekcje
+            # "ScrollView" – umożliwia przewijanie gdy zawartość jest dłuższa niż ekran.
+            # "do_scroll_x: False" – tylko przewijanie w pionie.
+            # "size_hint_y: 1" – zajmij całą dostępną wysokość.
+            # "bar_width: 0" – ukryj pasek przewijania.
             ScrollView:
                 do_scroll_x: False
                 size_hint_y: 1
                 bar_width: 0
 
+                # "adaptive_height" nie jest ustawione – zamiast tego używamy
+                # "height: self.minimum_height" aby wysokość dopasowywała się
+                # do sumy wysokości wszystkich dzieci.
                 MDBoxLayout:
                     orientation: "vertical"
                     spacing: dp(8)
@@ -446,7 +566,9 @@
                     height: self.minimum_height
                     padding: [0, dp(20), 0, dp(8)]
 
-                    # --- Notatki ---
+                    # ── SEKCJA: Notatki ──
+                    # "MDBoxLayout" – pionowe pudełko. "height: self.minimum_height"
+                    # – wysokość dopasowuje się do zawartości.
                     MDBoxLayout:
                         orientation: "vertical"
                         spacing: dp(12)
@@ -482,7 +604,7 @@
                         size_hint_y: None
                         height: dp(28)
 
-                    # --- Czas ---
+                    # ── SEKCJA: Czas (stoper) ──
                     MDBoxLayout:
                         orientation: "vertical"
                         spacing: dp(14)
@@ -499,6 +621,8 @@
                             size_hint_y: None
                             height: dp(48)
 
+                        # Wyświetlacz stopera (HH:MM:SS)
+                        # "font_size: sp(44)" – duża, czytelna czcionka.
                         MDLabel:
                             text: root.timer_display
                             font_size: sp(44)
@@ -509,6 +633,10 @@
                             size_hint_y: None
                             height: self.texture_size[1]
 
+                        # Przycisk Start / Stop
+                        # Przycisk zmienia kolor: zielony (Start) lub czerwony (Stop).
+                        # "canvas.before:" – rysuje zaokrąglony prostokąt jako tło
+                        # przycisku (zamiast domyślnego, bo background_normal jest '').
                         AnchorLayout:
                             size_hint_y: None
                             height: dp(44)
@@ -538,7 +666,7 @@
                         size_hint_y: None
                         height: dp(28)
 
-                    # --- Cel czasowy ---
+                    # ── SEKCJA: Cele czasowe (z samochodzikiem) ──
                     MDBoxLayout:
                         orientation: "vertical"
                         spacing: dp(16)
@@ -574,7 +702,7 @@
                         size_hint_y: None
                         height: dp(28)
 
-                    # --- Lista celów ---
+                    # ── SEKCJA: Lista celów (checklista) ──
                     MDBoxLayout:
                         id: lista_celow_box
                         orientation: "vertical"
@@ -608,6 +736,7 @@
                             height: self.minimum_height
                             on_minimum_height: self.height = self.minimum_height
 
+                        # Sekcja "Zrobione" – przenoszone są tu ukończone cele
                         ZrobioneSection:
                             id: zrobione_section
                             done_count: 0
@@ -616,7 +745,7 @@
                         size_hint_y: None
                         height: dp(28)
 
-                    # --- Etapy ---
+                    # ── SEKCJA: Etapy (oś czasu) ──
                     MDBoxLayout:
                         orientation: "vertical"
                         spacing: dp(12)
@@ -641,6 +770,9 @@
                                 icon: "plus"
                                 on_release: root.open_add_etapy_group_sheet()
 
+                        # Przewijane poziomo "żetony" (chipsy) z nazwami grup etapów
+                        # "ScrollView" z "do_scroll_x: True" – przewijanie w poziomie.
+                        # "height: dp(40)" – stała wysokość paska z żetonami.
                         ScrollView:
                             size_hint_y: None
                             height: dp(40)
@@ -657,6 +789,8 @@
                                 height: dp(36)
                                 padding: [0, dp(2), 0, dp(2)]
 
+                        # Oś czasu z krokami i podkrokami
+                        # "spacing: dp(2)" – mały odstęp między elementami osi.
                         MDBoxLayout:
                             id: etapy_timeline_list
                             orientation: "vertical"
@@ -665,7 +799,10 @@
                             height: self.minimum_height
                             padding: [0, dp(4), 0, 0]
 
-        # Bottom navigation (same layout as home; middle action = project settings)
+        # Dolny pasek nawigacyjny (taki sam jak na ekranie głównym)
+        # Środkowy przycisk to ustawienia (trybik) zamiast "+".
+        # "MDFloatLayout" umieszczony na dole ("pos_hint: {"y": 0}").
+        # "height: dp(60)" – wysokość paska nawigacji.
         MDFloatLayout:
             size_hint: 1, None
             height: dp(60)
@@ -697,6 +834,9 @@
                             icon_size: dp(30)
                             on_release: root.go_statistics()
 
+            # Przycisk ustawień (trybik) – unosi się nad paskiem nawigacyjnym
+            # "size: dp(120), dp(56)" – szeroki, niski prostokąt.
+            # "pos_hint: {"center_y": 0.67}" – 67% od dołu, unosi się nad paskiem.
             ClickableAnchorLayout:
                 size_hint: None, None
                 size: dp(120), dp(56)

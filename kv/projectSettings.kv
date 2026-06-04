@@ -1,6 +1,17 @@
 #:import utils kivy.utils
 #:import ProjectCard screens.home.ProjectCard
 
+# ---------------------------------------------------------------------------
+# EKRAN USTAWIEŃ PROJEKTU
+# ---------------------------------------------------------------------------
+# Ten ekran pozwala edytować istniejący projekt: zmienić jego nazwę,
+# zdjęcie, kolor lub usunąć projekt całkowicie.
+# Wygląda podobnie do ekranu dodawania projektu – ma podgląd karty,
+# pole tekstowe i przyciski wyboru.
+#
+# "canvas.before:" w tym pliku zawsze rysuje fioletowe tło całego ekranu.
+# Potem na tym tle układane są pozostałe elementy.
+
 <ProjectSettingsScreen>:
     canvas.before:
         Color:
@@ -9,17 +20,25 @@
             pos: self.pos
             size: self.size
 
+    # "MDBoxLayout" – główny pionowy układ. Wszystkie sekcje są ułożone
+    # jedna pod drugą. "padding" daje odstęp od krawędzi ekranu: lewy 24,
+    # górny 44 (żeby ominąć pasek stanu telefonu), prawy 24, dolny 0.
     MDBoxLayout:
         orientation: "vertical"
         padding: dp(24), dp(44), dp(24), dp(0)
         spacing: dp(0)
 
-        # ── Header ──
+        # ── Górny pasek z tytułem i przyciskiem powrotu ──
+        # "BoxLayout" domyślnie układa elementy w poziomie. Trzy elementy:
+        # strzałka (klikalna), tytuł (wyśrodkowany), pusty odstępnik (dla symetrii).
         BoxLayout:
-            size_hint_y: None
+            size_hint_y: None       # Nie rozciągaj procentowo – użyj stałej wysokości
             height: dp(60)
             spacing: dp(0)
 
+            # "ClickableAnchorLayout" – klikalny obszar, który ustawia ikonę
+            # po lewej stronie ("anchor_x: left").
+            # "on_release: root.cancel()" – po kliknięciu anuluj zmiany i wróć.
             ClickableAnchorLayout:
                 size_hint_x: None
                 width: dp(56)
@@ -32,6 +51,9 @@
                     font_size: sp(50)
                     adaptive_size: True
 
+            # Tytuł strony – wyśrodkowany ("halign: center, valign: middle")
+            # "text_size: self.size" – ogranicza obszar tekstu do rozmiaru
+            # etykiety, wymagane aby wyśrodkowanie działało.
             Label:
                 text: "Ustawienia projektu"
                 font_size: sp(20)
@@ -41,23 +63,37 @@
                 valign: "middle"
                 text_size: self.size
 
+            # Pusty odstępnik po prawej – symetryczny do strzałki
             Widget:
                 size_hint_x: None
                 width: dp(56)
 
-        # ── Scrollable body ──
+        # ── Przewijana zawartość ──
+        # "ScrollView" – kontener przewijany. Gdy formularz jest dłuższy niż
+        # ekran, użytkownik może przewinąć go palcem.
+        # "do_scroll_x: False" – przewijanie tylko w pionie.
+        # "size_hint_y: 1" – zajmij całą dostępną wysokość (wypełnij resztę).
+        # "bar_width: 0" – ukryj pasek przewijania (czystszy wygląd).
         ScrollView:
             do_scroll_x: False
             size_hint_y: 1
             bar_width: 0
 
+            # "adaptive_height: True" – automatyczna wysokość dopasowana
+            # do liczby elementów wewnątrz.
+            # "padding: [0, dp(24), 0, dp(120)]" – dodatkowy odstęp 120dp
+            # na dole, żeby przycisk zapisu nie zasłaniał ostatniego elementu.
             MDBoxLayout:
                 orientation: "vertical"
                 adaptive_height: True
                 spacing: dp(18)
                 padding: [0, dp(24), 0, dp(120)]
 
-                # ── Preview card (live mirror of pending edits) ──
+                # ── Podgląd karty projektu (pokazuje bieżące zmiany) ──
+                # Żywy podgląd: gdy użytkownik zmienia nazwę lub kolor,
+                # karta od razu to odzwierciedla.
+                # "AnchorLayout" – centruje kartę ("anchor_x/y: center").
+                # "size_hint: None, None" – stały rozmiar karty, nie procentowy.
                 BoxLayout:
                     orientation: "vertical"
                     size_hint_y: None
@@ -87,6 +123,7 @@
                             emoji_right_hint: 1.25
                             emoji_right_hint_png: 1.05
 
+                    # Napis "Podgląd" pod kartą
                     Label:
                         text: "Podgląd"
                         font_size: sp(14)
@@ -97,7 +134,10 @@
                         valign: "middle"
                         text_size: self.size
 
-                # ── Project name input ──
+                # ── Pole do zmiany nazwy projektu ──
+                # "on_text: root.on_name_input(self.text)" – gdy użytkownik
+                # wpisuje tekst, Python od razu otrzymuje informację i może
+                # zaktualizować podgląd.
                 ProjectTextInput:
                     id: name_input
                     hint_text: "Nazwa Projektu"
@@ -105,7 +145,8 @@
                     text: root.name_text
                     on_text: root.on_name_input(self.text)
 
-                # ── Two tile rows: Zdjęcie / Kolor + Reset zdjęcia ──
+                # ── Przyciski: zdjęcie, kolor, usuń zdjęcie ──
+                # Trzy przyciski obok siebie w jednym wierszu.
                 BoxLayout:
                     size_hint_y: None
                     height: dp(80)
@@ -126,7 +167,9 @@
                         icon_text: "image-off-outline"
                         on_release: root.clear_photo()
 
-                # ── Delete project button ──
+                # ── Czerwony przycisk "Usuń projekt" ──
+                # "ClickableBoxLayout" – klikalny wiersz z ikoną kosza i tekstem.
+                # Czerwone tło ("#D94646") sygnalizuje niebezpieczną operację.
                 ClickableBoxLayout:
                     size_hint_y: None
                     height: dp(54)
@@ -141,9 +184,7 @@
                             size: self.size
                             radius: [dp(12)]
 
-                    # Wrap the icon in an AnchorLayout so its glyph is
-                    # vertically centered within the 54dp row regardless of
-                    # the MDLabel's intrinsic baseline.
+                    # Ikona kosza na śmieci wyśrodkowana w pionie
                     AnchorLayout:
                         size_hint_x: None
                         width: dp(28)
@@ -157,6 +198,7 @@
                             font_size: sp(22)
                             adaptive_size: True
 
+                    # Tekst "Usuń projekt" po prawej stronie ikony
                     Label:
                         text: "Usuń projekt"
                         color: 1, 1, 1, 1
@@ -166,7 +208,11 @@
                         valign: "middle"
                         text_size: self.size
 
-    # ── Floating confirm (save) button ──
+    # ── Przycisk zapisu (okrągły, unosi się nad dolną krawędzią) ──
+    # "pos_hint: {"center_x": 0.5, "y": 0.04}" – wyśrodkowany poziomo,
+    # 4% od dołu ekranu (unosi się nad dolną krawędzią).
+    # "Ellipse" – rysuje owal (tutaj koło) w tle.
+    # "on_release: root.save()" – po kliknięciu zapisz zmiany.
     ClickableAnchorLayout:
         size_hint: None, None
         size: dp(68), dp(68)

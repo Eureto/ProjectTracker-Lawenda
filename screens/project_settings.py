@@ -1,14 +1,10 @@
-"""Editable project metadata: rename, photo, color, delete.
-
-Reached from the cog button on ProjectInfoScreen. Shares the visual idiom of
-AddProjectScreen (preview card + tile buttons + name input + floating confirm)
-plus a red "Usuń projekt" action that requires two-step confirmation.
-
-All edits are deferred until the user taps the checkmark; that's also the only
-moment the rename propagates to every persisted JSON file. Deletion runs
-through a dedicated path that scrubs sessions, project_details, card_positions
-and the projects list before popping the user back to home.
-"""
+# ---------------------------------------------------------------------------
+# EKRAN USTAWIEŃ PROJEKTU – edycja i usuwanie
+# ---------------------------------------------------------------------------
+# Ten ekran pozwala edytować istniejący projekt: zmienić nazwę, zdjęcie,
+# kolor, emoji, lub usunąć projekt całkowicie (wymaga potwierdzenia).
+# Wszystkie zmiany są zapisywane dopiero po kliknięciu przycisku zapisu.
+# ---------------------------------------------------------------------------
 
 import json
 import os
@@ -48,13 +44,8 @@ def _save_json(path, data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
+# Ekran do edycji/usuwania projektu. project_uid to identyfikator projektu.
 class ProjectSettingsScreen(Screen):
-    """Edit / delete a single project. ``project_uid`` is the lookup key.
-
-    ``project_title`` is also tracked so we can still find legacy projects.json
-    entries that haven't been migrated yet, and so the form can prefill the
-    name field without an extra lookup.
-    """
 
     project_uid = StringProperty("")
     project_title = StringProperty("")
@@ -63,36 +54,34 @@ class ProjectSettingsScreen(Screen):
     selected_image_path = StringProperty("")
     name_text = StringProperty("")
 
-    # Original title — only needed to update the home card after a rename and
-    # to display in the delete-confirmation dialog. The persistent lookup key
-    # is now ``project_uid``.
     _original_title = ""
     _original_uid = ""
 
+    # Przed wejściem na ekran – wczytaj dane projektu z pliku.
     def on_pre_enter(self, *_args):
         self._load_project_meta()
 
+    # Po wejściu na ekran – poproś o pozwolenia na pliki (Android).
+    # Potrzebujemy dostępu do zdjęć w galerii użytkownika.
     def on_enter(self, *_args):
         if platform == "android":
             from android.permissions import Permission, request_permissions
+            request_permissions([Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
 
-            request_permissions(
-                [Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE]
-            )
-
+    # Znajduje projekt w liście projektów.
+    # Najpierw szuka po UID (unikalny identyfikator), potem po tytule (fallback).
     def _find_project(self, projects):
         if self._original_uid:
             for p in projects:
                 if p.get("uid") == self._original_uid:
                     return p
-        # Legacy fallback: pick by title only when no uid is known.
         for p in projects:
             if p.get("title") == self._original_title:
                 return p
         return None
 
+    # Wczytuje aktualne dane projektu (nazwa, kolor, emoji, zdjęcie) z pliku.
     def _load_project_meta(self):
-        """Hydrate the form with the project's current persisted state."""
         self._original_uid = self.project_uid or ""
         self._original_title = self.project_title or ""
         self.name_text = self._original_title
@@ -113,8 +102,7 @@ class ProjectSettingsScreen(Screen):
         )
         self.selected_image_path = proj.get("image") or ""
 
-    # --- Photo / color pickers ---
-
+    # Otwiera wybór zdjęcia z galerii systemowej.
     def select_photo(self):
         filechooser.open_file(
             title="Wybierz zdjęcie projektu",
@@ -141,9 +129,11 @@ class ProjectSettingsScreen(Screen):
     def _set_image_path(self, path):
         self.selected_image_path = path
 
+    # Usuwa zdjęcie projektu (przywraca do domyślnego tła kolorowego).
     def clear_photo(self):
         self.selected_image_path = ""
 
+    # Otwiera okno wyboru koloru tła projektu (paleta barw).
     def select_color(self):
         open_palette_picker(
             default_color=tuple(self.selected_color),
@@ -153,12 +143,11 @@ class ProjectSettingsScreen(Screen):
     def _apply_picked_color(self, color):
         self.selected_color = list(color)
 
-    # --- Save / cancel ---
-
+    # Anuluj – wróć do ekranu projektu bez zapisywania zmian.
     def cancel(self):
-        # Discard pending edits; just navigate back to the project view.
         self._return_to_project(self._original_title)
 
+    # Zapisz zmiany – nadpisz dane projektu w plikach.
     def save(self):
         new_name = (self.name_text or "").strip()
         if not new_name:
@@ -170,16 +159,12 @@ class ProjectSettingsScreen(Screen):
         # by uid now, so duplicate titles are explicitly OK.
         self._write_projects_json(new_name)
         self._rename_sessions_by_uid(new_name)
-
         self._refresh_home_cards()
         self._return_to_project(new_name, original_uid)
 
-    # --- Delete with confirmation ---
-
+    # Pokaż okno z prośbą o potwierdzenie usunięcia projektu.
+    # Operacja jest nieodwracalna – dlatego wymaga potwierdzenia.
     def delete_project(self):
-        # MDDialog computes its layout (and the action-button row) at
-        # construction time; assigning ``dlg.buttons`` after the fact leaves
-        # the dialog buttonless. Always pass them via the constructor.
         cancel_btn = MDFlatButton(text="ANULUJ")
         confirm_btn = MDFlatButton(
             text="USUŃ NA ZAWSZE",
@@ -200,6 +185,10 @@ class ProjectSettingsScreen(Screen):
         dlg.open()
 
     def _confirm_delete(self, dlg):
+        # Usuwa projekt ze wszystkich plików po potwierdzeniu przez użytkownika.
+        # Czyści: listę projektów, szczegóły (notatki, cele), historię sesji
+        # oraz zapisane pozycje kart na ekranie głównym.
+        # Na koniec odświeża ekran główny i wraca do niego.
         dlg.dismiss()
         uid = self._original_uid
         title = self._original_title
@@ -210,9 +199,6 @@ class ProjectSettingsScreen(Screen):
         if uid:
             projects = [p for p in projects if p.get("uid") != uid]
         else:
-            # Legacy fallback: drop every duplicate-titled entry. After the
-            # uid migration runs this branch shouldn't fire, but it's a safe
-            # default for unmigrated installs.
             projects = [p for p in projects if p.get("title") != title]
         _save_json(_user_path("projects.json"), projects)
 
@@ -238,12 +224,10 @@ class ProjectSettingsScreen(Screen):
         self._refresh_home_cards()
         self._go_home_after_delete()
 
-    # --- Persistence helpers ---
-
+    # Zapisuje zmienione dane projektu do pliku projects.json.
+    # Tworzy nowy UID jeśli projekt go nie miał (migracja ze starej wersji).
     def _write_projects_json(self, new_name):
-        """Update the project's projects.json row in place (by uid when known)."""
         import uuid as _uuid
-
         path = _user_path("projects.json")
         projects = _load_json(path, [])
         updated = False
@@ -278,12 +262,9 @@ class ProjectSettingsScreen(Screen):
             self.project_uid = new_uid
         _save_json(path, projects)
 
+    # Po zmianie nazwy – aktualizuje nazwę we wszystkich zapisanych sesjach.
+    # Dzięki temu historia sesji nadal pasuje do projektu mimo zmiany nazwy.
     def _rename_sessions_by_uid(self, new_name):
-        """Keep historical session ``project_title`` in sync with the rename.
-
-        Sessions stay project_title-keyed for display, so when the name
-        changes we update every session row that belongs to this uid.
-        """
         if not self._original_uid:
             return
         path = _user_path("sessions.json")
@@ -296,10 +277,9 @@ class ProjectSettingsScreen(Screen):
         if changed:
             _save_json(path, sessions)
 
-    # --- Navigation ---
-
+    # Odświeża karty na ekranie głównym po zmianie lub usunięciu projektu.
+    # Usuwa stare karty i ładuje je ponownie z pliku.
     def _refresh_home_cards(self):
-        """Reload home cards so the rename/delete is reflected immediately."""
         app = MDApp.get_running_app()
         if not app or not getattr(app, "root", None):
             return
@@ -312,9 +292,7 @@ class ProjectSettingsScreen(Screen):
         container = home.ids.get("projects_container")
         if container is None:
             return
-        # Re-import locally to avoid a circular module dep at file load time.
         from screens.home import ProjectCard
-
         for child in list(container.children):
             if isinstance(child, ProjectCard):
                 container.remove_widget(child)
@@ -322,6 +300,7 @@ class ProjectSettingsScreen(Screen):
         Clock.schedule_once(lambda _dt: home.restore_card_positions(), 0)
         home.refresh_last_session()
 
+    # Wraca do ekranu szczegółów projektu po zapisaniu zmian.
     def _return_to_project(self, title, uid=""):
         app = MDApp.get_running_app()
         if not app or not getattr(app, "root", None):
@@ -331,6 +310,7 @@ class ProjectSettingsScreen(Screen):
         info.project_title = title
         app.root.current = "project_info"
 
+    # Po usunięciu projektu – wraca do ekranu głównego (bo projektu już nie ma).
     def _go_home_after_delete(self):
         app = MDApp.get_running_app()
         if not app or not getattr(app, "root", None):
@@ -346,5 +326,4 @@ class ProjectSettingsScreen(Screen):
         dlg.open()
 
     def on_name_input(self, value):
-        """Mirror the TextInput value into the StringProperty for kv bindings."""
         self.name_text = value or ""
