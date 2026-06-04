@@ -9,7 +9,7 @@
 # Pokazuje ikonkę, nazwę projektu i czas. Kolorowy kwadracik po środku
 # odpowiada kolorem segmentowi na wykresie kołowym.
 #
-# "size_hint: None, None" z "size: dp(28), dp(28)" – stały rozmiar ikony.
+# "size_hint: None, None" z "size: dp(28), dp(28)" – ikona ma stały rozmiar (nie rozciąga się).
 # "pos_hint: {"center_y": 0.5}" – wyśrodkuj ikonę w pionie.
 # "shorten: True, shorten_from: right" – skróć nazwę projektu jeśli za długa.
 
@@ -20,7 +20,7 @@
         size_hint_x: 1
         padding: [dp(10), 0, 0, 0]
 
-        # Ikona projektu (emoji lub MDIcon)
+        # Ikona projektu (emoji lub standardowa ikona)
         MDIcon:
             icon: root.icon_name
             theme_text_color: "Custom"
@@ -88,8 +88,7 @@
             padding: 0, 0, 0, 0
 
             # "GridLayout" – układa elementy w siatkę (tutaj 1 kolumna).
-            # "size_hint_y: None" + "height: self.minimum_height" –
-            # wysokość dopasowuje się do zawartości.
+            # "height: self.minimum_height" – wysokość dopasowuje się do zawartości.
             GridLayout:
                 id: stats_scroll_content
                 cols: 1
@@ -169,7 +168,7 @@
                         width: dp(260)
                         height: dp(220) + dp(12) + dp(52)
 
-                        # "PieChart" – niestandardowy wykres kołowy (zdefiniowany w Pythonie).
+                        # "PieChart" – własny wykres kołowy stworzony specjalnie dla tej aplikacji.
                         # "opacity: 1 if root.has_data else 0.25" – przyciemniony
                         # gdy brak danych.
                         PieChart:

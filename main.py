@@ -171,7 +171,7 @@ class TimeTrackerApp(MDApp):
 
     # Tworzy ekran jeśli jeszcze nie istnieje. Można ją wywołać z
     # samą nazwą ekranu, a resztę parametrów odczyta z listy _LAZY_SCREENS.
-    # Funkcja jest "idempotentna" – jeśli ekran już istnieje, nic nie robi.
+    # Funkcja jest "bezpieczna do wielokrotnego wywołania" – jeśli ekran już istnieje, nic nie robi.
     def _ensure_screen(self, name, kv=None, module_path=None, class_name=None):
         for s in self.screen_manager.screens:
             if s.name == name:

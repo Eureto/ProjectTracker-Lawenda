@@ -64,9 +64,9 @@ except Exception as _exc:
 if _MAPVIEW_AVAILABLE:
     class _SmoothMapView(MapView):
         # MapView z płynnym (nie skaczącym) przybliżaniem.
-        # Standardowa mapa po zdjęciu palca przeskakuje do najbliższej
-        # liczby całkowitej przybliżenia. Ta wersja tego nie robi –
-        # przybliżenie zostaje tam, gdzie użytkownik je ustawił.
+        # Zwykła mapa po zdjęciu palca "wskakuje" do najbliższego stopnia
+        # przybliżenia (np. z 15.7 na 16). Ta wersja tego nie robi –
+        # przybliżenie zostaje dokładnie takie, jakie użytkownik ustawił.
         def on_touch_up(self, touch):
             if touch.grab_current == self:
                 touch.ungrab(self)
@@ -81,8 +81,8 @@ else:
 
 
 class _TouchBarrierBox(MDBoxLayout):
-    # Pudełko które blokuje dotknięcia przed dotarciem do elementów pod spodem.
-    # Dzieci wewnątrz wciąż działają normalnie, ale przyciski pod spodem są niewidoczne dla dotknięć.
+    # Przezroczysta warstwa, która "łapie" dotknięcia, żeby nie przeszły do elementów pod spodem.
+    # Dzieci wewnątrz działają normalnie, ale to co jest pod spodem – nie reaguje na dotyk.
     def on_touch_down(self, touch):
         handled = super().on_touch_down(touch)
         if handled:
@@ -121,15 +121,15 @@ _MAX_ZOOM = 19.0  # Maksymalne przybliżenie
 
 
 def _meters_per_pixel(lat_deg, zoom):
-    # Oblicza ile metrów przypada na jeden piksel mapy.
-    # Wartość zależy od szerokości geograficznej (lat_deg) i aktualnego przybliżenia (zoom).
-    # Im bliżej równika (lat_deg=0) i wyższe zoom, tym mniej metrów na piksel.
+    # Oblicza, ile metrów w rzeczywistości odpowiada jednemu pikselowi na mapie.
+    # Wartość zależy od szerokości geograficznej i aktualnego przybliżenia –
+    # im bardziej przybliżona mapa, tym mniej metrów na piksel.
     return 156543.03392 * math.cos(lat_deg * math.pi / 180.0) / (2.0 ** float(zoom))
 
 
 def _zoom_for_radius(radius_m, lat_deg, viewport_short_px):
-    # Oblicza jakie przybliżenie jest potrzebne, aby koło o zadanym promieniu
-    # w metrach zajmowało całą szerąkość mapy. Większy promień = mniejsze przybliżenie.
+    # Oblicza, jakie przybliżenie mapy jest potrzebne, żeby koło o zadanym promieniu
+    # (w metrach) zmieściło się na ekranie. Im większy promień, tym bardziej trzeba oddalić mapę.
     if radius_m <= 0 or viewport_short_px <= 0:
         return _DEFAULT_ZOOM
     visual_d = viewport_short_px * _VIEWPORT_FRACTION
@@ -741,8 +741,8 @@ class GeofencePickerScreen(MDScreen):
         )
         return btn
 
-    # Wartość przybliżenia na jeden "tik" (w oktawach skali): scatter.scale *= 2**TICK.
-    # 60 tików/sek * 0.035 ≈ 2.1 oktaw/sek ≈ 4× przybliżenia na sekundę przy przytrzymaniu.
+    # Krótkie dotknięcie przycisku zoomu zmienia przybliżenie o 18%.
+    # Przytrzymanie przycisku powoduje płynne przybliżanie z szybkością ok. 4× na sekundę.
     # Pierwszy skok jest stosowany od razu po dotknięciu, żeby reakcja była natychmiastowa.
     _ZOOM_TAP_STEP = 0.18
     _ZOOM_TICK = 0.035

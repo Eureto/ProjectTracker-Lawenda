@@ -15,7 +15,7 @@ _PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _SOURCE_DIR = os.path.join(_PKG_ROOT, "assets", "Emoji_PNG")
 _ZIP_PATH = os.path.join(_PKG_ROOT, "assets", "Emoji_PNG.zip")
 _EXTRACTED_DIR_NAME = "Emoji_PNG"
-_STAMP_FILE = ".emoji_assets_zip_mtime"  # Plik znacznikowy – zapisujemy w nim datę ostatniej modyfikacji ZIP-a
+_STAMP_FILE = ".emoji_assets_zip_mtime"  # Specjalny plik pomocniczy, w którym zapisujemy datę ostatniej zmiany pliku ZIP – dzięki temu wiemy, czy trzeba ponownie rozpakować emoji
 
 
 # Zwraca ścieżkę do prywatnego folderu aplikacji (user_data_dir).

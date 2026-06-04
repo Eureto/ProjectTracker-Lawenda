@@ -2,6 +2,7 @@
 #:import DotProgressBar screens.home.DotProgressBar
 #:import ProjectCard screens.home.ProjectCard
 #:import SessionCard screens.home.SessionCard
+# Powyższe linie importują funkcje pomocnicze oraz własne elementy wizualne z kodu Pythona.
 
 # ---------------------------------------------------------------------------
 # DEFINICJE PRZYCISKÓW (klikalnych kontenerów)
@@ -78,7 +79,7 @@
             radius: [dp(16), ]
 
         # Panel z tytułem na dole karty
-        # "pos_hint: {'center_x': 0.5, 'y': 0}" – środek poziomo, dół na pozycji 0.
+        # "pos_hint: {'center_x': 0.5, 'y': 0}" – wyśrodkowany w poziomie, doklejony do samego dołu karty.
         MDBoxLayout:
             size_hint: 1, None
             height: dp(38)
@@ -104,8 +105,8 @@
                 shorten_from: "right"
 
         # Odznaka z emoji w prawym górnym rogu (przekręcona o -30°)
-        # "pos_hint: {'right': 1.05, 'top': 1.25}" – prawa krawędź 5% poza kartą,
-        # góra 25% nad kartą (emoji wystaje poza kartę).
+        # "pos_hint: {'right': 1.05, 'top': 1.25}" – emoji wystaje poza kartę:
+        # 5% jej szerokości w prawo i 25% nad górną krawędź.
         MDIcon:
             icon: root.emoji_source
             size_hint: None, None
@@ -192,7 +193,7 @@
         spacing: dp(10)
 
         # Wiersz z nazwą projektu i emoji
-        # "FloatLayout" pozwala ustawić emoji dokładnie obok tekstu.
+        # Specjalny układ, który pozwala dowolnie pozycjonować elementy – tutaj umieszcza emoji dokładnie obok tekstu.
         FloatLayout:
             size_hint_x: 1
             size_hint_y: None
@@ -252,8 +253,8 @@
 # - Przewijaną listę projektów (karty)
 # - Dolny pasek nawigacyjny z przyciskami i przyciskiem "+" do dodawania
 #
-# "MDFloatLayout" – jak FloatLayout (swobodne pozycjonowanie), ale z motywem KivyMD.
-# "canvas.after:" – rysuje linię POD nagłówkiem, po narysowaniu wszystkiego innego.
+# "MDFloatLayout" – układ swobodny, pozwala umieszczać elementy w dowolnym miejscu ekranu.
+# Linia POD nagłówkiem (rysowana na wierzchu, po wszystkim).
 # "Line" – rysuje linię (points: punkty połączenie, width: grubość).
 #----------------------------------------------------------------------------
 
@@ -366,7 +367,7 @@
         # "size: dp(120), dp(56)" – szeroki, niski prostokąt.
         # "pos_hint: {'center_x': 0.5, 'center_y': 0.67}" – na środku,
         # 67% wysokości od dołu (unosi się nad paskiem).
-        # "canvas.before:" rysuje tło (fioletowy prostokąt z zaokrągleniem).
+        # Tło przycisku: fioletowy prostokąt z zaokrąglonymi rogami.
         ClickableAnchorLayout:
             size_hint: None, None
             size: dp(120), dp(56)

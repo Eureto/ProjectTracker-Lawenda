@@ -121,8 +121,9 @@ def _now():
 
 
 def _to_datetime(value):
-    # Konwertuje podaną wartość (ciąg znaków lub obiekt datetime) na obiekt
-    # datetime. Jeśli podano już datetime, zwraca je bez zmian.
+    # Konwertuje podaną wartość (tekst lub wewnętrzny format daty) na
+    # wewnętrzny format datetime, którym program może łatwo manipulować.
+    # Jeśli podano już datetime, zwraca je bez zmian.
     if isinstance(value, datetime.datetime):
         return value
     if not value:
@@ -138,8 +139,8 @@ def _to_datetime(value):
 # ---------------------------------------------------------------------------
 
 def elapsed_from_state(state, now=None):
-    # Oblicza łączny czas w sekundach, który upłynął od momentu uruchomienia
-    # stopera do teraz, wliczając czas z poprzednich uruchomień.
+    # Oblicza łączny czas w sekundach, który upłynął od uruchomienia stopera do teraz.
+    # Sumuje czas z poprzednich uruchomień (base_elapsed_seconds) z czasem bieżącego uruchomienia.
     started = _to_datetime((state or {}).get("started_at"))
     if started is None:
         return int(float((state or {}).get("base_elapsed_seconds", 0)))
@@ -320,7 +321,8 @@ def _project_meta(project_uid=None, project_title=None, base_dir=None):
 
 
 def _details_key(state_or_meta):
-    # Określa klucz (UID lub tytuł) używany do przechowywania danych projektu.
+    # Określa unikalny identyfikator (UID lub tytuł) używany do przechowywania danych projektu.
+    # Dzięki temu każdy projekt ma swoje własne miejsce w pamięci – nawet jeśli dwa projekty mają tę samą nazwę.
     if not isinstance(state_or_meta, dict):
         return "_"
     return state_or_meta.get("project_uid") or state_or_meta.get("uid") or state_or_meta.get("project_title") or "_"

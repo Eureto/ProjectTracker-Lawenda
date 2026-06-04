@@ -44,7 +44,8 @@ def _save_json(path, data):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
-# Ekran do edycji/usuwania projektu. project_uid to identyfikator projektu.
+# Ekran do edycji/usuwania projektu. project_uid to unikalny numer identyfikacyjny (UID),
+# który odróżnia ten projekt od innych – nawet jeśli mają taką samą nazwę.
 class ProjectSettingsScreen(Screen):
 
     project_uid = StringProperty("")
@@ -69,7 +70,8 @@ class ProjectSettingsScreen(Screen):
             request_permissions([Permission.READ_EXTERNAL_STORAGE, Permission.WRITE_EXTERNAL_STORAGE])
 
     # Znajduje projekt w liście projektów.
-    # Najpierw szuka po UID (unikalny identyfikator), potem po tytule (fallback).
+    # Najpierw szuka po UID (unikalny numer identyfikacyjny).
+    # Jeśli nie znajdzie – szuka po nazwie projektu (rozwiązanie awaryjne).
     def _find_project(self, projects):
         if self._original_uid:
             for p in projects:

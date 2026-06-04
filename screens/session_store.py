@@ -45,6 +45,7 @@ def load_sessions():
 
 # Zapisuje listę sesji do pliku sessions.json.
 # "os.makedirs(exist_ok=True)" – utwórz folder do zapisu jeśli nie istnieje.
+# Parametr "exist_ok=True" oznacza: nie wyrzucaj błędu, jeśli folder już istnieje.
 def save_sessions(sessions):
     path = _sessions_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -161,7 +162,7 @@ def _goal_period_key(reset_mode):
 
 
 def _parse_goal_reset_mode(value):
-    # Zamienia tekstowy opis trybu resetowania celu na jednolitą stałą.
+    # Zamienia tekstowy opis trybu resetowania celu na wewnętrzny kod, który program rozumie.
     # Przykłady: "daily", "dziennie", "day" → "daily" (codziennie)
     #            "weekly", "tygodniowo" → "weekly" (co tydzień)
     #            "never", "none" → "never" (nigdy nie resetuj)

@@ -77,9 +77,10 @@ def _format_seconds(seconds):
 
 
 def _goal_notification_id(uid):
-    # Generuje unikalny numer powiadomienia dla celu czasowego na podstawie jego UID (unikalnego identyfikatora).
-    # Używa algorytmu CRC32 do stworzenia rozproszenia liczb, dzięki czemu różne cele otrzymują 
-    # różne numery powiadomień, co pozwala systemowi Android na właściwe zarządzanie nimi.
+    # Generuje unikalny numer powiadomienia dla celu czasowego na podstawie jego UID.
+    # Używa algorytmu matematycznego (CRC32), który na podstawie identyfikatora celu
+    # generuje liczbę – dzięki temu każdy cel dostaje inny numer powiadomienia
+    # i system Android może je właściwie rozróżniać.
     return GOAL_NOTIFICATION_BASE_ID + (zlib.crc32(uid.encode("utf-8")) % 8000)
 
 
@@ -120,11 +121,11 @@ class TimerNotificationService:
     # lub nie jest widoczna na ekranie.
     
     def __init__(self):
-        # Inicjalizuje usługę poprzez:
-        #   1. Ładowanie potrzebnych klas Androida przez JNI
-        #   2. Tworzenie kanału powiadomień (wymagane w Android 8.0+)
-        #   3. Ustawianie folderu do zapisu danych (takiego samego jak używa główna aplikacja)
-        #   4. Rejestrację odbiornika szerokiastreamowego do obsługi przycisków w powiadomieniach
+        # Przygotowuje usługę poprzez:
+        #   1. Połączenie się z Androidem i załadowanie potrzebnych klas
+        #   2. Utworzenie kanału powiadomień (wymagane w Android 8.0+)
+        #   3. Ustawienie folderu do zapisu danych (takiego samego jak używa główna aplikacja)
+        #   4. Uruchomienie nasłuchiwania na przyciski w powiadomieniach (np. "Stop")
         from jnius import autoclass
 
         self.autoclass = autoclass

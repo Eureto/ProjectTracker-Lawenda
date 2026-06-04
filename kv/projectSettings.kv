@@ -135,9 +135,8 @@
                         text_size: self.size
 
                 # ── Pole do zmiany nazwy projektu ──
-                # "on_text: root.on_name_input(self.text)" – gdy użytkownik
-                # wpisuje tekst, Python od razu otrzymuje informację i może
-                # zaktualizować podgląd.
+                # "on_text: root.on_name_input(self.text)" – za każdym razem
+                # gdy użytkownik wpisuje tekst, podgląd karty od razu się aktualizuje.
                 ProjectTextInput:
                     id: name_input
                     hint_text: "Nazwa Projektu"

@@ -62,8 +62,8 @@
             bar_width: 0
 
             # "MDLabel" – etykieta z tekstem notatki.
-            # "height: self.texture_size[1]" – wysokość dopasowana do treści
-            # (texture_size to rozmiar faktycznie narysowanego tekstu).
+            # "height: self.texture_size[1]" – wysokość automatycznie
+            # dopasowuje się do ilości tekstu.
             # "max_lines: 0" – brak limitu linii.
             # "line_height: 1.2" – odstęp między liniami (1.2 = 120% czcionki).
             MDLabel:
@@ -142,7 +142,7 @@
                     points: [dp(8), dp(16), self.width - dp(8), dp(16)]
 
             # Samochodzik – zmienia obrazek gdy cel jest aktywny (jedzie) lub nieaktywny (śpi)
-            # "pos_hint: {"center_x": root.car_hint_x}" – pozycja X samochodzika
+            # "pos_hint: {"center_x": root.car_hint_x}" – pozycja pozioma samochodzika
             # zależy od postępu (0% = lewo, 100% = prawo).
             # "Scale:" – odwraca samochodzik w poziomie (x: -1) gdy jedzie w lewo.
             CarProgressButton:
@@ -527,8 +527,8 @@
             padding: [dp(18), dp(28), dp(18), dp(67)]
 
             # Nazwa projektu na górze ekranu
-            # "height: self.texture_size[1] + dp(4)" – wysokość dopasowana
-            # do faktycznie narysowanego tekstu (tekst może być krótki lub długi).
+            # "height: self.texture_size[1] + dp(4)" – wysokość automatycznie
+            # dopasowuje się do długości tytułu.
             MDLabel:
                 text: root.project_title or "Projekt"
                 font_size: sp(17)
@@ -556,9 +556,8 @@
                 size_hint_y: 1
                 bar_width: 0
 
-                # "adaptive_height" nie jest ustawione – zamiast tego używamy
-                # "height: self.minimum_height" aby wysokość dopasowywała się
-                # do sumy wysokości wszystkich dzieci.
+                # "height: self.minimum_height" – wysokość dopasowuje się
+                # automatycznie do zawartości (sumy wszystkich elementów w środku).
                 MDBoxLayout:
                     orientation: "vertical"
                     spacing: dp(8)

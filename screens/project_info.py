@@ -390,7 +390,7 @@ def parse_reset_mode(value):
 
 
 def parse_goal_target_seconds(goal_str):
-    """Próbuje odczytać czas z tekstu takiego jak '1h/1d', '30min', '2h'. Domyślnie 1 godzina."""
+    """Próbuje odczytać czas z tekstu wpisanego przez użytkownika, np. '1h' = 1 godzina, '30min' = 30 minut, '2h/1d' = 2 godziny dziennie. Domyślnie 1 godzina."""
     s = (goal_str or "").lower().replace(",", ".")
     m = re.search(r"(\d+(?:\.\d+)?)\s*h", s)
     if m:
@@ -426,7 +426,7 @@ def format_goal_elapsed(seconds):
         return f"{s // 60}m"
     h, r = divmod(s, 3600)
     m = r // 60
-    # Single horizontal token (no line breaks)
+    # Pokazuje czas w zwartej formie, np. "2h30m" zamiast "2 godziny 30 minut".
     return f"{h}h{m}m" if m else f"{h}h"
 
 
@@ -682,7 +682,7 @@ class ChecklistGoalRow(MDBoxLayout):
 
 
 class ZrobioneHeaderBar(MDBoxLayout):
-    """Wiersz do kliknięcia: tytuł + strzałka."""
+    """Wiersz do kliknięcia: nagłówek "Zrobione" + strzałka. Kliknięcie rozwija lub zwija listę ukończonych celów."""
 
     section = ObjectProperty(None, allownone=True)
 

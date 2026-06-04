@@ -45,8 +45,8 @@ GRID_EMOJI_TOP_EXTRA = 0.25
 GRID_EMOJI_BADGE_SCALE = 1.6
 
 
-# Zamienia kolor na format (r, g, b, a) z zakresem 0-1.
-# Przyjmuje: string (#FF00FF), listę [255,0,255], listę [0-1,0-1,0-1].
+# Zamienia kolor zapisany w różnych formatach na jednolity zrozumiały dla Kivy.
+# Przyjmuje: zapis szesnastkowy (#FF00FF), listę [255,0,255], listę [0-1,0-1,0-1].
 def _normalize_rgba(color):
     if isinstance(color, str):
         return get_color_from_hex(color)
@@ -336,7 +336,8 @@ class SessionCard(MDCard):
 
     # Oblicza "rzeczywistą" szerokość tekstu – taką jaką miałby bez ograniczeń.
     # Używane do pozycjonowania ikony dokładnie obok tekstu.
-    # "CoreLabel" – to narzędzie Kivy do pomiaru tekstu bez rysowania go.
+    # "CoreLabel" – to narzędzie wbudowane w Kivy (silnik graficzny aplikacji), które pozwala
+    # zmierzyć tekst, zanim zostanie wyświetlony na ekranie.
     def _title_text_width(self, label):
         if not label.text:
             return 0
@@ -470,7 +471,7 @@ class HomeScreen(MDScreen):
         Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
 
     def apply_initial_layout(self):
-        """Uruchamia układ siatki lub swobodny, gdy kontener projektów ma już rzeczywistą szerokość."""
+        """Uruchamia układ siatki lub swobodny, gdy kontener projektów ma już ustalony rozmiar na ekranie – dopiero wtedy można prawidłowo rozłożyć karty."""
         container = self.ids.projects_container
         if container.width < 1:
             Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)

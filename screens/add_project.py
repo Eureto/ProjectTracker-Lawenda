@@ -49,7 +49,7 @@ class EmojiButton(RectangularRippleBehavior, ButtonBehavior, Image):
     # gdy użytkownik chce ustawić ikonę projektu. Każdy przycisk zawiera
     # jeden znak emoji i po kliknięciu informuje ekran, które emoji wybrano.
     
-    screen = ObjectProperty(None)
+    screen = ObjectProperty(None)  # Przechowuje odniesienie do ekranu głównego – potrzebne do odświeżania po dodaniu projektu
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -172,7 +172,8 @@ class AddProjectScreen(Screen):
     # WYBÓR EMOJI – otwiera okno z siatką emoji i wyszukiwarką
     # -----------------------------------------------------------------------
     # Otwiera okno wyboru emoji z paskiem wyszukiwania i siatką obrazków.
-    # Najpierw czyści pamięć podręczną obrazków (Cache.remove), żeby zwolnić RAM.
+    # Najpierw czyści pamięć podręczną obrazków (Cache), żeby zwolnić miejsce w pamięci RAM.
+    # Cache to tymczasowe przechowywanie obrazków – czyścimy go przed otwarciem okna emoji.
     def select_emoji(self):
         Cache.remove('kv.image')
         Cache.remove('kv.texture')
