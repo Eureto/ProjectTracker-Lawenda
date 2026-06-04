@@ -67,6 +67,7 @@ def _normalize_rgba(color):
 def _relative_luminance(rgba):
     r, g, b, *_ = _normalize_rgba(rgba)
 
+    # Przelicza składową koloru na wartość liniową – potrzebne do obliczenia jasności koloru.
     def linear(channel):
         return channel / 12.92 if channel <= 0.03928 else ((channel + 0.055) / 1.055) ** 2.4
 
@@ -100,6 +101,7 @@ class DotProgressBar(Widget):
     active_color = ColorProperty([0.08, 0.08, 0.08, 1])
     inactive_color = ColorProperty([1, 1, 1, 1])
 
+    # Przygotowuje pasek postępu – ustawia, że pasek ma się przerysowywać, gdy zmieni się jego położenie, rozmiar, liczba kroków lub kolory.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.bind(
@@ -171,6 +173,7 @@ class ProjectCard(MDCard):
     emoji_right_hint = NumericProperty(1.05)
     emoji_right_hint_png = NumericProperty(1.05)
 
+    # Sprawdza, czy emoji pochodzi z pliku PNG – jeśli tak, zwraca inne ustawienie pozycji niż dla zwykłej ikony.
     def _get_effective_emoji_right_hint(self):
         src = (self.emoji_source or "").lower()
         if src.endswith(".png"):
@@ -185,22 +188,27 @@ class ProjectCard(MDCard):
 
     interactive = BooleanProperty(True)
 
+    # Przygotowuje nową kartę projektu – zapamiętuje ustawienia początkowe i dobiera kolor tekstu pasujący do tła karty.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._long_press_ev = None
         self._shake_anim = None
         self._update_title_text_color()
 
+    # Wywołuje się automatycznie po zmianie koloru tła karty – wtedy trzeba też dobrać kolor napisu.
     def on_card_color(self, *_args):
         self._update_title_text_color()
 
+    # Dobiera kolor napisu (czarny lub biały) tak, żeby był dobrze widoczny na tle karty.
     def _update_title_text_color(self):
         self.title_text_color = contrasting_text_color(self.card_color)
 
+    # Sprawdza, czy karty mogą być swobodnie przesuwane (tryb swobodny, a nie siatka).
     def _free_layout_enabled(self):
         app = MDApp.get_running_app()
         return app is None or not app.grid_layout
 
+    # Reaguje na dotknięcie karty. Jeśli karta jest w trybie swobodnym, uruchamia licznik – przytrzymanie palca przez sekundę włącza tryb przeciągania.
     def on_touch_down(self, touch):
         if not self.interactive:
             return False
@@ -226,6 +234,7 @@ class ProjectCard(MDCard):
             self._shake_anim = None
         Animation(angle=0, d=0.1).start(self)
 
+    # Włącza tryb przeciągania karty – karta może swobodnie poruszać się po ekranie i zaczyna lekko drżeć, żeby zasygnalizować gotowość do przesunięcia.
     def _start_drag_mode(self, touch):
         if not self._free_layout_enabled():
             return
@@ -234,6 +243,7 @@ class ProjectCard(MDCard):
         self._shake_anim.repeat = True
         self._shake_anim.start(self)
 
+    # Reaguje na przesuwanie palca po ekranie. Jeśli karta jest w trybie przeciągania, przesuwa się razem z palcem.
     def on_touch_move(self, touch):
         if not self.interactive:
             return False
@@ -248,6 +258,7 @@ class ProjectCard(MDCard):
             return True
         return super().on_touch_move(touch)
 
+    # Reaguje na podniesienie palca z ekranu. Jeśli karta była przeciągana – zapisuje nowe położenie. Jeśli to było zwykłe kliknięcie – otwiera szczegóły projektu.
     def on_touch_up(self, touch):
         if not self.interactive:
             return False
@@ -272,6 +283,7 @@ class ProjectCard(MDCard):
             return True
         return super().on_touch_up(touch)
 
+    # Otwiera ekran ze szczegółami tego projektu – przekazuje nazwę i identyfikator, żeby ekran wiedział, które dane pokazać.
     def open_project_info(self):
         app = MDApp.get_running_app()
         info = app.root.get_screen("project_info")
@@ -282,6 +294,7 @@ class ProjectCard(MDCard):
         info.project_title = self.title
         app.root.current = "project_info"
 
+    # Zapisuje aktualne położenie karty do pliku, aby po ponownym uruchomieniu aplikacji karta wróciła w to samo miejsce.
     def save_position(self):
         if not self._free_layout_enabled():
             return
@@ -324,6 +337,7 @@ class SessionCard(MDCard):
     when_label = StringProperty("")
     duration_text = StringProperty("Czas:  00:00:00")
 
+    # Wywołuje się po utworzeniu karty ostatniej sesji na ekranie. Podłącza mechanizm, który ustawia ikonę tuż obok tekstu z nazwą projektu.
     def on_kv_post(self, base_widget):
         super().on_kv_post(base_widget)
         label = self.ids.session_project_title
@@ -402,6 +416,7 @@ class HomeScreen(MDScreen):
 
     _last_grid_container_width = 0
 
+    # Wywołuje się po utworzeniu ekranu głównego. Ustawia nasłuchiwanie zmian rozmiaru pojemnika na projekty i trybu widoku.
     def on_kv_post(self, base_widget):
         super().on_kv_post(base_widget)
         container = self.ids.projects_container
@@ -467,6 +482,7 @@ class HomeScreen(MDScreen):
         top_pad = base_top + badge_above
         return card_w, card_h, top_pad, margin_x, gutter, row_gap
 
+    # Planuje pierwsze ułożenie kart na ekranie – wykona się przy najbliższej okazji, gdy ekran będzie już w pełni gotowy.
     def schedule_initial_layout(self):
         Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
 
@@ -540,6 +556,7 @@ class HomeScreen(MDScreen):
     def on_enter(self, *_args):
         schedule_home_last_session_refresh()
         self.schedule_initial_layout()
+    # Wczytuje zapisane projekty z pliku i dodaje ich karty na ekran główny.
     def load_projects(self):
         app = MDApp.get_running_app()
         storage_path = os.path.join(app.user_data_dir, 'projects.json')

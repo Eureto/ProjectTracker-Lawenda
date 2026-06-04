@@ -117,6 +117,7 @@ def _remove(filename, base_dir=None):
 
 
 def _now():
+    # Zwraca aktualną datę i godzinę z systemu.
     return datetime.datetime.now()
 
 
@@ -181,6 +182,8 @@ def start_project_timer(
     base_dir=None,
     project_uid="",
 ):
+    # Uruchamia stoper (licznik czasu) dla wybranego projektu. Zapisuje w pliku
+    # nazwę projektu, dotychczasowy czas oraz moment startu.
     state = {
         "project_uid": project_uid or "",
         "project_title": project_title,
@@ -252,6 +255,8 @@ def start_goal(
     base_dir=None,
     project_uid="",
 ):
+    # Uruchamia nowy cel czasowy. Zapisuje w pliku wszystkie ustawienia celu,
+    # takie jak nazwa, limit czasu i moment rozpoczęcia.
     state = {
         "uid": uid,
         "project_uid": project_uid or "",
@@ -281,13 +286,16 @@ def remove_goal(uid, base_dir=None):
 # ---------------------------------------------------------------------------
 
 def _read_project_details(base_dir=None):
+    # Odczytuje z pliku szczegóły projektów (notatki, cele, postępy).
     data = _read_json(PROJECT_DETAILS_FILE, {}, base_dir)
     return data if isinstance(data, dict) else {}
 
 def _write_project_details(data, base_dir=None):
+    # Zapisuje do pliku szczegóły projektów (notatki, cele, postępy).
     _write_json(PROJECT_DETAILS_FILE, data, base_dir)
 
 def _read_projects(base_dir=None):
+    # Odczytuje z pliku listę wszystkich projektów.
     data = _read_json(PROJECTS_FILE, [], base_dir)
     return data if isinstance(data, list) else []
 
@@ -483,6 +491,9 @@ def migrate_legacy_state_to_uids(base_dir=None):
 
 
 def _migrate_project_details(base_dir, title_to_uid, valid_uids):
+    # Przenosi szczegóły projektów ze starych kluczy (nazwa projektu) na nowe
+    # (unikalny numer UID). Dzięki temu dane się nie mieszają, gdy dwa projekty
+    # mają tę samą nazwę.
     path = _path(PROJECT_DETAILS_FILE, base_dir)
     if not os.path.exists(path):
         return
@@ -506,6 +517,8 @@ def _migrate_project_details(base_dir, title_to_uid, valid_uids):
 
 
 def _migrate_active_timer(base_dir, title_to_uid):
+    # Przenosi aktywny stoper ze starego zapisu (po nazwie projektu) na nowy
+    # (z unikalnym numerem UID).
     path = _path(ACTIVE_TIMER_FILE, base_dir)
     if not os.path.exists(path):
         return
@@ -521,6 +534,8 @@ def _migrate_active_timer(base_dir, title_to_uid):
 
 
 def _migrate_active_goals(base_dir, title_to_uid):
+    # Przenosi aktywne cele czasowe ze starego zapisu (po nazwie projektu) na
+    # nowy (z unikalnym numerem UID).
     path = _path(ACTIVE_GOALS_FILE, base_dir)
     if not os.path.exists(path):
         return
@@ -542,6 +557,8 @@ def _migrate_active_goals(base_dir, title_to_uid):
 
 
 def _migrate_card_positions(base_dir, title_to_uid, valid_uids):
+    # Przenosi ułożenie kart na ekranie głównym ze starego zapisu (po nazwie
+    # projektu) na nowy (z unikalnym numerem UID).
     path = _path(CARD_POSITIONS_FILE, base_dir)
     if not os.path.exists(path):
         return
@@ -565,6 +582,8 @@ def _migrate_card_positions(base_dir, title_to_uid, valid_uids):
 
 
 def _migrate_sessions(base_dir, title_to_uid):
+    # Przenosi zapisane sesje pomiaru czasu ze starego zapisu (po nazwie
+    # projektu) na nowy (z unikalnym numerem UID).
     path = _path(SESSIONS_FILE, base_dir)
     if not os.path.exists(path):
         return

@@ -54,7 +54,6 @@ def _argb(a, r, g, b):
 ACCENT_COLOR = _argb(0xFF, 0x8A, 0x2B, 0xE2)
 
 
-# Zapisuje wiadomość zarówno w konsoli (stdout), jak i w logach systemowych Android (logcat).
 def _logcat(message):
     # Zapisuje wiadomość zarówno w konsoli (print) jak i w logach systemowych Android (logcat) 
     # do celów debugowania. Dzięki temu deweloper może śledzić działanie aplikacji 
@@ -177,7 +176,6 @@ class TimerNotificationService:
     def _jstr(self, value):
         return self.JavaString(str(value or ""))
 
-    # Wczytuje dużą ikonę aplikacji do wyświetlania w powiadomieniach.
     def _load_large_icon(self):
         # Wczytuje dużą ikonę aplikacji z zasobów Androida, która będzie wyświetlana
         # w powiadomieniu jako większe obrazki. Jeśli BitmapFactory nie jest dostępna
@@ -192,10 +190,10 @@ class TimerNotificationService:
             _logcat(f"large icon load failed: {exc!r}")
             return None
 
+    # Tworzy kanał powiadomień – wymagany w Androidzie 8.0 i nowszych.
+    # Kanał pozwala użytkownikowi kontrolować ustawienia powiadomień
+    # (ważność, dźwięk itp.) dla tej aplikacji w ustawieniach systemu.
     def _create_channel(self):
-        # Tworzy kanał powiadomień, który jest wymagany w Androidzie 8.0 (API level 26) i nowszych.
-        # Kanał powiadomień pozwala użytkownikowi na kontrolowanie ustawień powiadomień
-        # dla tej konkretnej aplikacji (jak ważność, dźwięk, itp.).
         if self.sdk_int < 26:
             return
         channel = self.NotificationChannel(
@@ -210,13 +208,15 @@ class TimerNotificationService:
             pass
         self.manager.createNotificationChannel(channel)
 
+    # Konwertuje tekst (string) Pythona na tekst zrozumiały dla Javy.
+    # Jest to potrzebne, ponieważ Android API działa na stringach Javy,
+    # a nie na stringach Pythona.
     def _jstr(self, value):
-        # Konwertuje string Pythona na obiekt string Javy, który jest wymagany
-        # przy wywoływaniu metod Androida przez JNI (Java Native Interface).
-        # Jest to konieczne ponieważ Android API pracuje ze stringami Javy,
-        # a nie ze stringami Pythona.
         return self.JavaString(str(value or ""))
 
+    # Zwraca odpowiednie flagi (ustawienia) dla PendingIntent w zależności
+    # od wersji Androida. To zabezpieczenie: nowsze wersje wymagają
+    # FLAG_IMMUTABLE, żeby intencji nie można było modyfikować z zewnątrz.
     def _pending_flags(self):
         # Zwraca odpowiednie flagi dla PendingIntent w zależności od wersji SDK Androida.
         # FLAG_UPDATE_CURRENT zapewnia aktualizację istniejącego intencji.
@@ -227,11 +227,9 @@ class TimerNotificationService:
             flags |= self.PendingIntent.FLAG_IMMUTABLE
         return flags
 
+    # Tworzy intencję (sygnał), która po kliknięciu w powiadomienie
+    # otwiera główną aplikację na ekranie wybranego projektu.
     def _activity_intent(self, project_title):
-        # Tworzy intencję (intention) która po kliknięciu w powiadomienie
-        # otwiera główną aplikację na ekranie wybranego projektu.
-        # Intent to obiekt Androida używany do uruchamiania aktywności
-        # lub przekazywania danych między komponentami aplikacji.
         intent = self.Intent(self.context, self.PythonActivity)
         intent.setFlags(
             self.Intent.FLAG_ACTIVITY_CLEAR_TOP | self.Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -239,20 +237,20 @@ class TimerNotificationService:
         intent.putExtra("project", project_title or "")
         return intent
 
+    # Tworzy intencję (sygnał) dla przycisku "Zatrzymaj" w powiadomieniu.
+    # Gdy użytkownik kliknie "Zatrzymaj" – ten sygnał trafia do usługi,
+    # która zatrzymuje stoper lub cel czasowy o podanym UID.
     def _stop_intent(self, action, uid=""):
-        # Tworzy intencję która po kliknięciu przycisku 'Zatrzymaj' w powiadomieniu
-        # wysyła sygnał do usługi aby zatrzymać stoper lub cel czasowy.
-        # Action określa jaką akcję wykonać (zatrzymanie stopera czy celu),
-        # a UID identyfikuje konkretny cel czasowy (jeśli dotyczy).
         intent = self.Intent(self._jstr(action))
         intent.setPackage(self._jstr(self.package_name))
         if uid:
             intent.putExtra(self._jstr("uid"), self._jstr(uid))
         return intent
 
+    # Tworzy obiekt do budowania powiadomień (Notification.Builder)
+    # w zależności od wersji Androida. W Android 8.0+ trzeba podać
+    # kanał powiadomień, inaczej powiadomienie nie będzie działać.
     def _builder(self):
-        # Tworzy odpowiedni obiekt Notification.Builder w zależności od wersji SDK Androida.
-        # W Androidzie 8.0 (API level 26) i nowszych należy podać kanał powiadomień.
         if self.sdk_int >= 26:
             return self.NotificationBuilder(self.context, CHANNEL_ID)
         return self.NotificationBuilder(self.context)
@@ -326,7 +324,6 @@ class TimerNotificationService:
             self._apply_style(builder, title, expanded_text)
         return builder
 
-    # Tworzy tymczasowe powiadomienie widoczne podczas uruchamiania usługi.
     def _placeholder_notification(self):
         # Tworzy tymczasowe powiadomienie widoczne na pasku statusu tylko
         # podczas uruchamiania usługi, zanim zacznie działać właściwy stoper.
@@ -398,7 +395,6 @@ class TimerNotificationService:
             sub_text="Lawenda",
         ).build()
 
-    # Uruchamia lub aktualizuje usługę na pierwszym planie z podanym powiadomieniem.
     def _start_foreground(self, notification_id, notification):
         # Uruchamia usługę Android na pierwszym planie ("foreground service").
         # To specjalny rodzaj usługi, która pokazuje stałe powiadomienie
@@ -457,6 +453,10 @@ class TimerNotificationService:
             _logcat(f"BroadcastReceiver unavailable: {exc!r}")
             return
 
+        # Gdy użytkownik kliknie "Zatrzymaj" w powiadomieniu – odbiera
+        # ten sygnał. Jeśli dotyczy stopera – zatrzymuje pomiar czasu
+        # projektu. Jeśli dotyczy celu czasowego – zatrzymuje śledzenie
+        # konkretnego celu na podstawie jego numeru (UID).
         def _on_receive(context, intent):
             action = str(intent.getAction() or "")
             _logcat(f"received {action}")
@@ -486,6 +486,8 @@ class TimerNotificationService:
             _logcat(f"BroadcastReceiver.start failed: {exc!r}")
             self._receiver = None
 
+    # Odłącza nasłuchiwacz kliknięć w powiadomieniach – przestaje
+    # reagować na przycisk "Zatrzymaj" w powiadomieniach.
     def _unregister_stop_receiver(self):
         if self._receiver is None:
             return

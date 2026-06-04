@@ -23,11 +23,15 @@ from screens.emoji_assets import resolve_emoji_source
 from screens.image_utils import prepare_project_image
 
 
+# Zwraca ścieżkę do pliku lub folderu w prywatnym katalogu aplikacji.
+# *parts to lista fragmentów ścieżki, które są łączone ze sobą.
 def _user_path(*parts):
     app = MDApp.get_running_app()
     return os.path.join(app.user_data_dir, *parts)
 
 
+# Odczytuje plik JSON i zwraca jego zawartość. Jeśli plik nie istnieje
+# lub jest uszkodzony – zwraca wartość domyślną podaną w "default".
 def _load_json(path, default):
     if not os.path.exists(path):
         return default
@@ -38,6 +42,8 @@ def _load_json(path, default):
         return default
 
 
+# Zapisuje dane do pliku w formacie JSON. Tworzy foldery jeśli trzeba.
+# "data" to dowolna wartość którą można zapisać w JSON (lista, słownik itp.).
 def _save_json(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -112,6 +118,8 @@ class ProjectSettingsScreen(Screen):
             on_selection=self._on_image_selected,
         )
 
+    # Po wybraniu zdjęcia z galerii – przekazuje je do funkcji, która
+    # przetworzy i wyświetli obrazek. Jeśli nic nie wybrano – nic nie robi.
     def _on_image_selected(self, selection):
         if not selection:
             return
@@ -119,6 +127,8 @@ class ProjectSettingsScreen(Screen):
             lambda _dt: self._apply_selected_photo(selection[0]), 0
         )
 
+    # Przygotowuje wybrane zdjęcie do użycia: zmniejsza je i zapisuje
+    # w prywatnym folderze aplikacji. Jeśli się nie uda – używa oryginału.
     def _apply_selected_photo(self, path):
         cache_dir = _user_path("project_images")
         try:
@@ -128,6 +138,8 @@ class ProjectSettingsScreen(Screen):
         self.selected_image_path = ""
         Clock.schedule_once(lambda _dt: self._set_image_path(path), 0.05)
 
+    # Ustawia ścieżkę do wybranego zdjęcia w podglądzie, co powoduje
+    # wyświetlenie nowego obrazka na karcie projektu.
     def _set_image_path(self, path):
         self.selected_image_path = path
 
@@ -142,6 +154,7 @@ class ProjectSettingsScreen(Screen):
             on_pick=self._apply_picked_color,
         )
 
+    # Zapisuje wybrany przez użytkownika kolor jako aktualny kolor projektu.
     def _apply_picked_color(self, color):
         self.selected_color = list(color)
 
@@ -150,6 +163,8 @@ class ProjectSettingsScreen(Screen):
         self._return_to_project(self._original_title)
 
     # Zapisz zmiany – nadpisz dane projektu w plikach.
+    # Zapisuje zmienione dane projektu do plików: aktualizuje nazwę,
+    # kolor, emoji i zdjęcie. Odświeża ekran główny i wraca do projektu.
     def save(self):
         new_name = (self.name_text or "").strip()
         if not new_name:
@@ -328,5 +343,7 @@ class ProjectSettingsScreen(Screen):
         ok.bind(on_release=lambda *_a: dlg.dismiss())
         dlg.open()
 
+    # Gdy użytkownik wpisuje nową nazwę projektu – zapamiętuje ją,
+    # żeby można było zapisać przy kliknięciu przycisku "Zapisz".
     def on_name_input(self, value):
         self.name_text = value or ""

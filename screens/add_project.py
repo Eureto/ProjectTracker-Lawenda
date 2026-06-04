@@ -51,6 +51,9 @@ class EmojiButton(RectangularRippleBehavior, ButtonBehavior, Image):
     
     screen = ObjectProperty(None)  # Przechowuje odniesienie do ekranu głównego – potrzebne do odświeżania po dodaniu projektu
     
+    # Przygotowuje przycisk emoji: ustawia jego rozmiar (60x60 punktów),
+    # wyłącza zapamiętywanie w pamięci podręcznej i pozwala na rozciąganie
+    # obrazka tak, żeby emoji dobrze wyglądało w środku przycisku.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.nocache = True  # Nie przechowuj w pamięci podręcznej (oszczędność RAM)
@@ -251,6 +254,8 @@ class AddProjectScreen(Screen):
         )
         self.emoji_dialog.open()
         
+        # Po otwarciu okna wyboru emoji – ustawia kursor w polu wyszukiwania,
+        # żeby użytkownik mógł od razu zacząć pisać bez klikania w pole.
         def focus_search(dt):
             self._search_input.focus = True
         Clock.schedule_once(focus_search, 0.1)
@@ -299,6 +304,7 @@ class AddProjectScreen(Screen):
             on_selection=self._on_image_selected
         )
 
+    # Wywoływane po wybraniu zdjęcia przez użytkownika – przekazuje ścieżkę do dalszego przetworzenia.
     def _on_image_selected(self, selection):
         if selection:
             Clock.schedule_once(lambda _dt: self._apply_selected_photo(selection[0]), 0)
@@ -322,6 +328,8 @@ class AddProjectScreen(Screen):
         # a po chwili ustawia nową – to wymusza przeładowanie obrazka
         # na ekranie.
         self.selected_image_path = ""
+        # Po krótkim opóźnieniu ustawia ścieżkę do zdjęcia w podglądzie,
+        # co powoduje załadowanie i wyświetlenie obrazka na karcie projektu.
         def reapply_path(dt):
             self.selected_image_path = path
             print(f"Image updated in preview: {path}")
@@ -431,6 +439,7 @@ class AddProjectScreen(Screen):
             on_pick=self._apply_picked_color,
         )
 
+    # Zapamiętuje kolor wybrany przez użytkownika w palecie kolorów.
     def _apply_picked_color(self, color):
         self.selected_color = color
 

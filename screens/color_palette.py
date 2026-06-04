@@ -55,6 +55,9 @@ class PaletteSwatchButton(ButtonBehavior, Widget):
     swatch_color = ListProperty([1, 1, 1, 1])
     selected = BooleanProperty(False)
 
+    # Przygotowuje przycisk z kolorowym kółkiem: ustawia jego rozmiar
+    # (40x40 punktów) i podłącza funkcję, która odrysowuje kółko przy
+    # każdej zmianie położenia, rozmiaru, koloru lub stanu zaznaczenia.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (None, None)
@@ -66,6 +69,10 @@ class PaletteSwatchButton(ButtonBehavior, Widget):
             selected=self._redraw,
         )
 
+    # Rysuje kolorowe kółko od nowa przy każdej zmianie położenia,
+    # rozmiaru lub koloru. Dla wybranego koloru dodaje białą obwódkę.
+    # Dla bardzo jasnych kolorów dodaje szarą obwódkę, żeby nie zlewały
+    # się z białym tłem okna.
     def _redraw(self, *_args):
         self.canvas.clear()
         if self.width < 1 or self.height < 1:
@@ -157,6 +164,9 @@ def open_palette_picker(default_color, on_pick, title="Wybierz kolor"):
 
     swatches = []
 
+    # Gdy użytkownik kliknie w kolorowe kółko – zaznacza je (odznacza
+    # inne), zamyka okno wyboru koloru i przekazuje wybrany kolor
+    # do funkcji, która go zapamięta dla projektu.
     def select(btn, color, *_args):
         for sw in swatches:
             sw.selected = (sw is btn)

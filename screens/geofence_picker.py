@@ -90,6 +90,9 @@ class _TouchBarrierBox(MDBoxLayout):
         if self.collide_point(*touch.pos):
             return True
         return False
+    # Gdy użytkownik przesuwa palec, ta funkcja sprawdza, czy dotknięcie
+    # zostało obsłużone przez dzieci; jeśli nie – blokuje je, żeby nie
+    # przeszło do elementów pod spodem.
     def on_touch_move(self, touch):
         handled = super().on_touch_move(touch)
         if handled:
@@ -97,6 +100,9 @@ class _TouchBarrierBox(MDBoxLayout):
         if self.collide_point(*touch.pos):
             return True
         return False
+    # Gdy użytkownik puści palec, ta funkcja sprawdza, czy dotknięcie
+    # zostało obsłużone przez dzieci; jeśli nie, blokuje je, żeby nie
+    # przeszło do elementów pod spodem.
     def on_touch_up(self, touch):
         handled = super().on_touch_up(touch)
         if handled:
@@ -167,6 +173,8 @@ class GeofenceCircleOverlay(Widget):
     fill_color = ObjectProperty((0.55, 0.31, 0.78, 0.18))
     diameter_px = NumericProperty(dp(120))
 
+    # Przygotowuje nakładkę: zapamiętuje, że ma przerysowywać koło,
+    # gdy zmieni się położenie, rozmiar, kolor lub średnica.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.size_hint = (1, 1)
@@ -182,9 +190,13 @@ class GeofenceCircleOverlay(Widget):
     def on_touch_down(self, touch):
         return False
 
+    # Gdy użytkownik przesuwa palec po ekranie – ignorujemy to,
+    # żeby przesuwanie i przybliżanie mapy działało normalnie.
     def on_touch_move(self, touch):
         return False
 
+    # Gdy użytkownik puści palec – ignorujemy to,
+    # żeby mapa mogła normalnie zareagować.
     def on_touch_up(self, touch):
         return False
 
@@ -235,6 +247,8 @@ class GeofencePickerScreen(MDScreen):
     _gps_started = False
     _location_acquired = False
 
+    # Przygotowuje ekran wyboru lokalizacji: ustawia fioletowe tło,
+    # tworzy zmienne na mapę, nakładkę i etykietę, a następnie buduje cały interfejs.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.md_bg_color = get_color_from_hex("#8A2BE2")
@@ -288,6 +302,7 @@ class GeofencePickerScreen(MDScreen):
         Clock.schedule_once(lambda _dt: self._refresh_overlay(), 0)
         self._kickoff_location_acquisition()
 
+    # Gdy użytkownik opuszcza ten ekran – wyłączamy GPS, żeby oszczędzać baterię.
     def on_leave(self, *_args):
         self._stop_gps()
 
@@ -307,6 +322,9 @@ class GeofencePickerScreen(MDScreen):
             _log(f"non-Android platform ({platform!r}); trying plyer.gps directly")
             Clock.schedule_once(lambda _dt: self._start_gps(), 0)
 
+    # Na Androidzie prosi użytkownika o zgodę na dostęp do lokalizacji.
+    # Jeśli użytkownik wyrazi zgodę – uruchamia GPS. Jeśli nie – pokazuje
+    # komunikat "Brak uprawnień GPS". Na innych systemach pomija ten krok.
     def _request_location_permission_then_start(self):
         used_callback = False
         # Prosi użytkownika o zgodę na dostęp do lokalizacji (wymagane
@@ -314,6 +332,9 @@ class GeofencePickerScreen(MDScreen):
         # Jeśli nie – pokazuje komunikat "Brak uprawnień GPS".
         try:
             from android.permissions import Permission, request_permissions
+            # Ta funkcja zostaje wywołana, gdy użytkownik odpowie na prośbę
+            # o zgodę na lokalizację. Jeśli zezwolił – uruchamiamy GPS,
+            # jeśli nie – pokazujemy komunikat.
             def _cb(perms, results):
                 _log(f"permission callback: perms={list(perms)} results={list(results)}")
                 if results and any(results):
@@ -343,6 +364,9 @@ class GeofencePickerScreen(MDScreen):
             # from a previous session.
             Clock.schedule_once(lambda _dt: self._start_gps(), 0)
 
+    # Włącza GPS, żeby znaleźć bieżącą pozycję telefonu.
+    # Jeśli GPS jest już włączony lub pozycja już została znaleziona –
+    # nic nie robi. W razie błędu pokazuje odpowiedni komunikat.
     def _start_gps(self):
         if self._gps_started or self._location_acquired:
             _log("skip _start_gps (already started or fix acquired)")
@@ -370,6 +394,7 @@ class GeofencePickerScreen(MDScreen):
             _log(f"plyer.gps start failed: {exc!r}")
             self._set_status(f"Błąd GPS: {exc!r}")
 
+    # Wyłącza GPS, żeby oszczędzać baterię, gdy już nie jest potrzebny.
     def _stop_gps(self):
         if not self._gps_started:
             return
@@ -381,6 +406,8 @@ class GeofencePickerScreen(MDScreen):
             _log(f"plyer.gps stop failed: {exc!r}")
         self._gps_started = False
 
+    # Otrzymuje informacje o stanie GPS (np. czy szuka sygnału).
+    # Zapisuje to w dzienniku, ale nie pokazuje użytkownikowi.
     def _on_gps_status(self, status_type, status_message):
         _log(f"gps status: {status_type} {status_message}")
 
@@ -401,6 +428,8 @@ class GeofencePickerScreen(MDScreen):
             return
         Clock.schedule_once(lambda _dt: self._apply_user_location(lat_f, lon_f), 0)
 
+    # Przesuwa mapę tak, żeby środek wskazywał bieżącą pozycję użytkownika
+    # (odczytaną z GPS). Potem czyści komunikat statusu i wyłącza GPS.
     def _apply_user_location(self, lat, lon):
         if self._location_acquired or self._initial_location_explicit:
             self._stop_gps()
@@ -434,6 +463,8 @@ class GeofencePickerScreen(MDScreen):
             )
         return True
 
+    # Próbuje ponownie ustawić środek mapy na podanych współrzędnych –
+    # używane, gdy poprzednia próba się nie udała, bo mapa nie była jeszcze gotowa.
     def _retry_center_map_on(self, lat, lon):
         mv = self._mapview
         if mv is None or mv.width <= 1 or mv.height <= 1:
@@ -519,6 +550,8 @@ class GeofencePickerScreen(MDScreen):
         root.add_widget(self._build_bottom_panel())
         self.add_widget(root)
 
+    # Próbuje ustawić daną właściwość na obiekcie – jeśli się nie uda,
+    # po prostu pomija błąd (np. gdy dana właściwość nie istnieje).
     @staticmethod
     def _safe_set(obj, attr, value):
         try:
@@ -526,6 +559,8 @@ class GeofencePickerScreen(MDScreen):
         except Exception:
             pass
 
+    # Ustawia przybliżenie mapy na podaną wartość (w dozwolonym zakresie 12–19).
+    # Najpierw próbuje ustawić płynnie, a jeśli się nie uda – skokowo.
     def _set_smooth_zoom(self, zoom):
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return
@@ -538,6 +573,8 @@ class GeofencePickerScreen(MDScreen):
         except Exception:
             self._mapview.zoom = int(round(z))
 
+    # Tworzy górny pasek ekranu: przycisk powrotu (strzałka w lewo)
+    # oraz tytuł "Wybierz miejsce".
     def _build_header(self):
         header = _TouchBarrierBox(
             orientation="horizontal",
@@ -587,6 +624,8 @@ class GeofencePickerScreen(MDScreen):
 
         return header
 
+    # Tworzy dolny panel ekranu: etykietę z promieniem, pasek statusu,
+    # przyciski przybliżania/oddalania oraz przyciski "Wyczyść" i "Zapisz".
     def _build_bottom_panel(self):
         panel = _TouchBarrierBox(
             orientation="vertical",
@@ -759,6 +798,9 @@ class GeofencePickerScreen(MDScreen):
         self._apply_smooth_zoom_delta(self._zoom_direction * 0.18)
         self._zoom_clock = Clock.schedule_interval(self._zoom_tick, 1.0 / 60.0)
 
+    # Wywoływana przy każdym "tiknięciu" zegara podczas przytrzymania
+    # przycisku zoomu – dodaje mały przyrost przybliżenia (ok. 0.035),
+    # co daje efekt płynnego przybliżania.
     def _zoom_tick(self, _dt):
         if (
             not _MAPVIEW_AVAILABLE
@@ -769,6 +811,8 @@ class GeofencePickerScreen(MDScreen):
         self._apply_smooth_zoom_delta(self._zoom_direction * self._ZOOM_TICK)
         return None  # keep scheduling
 
+    # Gdy użytkownik puści przycisk zoomu – zatrzymujemy płynne
+    # przybliżanie i wyłączamy zegar, który je napędzał.
     def _zoom_press_stop(self, *_):
         self._zoom_direction = 0
         clk = getattr(self, "_zoom_clock", None)
@@ -849,6 +893,8 @@ class GeofencePickerScreen(MDScreen):
         if self._radius_label is not None:
             self._radius_label.text = self.radius_text
 
+    # Próbuje ustawić daną właściwość na obiekcie – jeśli się nie uda,
+    # po prostu pomija błąd (zabezpieczenie przed brakującą właściwością).
     @staticmethod
     def _safe_set(obj, attr, value):
         try:
@@ -856,6 +902,7 @@ class GeofencePickerScreen(MDScreen):
         except Exception:
             pass
 
+    # Ustawia przybliżenie mapy na podaną wartość (w zakresie 12–19).
     def _set_smooth_zoom(self, zoom):
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return
@@ -865,6 +912,8 @@ class GeofencePickerScreen(MDScreen):
         except Exception:
             self._mapview.zoom = int(round(z))
 
+    # Zwraca aktualne ustawienia geofence: szerokość i długość geograficzną
+    # środka, promień w metrach oraz poziom przybliżenia mapy.
     def _current_result(self):
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return None
@@ -875,6 +924,8 @@ class GeofencePickerScreen(MDScreen):
             "zoom": float(_effective_zoom(self._mapview)),
         }
 
+    # Zapisuje wybrany geofence i wraca do poprzedniego ekranu.
+    # Jeśli mapa nie jest dostępna – anuluje bez zapisu.
     def _save_and_return(self):
         gf = self._current_result()
         if gf is None:
@@ -882,12 +933,17 @@ class GeofencePickerScreen(MDScreen):
         else:
             self._finish({"action": "save", "geofence": gf})
 
+    # Czyści zaznaczony geofence (usuwa) i wraca do poprzedniego ekranu.
     def _clear_and_return(self):
         self._finish({"action": "clear"})
 
+    # Anuluje wybór i wraca do poprzedniego ekranu bez zapisywania.
     def _cancel(self):
         self._finish({"action": "cancel"})
 
+    # Kończy działanie ekranu geofence: wywołuje funkcję zwrotną
+    # z wynikiem (zapis, wyczyszczenie lub anulowanie), a potem wraca
+    # do poprzedniego ekranu.
     def _finish(self, result):
         cb = self._on_done
         self._on_done = None
@@ -897,6 +953,8 @@ class GeofencePickerScreen(MDScreen):
         finally:
             self._navigate_back()
 
+    # Przełącza aplikację z powrotem na ekran, z którego przyszliśmy
+    # (np. ekran projektu lub strony głównej).
     def _navigate_back(self):
         app = MDApp.get_running_app()
         if app is None or app.root is None:

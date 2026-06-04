@@ -25,6 +25,10 @@ ORIGINAL = 'output = shprint(gradlew, "clean", gradle_task, _tail=20,'
 PATCHED = 'output = shprint(gradlew, gradle_task, _tail=20,  # patched: skip clean'
 
 
+# Główna funkcja skryptu: modyfikuje plik Python-for-Android tak,
+# żeby pomijał czyszczenie (gradlew clean) przed budowaniem aplikacji.
+# Dzięki temu kolejne budowanie jest szybsze. Jeśli plik nie istnieje
+# lub jest już zmodyfikowany – nic nie robi.
 def main():
     path = os.path.join(os.getcwd(), TOOLCHAIN_REL)
     if not os.path.isfile(path):

@@ -41,6 +41,9 @@ class PeriodSegmentButton(Button):
 
     _anim_duration = 0.22
 
+    # Przygotowuje przycisk wyboru okresu (Dzień/Tydzień/Miesiąc):
+    # usuwa domyślne tło, ustawia rozmiar i wysokość, oraz podłącza
+    # funkcje które rysują efekt "pigułki" po kliknięciu.
     def __init__(self, **kwargs):
         kwargs.setdefault("background_normal", "")
         kwargs.setdefault("background_down", "")
@@ -98,6 +101,9 @@ def _make_segment_color_dot(rgba, size_dp=20):
     dot = Widget(size_hint=(None, None), size=(dp(size_dp), dp(size_dp)))
     rgba = tuple(rgba) if len(rgba) >= 4 else (*rgba[:3], 1.0)
 
+    # Rysuje kolorowe kółko od nowa przy każdej zmianie położenia
+    # lub rozmiaru. Czyści stare rysunki i tworzy nowe kółko
+    # w aktualnej pozycji i rozmiarze.
     def redraw(*_):
         dot.canvas.clear()
         with dot.canvas:
@@ -121,6 +127,8 @@ class StatisticsDetailRow(MDBoxLayout):
     icon_rgba = ListProperty([1, 1, 1, 1])
     segment_rgba = ListProperty([0.6, 0.4, 0.8, 1])
 
+    # Przygotowuje wiersz w tabeli statystyk: zapamiętuje dane projektu
+    # (nazwę, czas, ikonę, kolor) i ustawia jego wygląd.
     def __init__(self, row_data, **kwargs):
         self._row_data = row_data
         kwargs.setdefault("orientation", "horizontal")
@@ -129,6 +137,8 @@ class StatisticsDetailRow(MDBoxLayout):
         kwargs.setdefault("spacing", dp(6))
         super().__init__(**kwargs)
 
+    # Po załadowaniu wyglądu wiersza z pliku KV – wypełnia go danymi
+    # projektu (nazwa, czas, ikona) i przygotowuje kolorową kropkę.
     def on_kv_post(self, base_widget):
         self.apply_row(self._row_data)
         self.bind(segment_rgba=self._redraw_segment_dot)
@@ -173,6 +183,7 @@ class StatisticsDetailRow(MDBoxLayout):
 class PieChart(Widget):
     data = ListProperty([])
 
+    # Przygotowuje wykres kołowy – odświeża go przy zmianie pozycji, rozmiaru lub danych.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.bind(pos=self.update_canvas, size=self.update_canvas, data=self.update_canvas)
@@ -285,6 +296,8 @@ class StatisticsScreen(MDScreen):
         self.set_statistics_rows(rows)
         self._relayout_stats_scroll()
 
+    # Gdy użytkownik zmieni wybrany okres (Dzień/Tydzień/Miesiąc) –
+    # automatycznie odświeża statystyki, żeby pokazać dane z nowego okresu.
     def on_selected_period(self, _instance, value):
         if value in ("Dzień", "Tydzień", "Miesiąc"):
             self.refresh_statistics()
@@ -295,6 +308,9 @@ class StatisticsScreen(MDScreen):
         # informacje, nawet jeśli coś zmieniło się na innych ekranach.
         self.refresh_statistics()
 
+    # Przygotowuje ekran statystyk: uruchamia standardową inicjalizację
+    # Kivy i ustawia nasłuchiwanie na zmianę wybranego okresu
+    # (Dzień/Tydzień/Miesiąc), żeby automatycznie odświeżać dane.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.bind(selected_period=self.on_selected_period)

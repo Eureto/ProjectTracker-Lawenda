@@ -284,6 +284,9 @@ class TimeTrackerApp(MDApp):
             info.project_title = project
             self.screen_manager.current = "project_info"
 
+    # Zwraca ścieżkę do pliku layout_pref.json, który przechowuje
+    # preferencję użytkownika: czy karty na ekranie głównym mają być
+    # ułożone w siatkę czy swobodnie.
     def _layout_pref_path(self):
         return os.path.join(self.user_data_dir, "layout_pref.json")
 

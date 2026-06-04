@@ -19,10 +19,14 @@ from kivymd.app import MDApp
 from screens.emoji_assets import resolve_emoji_source
 
 
+# Zwraca ścieżkę do pliku sessions.json, który przechowuje historię
+# wszystkich zakończonych pomiarów czasu (sesji).
 def _sessions_path():
     return os.path.join(MDApp.get_running_app().user_data_dir, "sessions.json")
 
 
+# Zwraca ścieżkę do pliku projects.json, który przechowuje listę
+# wszystkich zapisanych projektów (nazwy, kolory, emoji, zdjęcia).
 def _projects_path():
     return os.path.join(MDApp.get_running_app().user_data_dir, "projects.json")
 
@@ -110,6 +114,8 @@ def record_session(project_title, duration_seconds, started_at=None, ended_at=No
     return entry
 
 
+# Zwraca ścieżkę do pliku project_details.json, który przechowuje
+# szczegółowe dane projektów (notatki, cele, listy zadań, etapy).
 def _project_details_path():
     return os.path.join(MDApp.get_running_app().user_data_dir, "project_details.json")
 
@@ -244,6 +250,8 @@ def format_statistics_duration(seconds):
     return f"{m}:{sec:02d}"
 
 
+# Zwraca tekst "suma: X" gdzie X to sformatowany czas całkowity
+# (np. "suma: 1:30:00" dla 5400 sekund). Używane na ekranie statystyk.
 def format_statistics_total(seconds):
     return f"suma: {format_statistics_duration(seconds)}"
 

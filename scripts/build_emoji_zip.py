@@ -37,6 +37,9 @@ def _zip_is_current(files):
     return all(os.path.getmtime(path) <= zip_mtime for path in files)
 
 
+# Główna funkcja skryptu: pakuje obrazki emoji (PNG) do pliku ZIP.
+# Sprawdza czy plik ZIP jest już aktualny (czy obrazki nie są nowsze).
+# Jeśli nie – tworzy nowy ZIP ze wszystkimi obrazkami i zapisuje go w folderze assets/.
 def main():
     if not os.path.isdir(SRC):
         print(f"[emoji-zip] Missing source directory: {SRC}", file=sys.stderr)
