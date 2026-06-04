@@ -409,13 +409,13 @@ class AddProjectScreen(Screen):
         projects = []
         if os.path.exists(storage_path):
             try:
-                with open(storage_path, 'r') as f:
+                with open(storage_path, 'r', encoding='utf-8') as f:
                     projects = json.load(f)
             except (IOError, json.JSONDecodeError):
                 pass
 
         projects.append(project_data)
-        with open(storage_path, 'w') as f:
+        with open(storage_path, 'w', encoding='utf-8') as f:
             json.dump(projects, f)
 
         # Dodaj kartę projektu na ekranie głównym
