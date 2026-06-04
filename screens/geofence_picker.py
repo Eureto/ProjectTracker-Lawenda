@@ -18,8 +18,8 @@ from kivy.logger import Logger
 from kivy.metrics import dp, sp
 
 
+# Wysyła pojedyncze linie logów (do Kivy i logcat Androida) dla ekranu wyboru lokalizacji.
 def _log(message):
-    """Wysyła pojedyncze linie logów (do Kivy i logcat Androida) dla ekranu wyboru lokalizacji."""
     try:
         Logger.info("GeofencePicker: %s", message)
     except Exception:

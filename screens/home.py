@@ -448,8 +448,8 @@ class HomeScreen(MDScreen):
         cards.sort(key=lambda c: c.title.lower())
         return cards
 
+    # Odstępy dla układu dwukolumnowego; top_pad robi miejsce na znaczek emoji nad każdą kartą.
     def _grid_layout_metrics(self, container, cards):
-        """Odstępy dla układu dwukolumnowego; top_pad robi miejsce na znaczek emoji nad każdą kartą."""
         margin_x = dp(16)
         gutter = dp(12)
         row_gap = dp(16)
@@ -470,8 +470,8 @@ class HomeScreen(MDScreen):
     def schedule_initial_layout(self):
         Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
 
+    # Uruchamia układ siatki lub swobodny, gdy kontener projektów ma już ustalony rozmiar na ekranie – dopiero wtedy można prawidłowo rozłożyć karty.
     def apply_initial_layout(self):
-        """Uruchamia układ siatki lub swobodny, gdy kontener projektów ma już ustalony rozmiar na ekranie – dopiero wtedy można prawidłowo rozłożyć karty."""
         container = self.ids.projects_container
         if container.width < 1:
             Clock.schedule_once(lambda _dt: self.apply_initial_layout(), 0)
@@ -536,8 +536,8 @@ class HomeScreen(MDScreen):
         if card is not None:
             card.apply_last_session(get_last_session())
 
+    # Po wejściu na ekran – odśwież ostatnią sesję i zaplanuj układ.
     def on_enter(self, *_args):
-        """Po wejściu na ekran – odśwież ostatnią sesję i zaplanuj układ."""
         schedule_home_last_session_refresh()
         self.schedule_initial_layout()
     def load_projects(self):

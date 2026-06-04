@@ -49,8 +49,8 @@ PALETTES = (
 # ---------------------------------------------------------------------------
 # PRZYCISK Z KOLOROWYM KÓŁKIEM
 # ---------------------------------------------------------------------------
+# Klikalne kolorowe kółko – wybór koloru projektu.
 class PaletteSwatchButton(ButtonBehavior, Widget):
-    """Klikalne kolorowe kółko – wybór koloru projektu."""
 
     swatch_color = ListProperty([1, 1, 1, 1])
     selected = BooleanProperty(False)
