@@ -224,9 +224,27 @@ def goal_seconds_by_project(period_label):
     # jest nazwa projektu, a wartością łączna liczba sekund z celów czasowych.
     # Te dane są dodawane do zwykłych sesji w statystykach.
     totals = {}
-    for project_title, blob in load_project_details().items():
-        if not project_title or project_title == "_":
+    for key, blob in load_project_details().items():
+        if not key or key == "_":
             continue
+        
+        # Resolve the key (which might be a UID or title) to get the actual project title
+        project_title = key
+        # Try to find project by UID first (if key looks like a UID)
+        if key.startswith("proj-"):
+            # Load projects to find the title for this UID
+            projects_path = _projects_path()
+            if os.path.exists(projects_path):
+                try:
+                    with open(projects_path, "r", encoding="utf-8") as f:
+                        projects = json.load(f)
+                    for p in projects:
+                        if p.get("uid") == key:
+                            project_title = p.get("title", key)
+                            break
+                except (OSError, json.JSONDecodeError):
+                    pass  # Fall back to using key as title
+        
         sec = 0
         for g in blob.get("goals") or []:
             sec += _goal_logged_for_period(period_label, g)
