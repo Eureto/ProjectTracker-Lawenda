@@ -55,20 +55,26 @@
         # "height: self.texture_size[1]" – wysokość automatycznie
         # dopasowuje się do ilości tekstu.
         # "max_lines: 0" – brak limitu linii (nie potrzebuje ScrollView).
-        MDLabel:
-            id: note_label
-            text: root.display_text
-            halign: "left"
-            valign: "top"
-            theme_text_color: "Custom"
-            text_color: (0.45, 0.45, 0.48, 1) if not root.display_text else (0.12, 0.12, 0.12, 1)
-            font_size: sp(14)
-            padding: dp(8), dp(6), dp(8), dp(6)
-            size_hint_y: None
-            height: self.texture_size[1]
-            shorten: False
-            max_lines: 0
-            line_height: 1.2
+        # AnchorLayout wyśrodkowuje tekst w pionie w białym pudełku
+        AnchorLayout:
+            size_hint: 1, 1
+            anchor_x: "left"
+            anchor_y: "center"
+            padding: [dp(8), dp(6), dp(8), dp(6)]
+
+            MDLabel:
+                id: note_label
+                text: root.display_text
+                halign: "left"
+                valign: "middle"
+                theme_text_color: "Custom"
+                text_color: (0.45, 0.45, 0.48, 1) if not root.display_text else (0.12, 0.12, 0.12, 1)
+                font_size: sp(14)
+                size_hint_y: None
+                height: self.texture_size[1]
+                shorten: False
+                max_lines: 0
+                line_height: 1.2
 
     # Przycisk "×" do usunięcia notatki (fioletowe kółko)
     # "background_normal: ''" i "background_color: 0,0,0,0" – usuwa domyślne
