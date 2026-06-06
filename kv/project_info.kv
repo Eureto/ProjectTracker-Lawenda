@@ -14,6 +14,7 @@
 #:import EtapyPlusSpine screens.project_info.EtapyPlusSpine
 #:import ZrobioneSection screens.project_info.ZrobioneSection
 #:import ZrobioneHeaderBar screens.project_info.ZrobioneHeaderBar
+#:import NoteTextTap screens.project_info.NoteTextTap
 
 # ---------------------------------------------------------------------------
 # DEFINICJE ELEMENTÓW INTERFEJSU
@@ -36,14 +37,12 @@
     spacing: dp(10)
     size_hint_y: None
 
-    # Białe pudełko z zaokrąglonymi rogami – tło dla tekstu notatki
-    # "size_hint_x: 1" – zajmij całą dostępną szerokość (po odjęciu przycisku).
-    # "canvas.before:" – rysuje białe tło przed tekstem.
-    # "RoundedRectangle" – prostokąt z zaokrąglonymi rogami (tutaj 12dp każdy róg).
-    MDBoxLayout:
+    # Białe pudełko z zaokrąglonymi rogami – tło dla tekstu notatki, klikalne (otwiera edytor)
+    NoteTextTap:
         size_hint_x: 1
         size_hint_y: 1
         padding: dp(2)
+        on_release: root.open_edit_from_row()
         canvas.before:
             Color:
                 rgba: 1, 1, 1, 1
@@ -52,34 +51,24 @@
                 size: self.size
                 radius: [dp(12), dp(12), dp(12), dp(12)]
 
-        # "ScrollView" – pozwala przewijać tekst notatki jeśli jest za długi.
-        # "do_scroll_x: False" – przewijanie tylko w pionie (nie w poziomie).
-        # "bar_width: 0" – ukryj pasek przewijania (design).
-        ScrollView:
-            id: note_scroll
-            size_hint: 1, 1
-            do_scroll_x: False
-            bar_width: 0
-
-            # "MDLabel" – etykieta z tekstem notatki.
-            # "height: self.texture_size[1]" – wysokość automatycznie
-            # dopasowuje się do ilości tekstu.
-            # "max_lines: 0" – brak limitu linii.
-            # "line_height: 1.2" – odstęp między liniami (1.2 = 120% czcionki).
-            MDLabel:
-                id: note_label
-                text: root.display_text
-                halign: "left"
-                valign: "top"
-                theme_text_color: "Custom"
-                text_color: (0.45, 0.45, 0.48, 1) if not root.display_text else (0.12, 0.12, 0.12, 1)
-                font_size: sp(14)
-                padding: dp(8), dp(6), dp(8), dp(6)
-                size_hint_y: None
-                height: self.texture_size[1]
-                shorten: False
-                max_lines: 0
-                line_height: 1.2
+        # "MDLabel" – etykieta z tekstem notatki.
+        # "height: self.texture_size[1]" – wysokość automatycznie
+        # dopasowuje się do ilości tekstu.
+        # "max_lines: 0" – brak limitu linii (nie potrzebuje ScrollView).
+        MDLabel:
+            id: note_label
+            text: root.display_text
+            halign: "left"
+            valign: "top"
+            theme_text_color: "Custom"
+            text_color: (0.45, 0.45, 0.48, 1) if not root.display_text else (0.12, 0.12, 0.12, 1)
+            font_size: sp(14)
+            padding: dp(8), dp(6), dp(8), dp(6)
+            size_hint_y: None
+            height: self.texture_size[1]
+            shorten: False
+            max_lines: 0
+            line_height: 1.2
 
     # Przycisk "×" do usunięcia notatki (fioletowe kółko)
     # "background_normal: ''" i "background_color: 0,0,0,0" – usuwa domyślne

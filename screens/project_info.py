@@ -1023,6 +1023,12 @@ class StageTextTap(ButtonBehavior, BoxLayout):
     pass
 
 
+# Otoczka wokół tekstu notatki, która reaguje na kliknięcie: dotknięcie = edycja notatki.
+class NoteTextTap(ButtonBehavior, MDBoxLayout):
+
+    pass
+
+
 # Kolumna osi dla wiersza EtapyPlusRow: linia od góry do środka,
 # a potem wypełnione fioletowe kółko z białym plusem pośrodku.
 #
@@ -3932,38 +3938,6 @@ class ProjectNoteRow(MDBoxLayout):
         self.bind(tall=self._schedule_layout)
         self.bind(width=self._schedule_layout)
 
-    # Zwraca unikalny klucz do rozpoznawania dotkniec na tym wierszu.
-    def _touch_key(self):
-        return "_pnr_%d" % id(self)
-
-    # Sprawdza, czy uzytkownik dotknal tego wiersza - zapamietuje miejsce dotkniecia.
-    def on_touch_down(self, touch):
-        if not self.collide_point(*touch.pos):
-            return super().on_touch_down(touch)
-        if "delete_btn" in self.ids and self.ids.delete_btn.collide_point(*touch.pos):
-            return super().on_touch_down(touch)
-        if super().on_touch_down(touch):
-            return True
-        if "note_scroll" in self.ids and self.ids.note_scroll.collide_point(*touch.pos):
-            touch.ud[self._touch_key()] = touch.pos
-        return False
-
-    # Sprawdza, czy uzytkownik puscil dotkniecie w tym samym miejscu (krotkie klikniecie). Jesli tak, otwiera edytor notatki.
-    def on_touch_up(self, touch):
-        if super().on_touch_up(touch):
-            return True
-        key = self._touch_key()
-        start = touch.ud.pop(key, None)
-        if start and self.collide_point(*touch.pos):
-            if "delete_btn" in self.ids and self.ids.delete_btn.collide_point(*touch.pos):
-                return False
-            dx = touch.pos[0] - start[0]
-            dy = touch.pos[1] - start[1]
-            if dx * dx + dy * dy < dp(14) ** 2:
-                self.open_edit_from_row()
-                return True
-        return False
-
     # Usuwa te notatke z projektu.
     def request_delete(self, *_args):
         scr = self.parent_screen
@@ -3979,7 +3953,6 @@ class ProjectNoteRow(MDBoxLayout):
 
     # Wywolywane po utworzeniu widoku - podlacza przeliczanie ukladu i obsluge przycisku usuwania.
     def on_kv_post(self, base_widget):
-        self.ids.note_scroll.bind(width=self._schedule_layout)
         self.ids.note_label.bind(texture_size=self._schedule_layout)
         self.ids.delete_btn.bind(on_press=lambda *_a: self.request_delete())
         Clock.schedule_once(self._sync_note_layout, 0)
@@ -3990,9 +3963,8 @@ class ProjectNoteRow(MDBoxLayout):
 
     # Przelicza wysokosc wiersza notatki na podstawie dlugosci tekstu i szerokosci ekranu.
     def _sync_note_layout(self, *args):
-        sc = self.ids.note_scroll
         lbl = self.ids.note_label
-        aw = max(self.width - dp(74), sc.width - dp(16), sp(20))
+        aw = max(self.width - dp(74), sp(20))
         if aw <= sp(20) or self.width <= 1:
             Clock.schedule_once(self._sync_note_layout, 0.05)
             return
