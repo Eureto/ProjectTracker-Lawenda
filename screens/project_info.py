@@ -27,7 +27,7 @@ from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 
-from screens.keyboard_inset import keyboard_inset
+from screens.keyboard_inset import keyboard_inset, safe_keyboard_height
 from screens import active_timer
 from screens.emoji_assets import emoji_path
 from screens.session_store import record_session, schedule_home_last_session_refresh
@@ -2204,7 +2204,7 @@ class _BottomSheetKeyboardMixin:
         win_h = float(Window.height or 0)
         shrink = max(0.0, baseline - win_h) if baseline > win_h + dp(8) else 0.0
         inset = keyboard_inset(baseline) if baseline > 0 else 0.0
-        kh = float(Window.keyboard_height or 0)
+        kh = safe_keyboard_height(baseline)
 
         gap = max(0.0, inset - shrink)
         if kh > shrink + dp(4):
@@ -2221,10 +2221,11 @@ class _BottomSheetKeyboardMixin:
         if h <= 0:
             return
         gap = 0.0
+        baseline = float(getattr(self, "_win_h_baseline", 0) or 0)
         if (
             self._sheet_input_focused()
             or self._window_shrunk_for_keyboard()
-            or float(Window.keyboard_height or 0) > dp(48)
+            or safe_keyboard_height(baseline) > dp(48)
         ):
             gap = self._keyboard_unreserved_gap()
 
@@ -2302,7 +2303,7 @@ class _BottomSheetKeyboardMixin:
             self._kb_lift_peak = kh
         lift = max(kh, peak)
 
-        if self._sheet_input_focused() and lift < dp(200):
+        if self._sheet_input_focused() and lift < dp(200) and platform not in ("win", "linux", "macosx"):
             win_h = float(Window.height or 640)
             lift = max(lift, win_h * 0.36)
         return lift
@@ -2324,7 +2325,7 @@ class _BottomSheetKeyboardMixin:
     def _sheet_bottom_y(self, win_h):
         baseline = float(getattr(self, "_win_h_baseline", 0) or 0)
         shrink = max(0.0, baseline - win_h) if baseline > 0 else 0.0
-        inset = keyboard_inset(baseline) if baseline > 0 else float(Window.keyboard_height or 0)
+        inset = keyboard_inset(baseline) if baseline > 0 else safe_keyboard_height(baseline)
 
         if not (
             self._sheet_input_focused()
@@ -2336,7 +2337,7 @@ class _BottomSheetKeyboardMixin:
         if shrink > dp(40):
             return 0.0
 
-        lift = max(inset, float(Window.keyboard_height or 0), self._keyboard_lift())
+        lift = max(inset, safe_keyboard_height(baseline), self._keyboard_lift())
         gap = self._keyboard_unreserved_gap()
         return max(0.0, lift - gap)
 
