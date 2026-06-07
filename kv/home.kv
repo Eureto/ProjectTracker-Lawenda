@@ -129,7 +129,9 @@
                     rgba: root.card_color
                     # Kolor tła = kolor karty.
                 RoundedRectangle:
+                    # "pos: self.pos" – pozycja prostokąta taka sama jak pozycja panelu.
                     pos: self.pos
+                    # "size: self.size" – rozmiar prostokąta taki sam jak rozmiar panelu.
                     size: self.size
                     radius: [dp(16), dp(16), dp(16), dp(16)]
                     # "radius" – zaokrąglenie wszystkich czterech rogów po 16 pikseli.
@@ -166,6 +168,7 @@
             size: root.emoji_size * 1.6, root.emoji_size * 1.6
             # "size" – rozmiar emoji (1.6 raza większy niż standardowy).
             font_size: root.emoji_size * 1.6
+            # "icon_size: root.emoji_size * 1.6" – rozmiar ikony (1.6 raza większy niż standardowy).
             icon_size: root.emoji_size * 1.6
             pos_hint: {'right': root.effective_emoji_right_hint, 'top': 1.25}
             # "pos_hint" – pozycja: emoji wystaje poza kartę (prawo i góra).
@@ -175,12 +178,14 @@
             canvas.before:
                 # Obrót emoji o -30 stopni (przekrzywienie).
                 PushMatrix
+                # "Rotate:" – rozpocznij obracanie rysunku.
                 Rotate:
                     angle: -30
                     # "angle: -30" – obrót o -30 stopni (w lewo).
                     origin: self.center
                     # "origin: self.center" – obracaj wokół środka emoji.
             canvas.after:
+                # "PopMatrix" – przywróć ustawienia graficzne sprzed obrotu.
                 PopMatrix
 
 # ---------------------------------------------------------------------------
@@ -223,39 +228,57 @@
         orientation: "horizontal"
         # "orientation: horizontal" – elementy obok siebie.
         size_hint_y: None
+        # "size_hint_y: None" – stała wysokość (nie zmienia się przy powiększaniu okna).
         height: dp(22)
         # "height: dp(22)" – wysokość paska 22 piksele.
         padding: [dp(14), 0, dp(14), 0]
         # "padding" – odstęp: 14 pikseli z lewej i prawej, 0 z góry i dołu.
         spacing: dp(8)
+        # "spacing: dp(8)" – odstęp między etykietą "Ostatnia sesja" a datą.
 
         MDLabel:
             # "MDLabel" – etykieta "Ostatnia sesja".
             text: "Ostatnia sesja"
+            # "text: Ostatnia sesja" – napis nagłówka.
             bold: True
+            # "bold: True" – pogrubiony tekst.
             font_style: "Caption"
+            # "font_style: Caption" – mały, opisowy styl czcionki (podpis).
             font_size: sp(13)
+            # "font_size: sp(13)" – rozmiar czcionki 13 punktów.
             halign: "left"
+            # "halign: left" – wyrównaj tekst do lewej strony.
             valign: "middle"
+            # "valign: middle" – wyśrodkuj w pionie.
             theme_text_color: "Custom"
+            # "theme_text_color: Custom" – użyj własnego koloru (nie domyślnego).
             text_color: utils.get_color_from_hex(app.theme_text_dark)
             # "text_color" – kolor tekstu z motywu (ciemny).
             size_hint_x: 1
+            # "size_hint_x: 1" – zajmij całą dostępną szerokość w poziomie.
             text_size: self.width, None
+            # "text_size" – ogranicza tekst do szerokości etykiety (żeby zawijanie działało).
 
         MDLabel:
             # "MDLabel" – data ostatniej sesji (np. "2 godz. temu").
             text: root.when_label if root.has_session else "—"
             # "text" – jeśli jest sesja, pokaż kiedy była. Jeśli nie, pokaż "—".
             bold: True
+            # "bold: True" – pogrubiony tekst.
             font_style: "Caption"
+            # "font_style: Caption" – mały, opisowy styl czcionki.
             font_size: sp(13)
+            # "font_size: sp(13)" – rozmiar czcionki 13 punktów.
             halign: "right"
             # "halign: right" – wyrównaj do prawej.
             valign: "middle"
+            # "valign: middle" – wyśrodkuj w pionie.
             theme_text_color: "Custom"
+            # "theme_text_color: Custom" – użyj własnego koloru.
             text_color: utils.get_color_from_hex(app.theme_text_dark)
+            # "text_color" – kolor tekstu z motywu (ciemny).
             size_hint_x: None
+            # "size_hint_x: None" – stała szerokość (dopasowana do tekstu).
 
     # Wewnętrzna karta (ciemna) – nazwa projektu, emoji i czas trwania
     # "elevation: 0" – wewnętrzna karta nie ma cienia (nie unosi się).
@@ -263,22 +286,30 @@
     MDCard:
         # "MDCard" – wewnętrzna karta z ciemnym tłem.
         orientation: "vertical"
+        # "orientation: vertical" – układaj zawartość pionowo.
         size_hint_x: 1
+        # "size_hint_x: 1" – rozciągnij na całą szerokość rodzica.
         size_hint_y: 1
+        # "size_hint_y: 1" – rozciągnij na całą wysokość rodzica.
         radius: [dp(22), dp(22), dp(22), dp(22)]
+        # "radius" – zaokrąglenie wszystkich rogów po 22 piksele.
         md_bg_color: utils.get_color_from_hex(app.theme_session_bg)
         # "md_bg_color" – kolor tła z motywu (ciemny, kontrastowy).
         elevation: 0
         # "elevation: 0" – brak cienia (wewnętrzna karta nie unosi się).
         padding: [dp(14), dp(9), dp(14), dp(14)]
+        # "padding" – odstęp wewnętrzny: 14px po bokach, 9px na górze, 14px na dole.
         spacing: dp(10)
+        # "spacing: dp(10)" – odstęp między wierszem projektu a czasem trwania.
 
         # Wiersz z nazwą projektu i emoji
         # Specjalny układ, który pozwala dowolnie pozycjonować elementy – tutaj umieszcza emoji dokładnie obok tekstu.
         FloatLayout:
             # "FloatLayout" – układ swobodny: nazwa projektu i emoji mogą na siebie nachodzić.
             size_hint_x: 1
+            # "size_hint_x: 1" – rozciągnij na całą szerokość.
             size_hint_y: None
+            # "size_hint_y: None" – stała wysokość (nie rozciągaj).
             height: dp(38)
             # "height: dp(38)" – wysokość wiersza 38 pikseli.
 
@@ -289,31 +320,48 @@
                 text: root.project_name if root.has_session else "Brak ostatniej sesji"
                 # "text" – jeśli jest sesja, pokaż nazwę projektu. Jeśli nie, pokaż "Brak ostatniej sesji".
                 font_style: "H6"
+                # "font_style: H6" – duży, wyraźny styl nagłówka.
                 bold: True
+                # "bold: True" – pogrubiony tekst.
                 font_size: sp(22)
+                # "font_size: sp(22)" – rozmiar czcionki 22 punkty.
                 halign: "right"
                 # "halign: right" – wyrównaj do prawej (żeby emoji było obok).
                 valign: "middle"
+                # "valign: middle" – wyśrodkuj w pionie.
                 theme_text_color: "Custom"
+                # "theme_text_color: Custom" – użyj własnego koloru.
                 text_color: 1, 1, 1, 1
+                # "text_color: 1,1,1,1" – kolor biały (RGB + przezroczystość).
                 size_hint: 1, 1
+                # "size_hint: 1, 1" – wypełnij całe dostępne miejsce.
                 pos_hint: {"x": 0, "y": 0}
+                # "pos_hint" – pozycja: lewy dolny róg.
                 padding: 0, 0
+                # "padding: 0, 0" – brak wewnętrznego odstępu.
                 text_size: self.width, None
+                # "text_size" – ogranicza tekst do szerokości etykiety.
                 shorten: True
+                # "shorten: True" – skróć tekst jeśli za długi (dodaj "...").
                 shorten_from: "right"
                 # Skracaj od prawej, żeby nie nachodziło na emoji.
 
             MDIcon:
                 # "MDIcon" – emoji projektu.
                 id: session_project_icon
+                # "id: session_project_icon" – unikalna nazwa dla Pythona.
                 icon: root.emoji_source
+                # "icon" – emoji lub ikona projektu.
                 theme_text_color: "Custom"
+                # "theme_text_color: Custom" – użyj własnego koloru.
                 text_color: (1, 1, 1, 1) if root.emoji_source.endswith('.png') else (1, 0.8, 0, 1)
                 # Kolor: biały dla PNG, żółty dla ikon tekstowych.
                 icon_size: dp(26)
+                # "icon_size: dp(26)" – rozmiar ikony 26 pikseli.
                 size_hint: None, None
+                # "size_hint: None, None" – stały rozmiar (nie rozciągaj).
                 size: dp(28), dp(28)
+                # "size: dp(28), dp(28)" – wymiary 28x28 pikseli.
                 opacity: 1 if root.has_session else 0.45
                 # "opacity" – w pełni widoczne gdy jest sesja, przyciemnione gdy nie ma.
 
@@ -323,18 +371,29 @@
             text: root.duration_text if root.has_session else "Uruchom timer w projekcie"
             # "text" – jeśli jest sesja, pokaż czas. Jeśli nie, wyświetl zachętę.
             halign: "right"
+            # "halign: right" – wyrównaj czas do prawej strony.
             valign: "middle"
+            # "valign: middle" – wyśrodkuj w pionie.
             font_style: "Caption"
+            # "font_style: Caption" – mały, opisowy styl czcionki.
             font_size: sp(14)
+            # "font_size: sp(14)" – rozmiar czcionki 14 punktów.
             theme_text_color: "Custom"
+            # "theme_text_color: Custom" – użyj własnego koloru.
             text_color: 1, 1, 1, 0.95 if root.has_session else 0.65
             # "text_color" – biały (prawie nieprzezroczysty) gdy są dane, przyciemniony gdy brak.
             size_hint_x: 1
+            # "size_hint_x: 1" – zajmij całą dostępną szerokość.
             size_hint_y: None
+            # "size_hint_y: None" – stała wysokość.
             height: dp(20)
+            # "height: dp(20)" – wysokość 20 pikseli.
             padding: 0, 0
+            # "padding: 0, 0" – brak wewnętrznego odstępu.
             text_size: self.width, None
+            # "text_size" – ogranicza tekst do szerokości etykiety.
             shorten: True
+            # "shorten: True" – skróć tekst jeśli za długi.
             shorten_from: "left"
             # "shorten_from: left" – skracaj od lewej (początek czasu jest ważniejszy).
 
@@ -362,21 +421,25 @@
     MDBoxLayout:
         # "MDBoxLayout" – główne pudełko układające zawartość pionowo.
         orientation: 'vertical'
+        # "orientation: vertical" – układaj elementy jeden pod drugim.
         spacing: dp(10)
-        
+        # "spacing: dp(10)" – odstęp 10 pikseli między elementami.
+
         # Odstęp na pasek stanu telefonu (bateria, godzina, zasięg)
         Widget:
             # "Widget" – pusty element robiący miejsce na pasek stanu.
             size_hint_y: None
-            height: dp(35) 
+            # "size_hint_y: None" – stała wysokość (nie zmieniaj rozmiaru).
+            height: dp(35)
             # "height: dp(35)" – standardowa wysokość paska stanu.
-            
+
         MDFloatLayout:
             # "MDFloatLayout" – nagłówek z nazwą aplikacji i przyciskiem układu.
             size_hint_y: None
+            # "size_hint_y: None" – stała wysokość nagłówka.
             height: dp(70)
             # "height: dp(70)" – wysokość nagłówka 70 pikseli.
-            
+
             # Po narysowaniu wszystkiego – dodaj białą linię pod nagłówkiem
             canvas.after:
                 # "canvas.after" – rysuj PO zawartości (na wierzchu).
@@ -389,18 +452,25 @@
                     # "points" – punkty linii: od lewej krawędzi do prawej, na dole nagłówka.
                     width: dp(1.5)
                     # "width: dp(1.5)" – grubość linii: 1.5 piksela.
-            
+
             # Nazwa aplikacji – wyśrodkowana
             MDLabel:
                 # "MDLabel" – tytuł aplikacji "JUST DO IT".
                 text: "JUST DO IT"
+                # "text" – treść napisu: "JUST DO IT".
                 font_style: "H4"
+                # "font_style: H4" – duży styl nagłówka (H4).
                 bold: True
+                # "bold: True" – pogrubienie.
                 halign: "center"
+                # "halign: center" – wyśrodkuj tekst w poziomie.
                 pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+                # "pos_hint" – umieść dokładnie na środku nagłówka.
                 theme_text_color: "Custom"
+                # "theme_text_color: Custom" – użyj własnego koloru.
                 text_color: 1, 1, 1, 1
-                
+                # "text_color: 1,1,1,1" – kolor biały.
+
             # Przycisk zmiany układu (siatka / swobodny)
             # "MDIconButton" – okrągły przycisk z ikoną.
             # Kolor zmienia się na żółty gdy siatka jest włączona.
@@ -411,6 +481,7 @@
                 pos_hint: {'right': 0.98, 'center_y': 0.5}
                 # "pos_hint" – pozycja: prawa strona (98%), wyśrodkowany w pionie.
                 theme_text_color: "Custom"
+                # "theme_text_color: Custom" – użyj własnego koloru.
                 text_color: (1, 1, 0, 1) if app.grid_layout else (1, 1, 1, 1)
                 # "text_color" – żółty gdy siatka włączona, biały gdy wyłączona.
                 on_release: app.toggle_layout_menu()
@@ -421,7 +492,9 @@
         SessionCard:
             # "SessionCard" – karta ostatniej sesji.
             id: last_session_card
+            # "id: last_session_card" – unikalna nazwa dla Pythona.
             pos_hint: {'center_x': 0.5}
+            # "pos_hint" – wyśrodkuj kartę w poziomie.
 
         # Przewijana lista projektów
         # "ScrollView" – kontener przewijany w pionie.
@@ -429,25 +502,28 @@
         ScrollView:
             # "ScrollView" – przewijana lista projektów.
             do_scroll_x: False
+            # "do_scroll_x: False" – wyłącz przewijanie w poziomie (tylko w pionie).
             bar_width: 0
+            # "bar_width: 0" – ukryj pasek przewijania.
 
             MDFloatLayout:
                 # "MDFloatLayout" – pojemnik na karty projektów.
                 id: projects_container
                 # "id: projects_container" – unikalna nazwa dla Pythona (dodaje karty tutaj).
                 size_hint_y: None
+                # "size_hint_y: None" – stała wysokość (Python ustawi ją automatycznie).
                 height: dp(1)
                 # "height: dp(1)" – tymczasowa wysokość (Python zmieni ją gdy doda karty).
-               
+
     # -----------------------------------------------------------------------
     # DOLNY PASEK NAWIGACYJNY (z przyciskami)
     # -----------------------------------------------------------------------
     # Zawiera ikony: dom (Home), pustą przestrzeń pod przycisk "+",
     # oraz wykres (Statystyki). Przycisk "+" jest osobnym, unoszącym się
     # elementem pomiędzy dwiema ikonami.
-    # 
+    #
     # "pos_hint: {'center_x': 0.5, 'y': 0}" – wyśrodkowany, przylegający do dołu.
-    
+
     MDFloatLayout:
         # "MDFloatLayout" – dolny pasek nawigacyjny.
         size_hint: 1, None
@@ -456,28 +532,37 @@
         # "height: dp(60)" – wysokość paska 60 pikseli.
         pos_hint: {'center_x': 0.5, 'y': 0}
         # "pos_hint" – wyśrodkowany w poziomie, przylegający do dołu.
-        
+
         # Główny pasek – biały, z zaokrąglonymi górnymi rogami
         # "radius: [dp(25), dp(25), 0, 0]" – tylko górne rogi zaokrąglone.
         # Dzięki temu pasek wygląda jak "wyspa" przyklejona do dołu.
         MDCard:
             # "MDCard" – biała karta paska nawigacyjnego.
             size_hint: 1, 1
+            # "size_hint: 1, 1" – wypełnij całe dostępne miejsce.
             pos_hint: {'x': 0, 'y': 0}
+            # "pos_hint" – pozycja: lewy dolny róg.
             radius: [0, 0, 0, 0]
             # "radius: [0, 0, 0, 0]" – brak zaokrąglenia (proste krawędzie).
             elevation: 4
+            # "elevation: 4" – cień pod paskiem (unosi się nad resztą).
             md_bg_color: 1, 1, 1, 1
-            
+            # "md_bg_color: 1,1,1,1" – białe tło.
+
             MDBoxLayout:
                 # "MDBoxLayout" – trzy kolumny: dom, pusto, wykres.
                 AnchorLayout:
                     # "AnchorLayout" – ikona domku na środku kolumny.
                     anchor_x: 'center'
+                    # "anchor_x: center" – wyśrodkuj w poziomie.
                     anchor_y: 'center'
+                    # "anchor_y: center" – wyśrodkuj w pionie.
                     MDIconButton:
+                        # "MDIconButton" – przycisk z ikoną domku.
                         icon: "home-outline"
+                        # "icon: home-outline" – ikona domku (strona główna).
                         icon_size: dp(30)
+                        # "icon_size: dp(30)" – rozmiar ikony 30 pikseli.
 
                 Widget:
                     # "Widget" – pusty odstępnik (miejsce pod przycisk "+").
@@ -485,10 +570,15 @@
                 AnchorLayout:
                     # "AnchorLayout" – ikona statystyk na środku kolumny.
                     anchor_x: 'center'
+                    # "anchor_x: center" – wyśrodkuj w poziomie.
                     anchor_y: 'center'
+                    # "anchor_y: center" – wyśrodkuj w pionie.
                     MDIconButton:
+                        # "MDIconButton" – przycisk z ikoną statystyk.
                         icon: "chart-arc"
+                        # "icon: chart-arc" – ikona wykresu (statystyki).
                         icon_size: dp(30)
+                        # "icon_size: dp(30)" – rozmiar ikony 30 pikseli.
                         on_release: app.root.current = "statistics"
                         # Po kliknięciu przełącz na ekran statystyk.
 
@@ -500,6 +590,7 @@
         ClickableAnchorLayout:
             # "ClickableAnchorLayout" – przycisk "+" do dodawania projektu.
             size_hint: None, None
+            # "size_hint: None, None" – stały rozmiar (nie rozciągaj).
             size: dp(120), dp(56)
             # "size: dp(120), dp(56)" – szeroki przycisk 120x56 pikseli.
             pos_hint: {'center_x': 0.5, 'center_y': 0.67}
@@ -509,19 +600,33 @@
             canvas.before:
                 # Rysujemy fioletowe tło przycisku.
                 Color:
+                    # "Color:" – ustawia kolor dla kolejnych rysunków.
                     rgba: utils.get_color_from_hex(app.theme_card_bg)
+                    # "rgba" – kolor tła przycisku (z motywu aplikacji).
                 RoundedRectangle:
+                    # "RoundedRectangle:" – narysuj zaokrąglony prostokąt.
                     pos: self.pos
+                    # "pos: self.pos" – pozycja prostokąta = pozycja przycisku.
                     size: self.size
+                    # "size: self.size" – rozmiar prostokąta = rozmiar przycisku.
                     radius: [dp(18)]
-            
+                    # "radius: [dp(18)]" – zaokrąglenie rogów 18 pikseli.
+
             Label:
                 # "Label" – znak "+".
                 text: "+"
+                # "text: +" – wyświetla znak plus.
                 bold: True
+                # "bold: True" – pogrubienie.
                 font_size: dp(48)
+                # "font_size: dp(48)" – duży rozmiar czcionki 48 pikseli.
                 color: 1, 1, 1, 1
+                # "color: 1,1,1,1" – biały kolor tekstu.
                 halign: "center"
+                # "halign: center" – wyśrodkuj w poziomie.
                 valign: "middle"
+                # "valign: middle" – wyśrodkuj w pionie.
                 size_hint: None, None
+                # "size_hint: None, None" – stały rozmiar.
                 pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                # "pos_hint" – wyśrodkuj znak "+" wewnątrz przycisku.

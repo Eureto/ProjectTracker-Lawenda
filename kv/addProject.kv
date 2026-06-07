@@ -21,10 +21,12 @@
 # Składnia "<NowaNazwa@Klasa1+Klasa2>:" oznacza: stwórz nowy szablon o nazwie
 # "NowaNazwa", który dziedziczy cechy z obu klas.
 
+# "<ClickableBoxLayout>" – nowy szablon: klikalny kontener poziomu (ButtonBehavior + BoxLayout).
 <ClickableBoxLayout@ButtonBehavior+BoxLayout>:
 # "<ClickableBoxLayout>" – nowy szablon: klikalne pudełko (ButtonBehavior + BoxLayout).
 # Używane np. dla przycisku "Usuń projekt".
 
+# "<ClickableAnchorLayout>" – nowy szablon: klikalny kontener z pozycjonowaniem (ButtonBehavior + AnchorLayout).
 <ClickableAnchorLayout@ButtonBehavior+AnchorLayout>:
 # "<ClickableAnchorLayout>" – nowy szablon: klikalny obszar z pozycjonowaniem
 # (ButtonBehavior + AnchorLayout). Używane dla przycisków nawigacji i zapisu.
@@ -48,10 +50,12 @@
 # "canvas.before:" – rysuje tło PRZED zawartością. Działa jak "podkładka".
 # "RoundedRectangle" – prostokąt z zaokrąglonymi rogami.
 
+# "<ProjectTextInput>" – szablon: pole tekstowe z ikoną (BoxLayout z TextInput i MDIcon).
 <ProjectTextInput@BoxLayout>:
     # "ProjectTextInput" – szablon pola tekstowego z ikoną.
     # "BoxLayout" – układa pole tekstowe i ikonę obok siebie w poziomie.
 
+    # "size_hint_y: None" – stała wysokość (nie procentowa).
     size_hint_y: None
     # "size_hint_y: None" – stała wysokość (nie procentowa).
     height: dp(54)
@@ -69,12 +73,15 @@
     canvas.before:
         # Rysujemy tło (szary prostokąt) PRZED zawartością pola.
         Color:
+            # "rgba: #EFEFEF" – kolor tła w formacie RGBA (jasnoszary).
             rgba: utils.get_color_from_hex("#EFEFEF")
             # Kolor tła: jasnoszary (#EFEFEF).
         RoundedRectangle:
             # "RoundedRectangle" – prostokąt z zaokrąglonymi rogami.
             pos: self.pos
+            # "size: self.size" – rozmiar prostokąta = rozmiar elementu.
             size: self.size
+            # "radius: [dp(12)]" – zaokrąglenie rogów o 12 pikseli.
             radius: [dp(12)]
             # "radius: [dp(12)]" – zaokrąglenie rogów: 12 pikseli.
 
@@ -137,7 +144,9 @@
 # "valign: middle" – wyrównanie w pionie do środka.
 # "text_size: self.size" – ogranicza obszar tekstu do rozmiaru etykiety.
 
+# "<ProjectTileButton>" – szablon: kwadratowy przycisk z ikoną i podpisem.
 <ProjectTileButton@ButtonBehavior+BoxLayout>:
+    # "orientation: vertical" – elementy ułożone pionowo: napis nad ikoną.
     # "ProjectTileButton" – kwadratowy przycisk z ikoną i podpisem.
     orientation: "vertical"
     # "orientation: vertical" – elementy jeden nad drugim: napis na górze, ikona na dole.
@@ -159,11 +168,15 @@
             rgba: utils.get_color_from_hex("#EFEFEF")
             # Kolor tła: jasnoszary.
         RoundedRectangle:
+            # "pos: self.pos" – pozycja prostokąta = pozycja elementu.
             pos: self.pos
+            # "size: self.size" – rozmiar prostokąta = rozmiar elementu.
             size: self.size
+            # "radius: [dp(12)]" – zaokrąglenie rogów o 12 pikseli.
             radius: [dp(12)]
             # "radius: [dp(12)]" – zaokrąglenie rogów: 12 pikseli.
 
+    # "Label" – etykieta z podpisem pod ikoną.
     Label:
         # "Label" – podpis pod ikoną.
         text: root.label_text
@@ -173,6 +186,7 @@
         font_size: sp(13)
         # "font_size: sp(13)" – mała czcionka.
         size_hint_y: None
+        # "height: dp(20)" – wysokość etykiety: 20 pikseli.
         height: dp(20)
         # "height: dp(20)" – wysokość tekstu 20 pikseli.
         halign: "center"
@@ -182,6 +196,7 @@
         text_size: self.size
         # "text_size: self.size" – ogranicz obszar tekstu do rozmiaru etykiety.
 
+    # "AnchorLayout" – kontener do ustawiania ikony na środku.
     AnchorLayout:
         # "AnchorLayout" – umieszcza ikonę na środku.
         size_hint_y: 1
@@ -205,6 +220,7 @@
 # "state == 'down'" – sprawdza czy przycisk jest aktualnie wciśnięty.
 # Jeśli tak, tło staje się lekko przezroczyste (efekt kliknięcia).
 
+# "<EmojiButton>" – definicja przycisku do wyboru emoji.
 <EmojiButton>:
     # "EmojiButton" – mały przycisk do wyboru emoji.
     size_hint: None, None
@@ -214,12 +230,16 @@
     canvas.before:
         # Rysujemy tło PRZED emoji – przyciemnienie po kliknięciu.
         Color:
+            # "rgba: (0,0,0,0.1) po kliknięciu" – gdy wciśnięty, tło lekko czarne; normalnie przezroczyste.
             rgba: (0, 0, 0, 0.1) if self.state == 'down' else (0, 0, 0, 0)
             # "state == 'down'" – gdy przycisk jest wciśnięty, tło staje się
             # lekko czarne (10% przezroczystości). Gdy nie jest wciśnięty – tło jest przezroczyste.
         RoundedRectangle:
+            # "pos: self.pos" – pozycja = pozycja przycisku.
             pos: self.pos
+            # "size: self.size" – rozmiar = rozmiar przycisku.
             size: self.size
+            # "radius: [dp(8)]" – zaokrąglenie rogów o 8 pikseli.
             radius: [dp(8)]
             # "radius: [dp(8)]" – zaokrąglenie rogów: 8 pikseli.
 
@@ -235,9 +255,11 @@
 # "Rectangle" – wypełnia cały obszar kolorem. "pos: self.pos, size: self.size"
 # oznacza: pozycja i rozmiar takie jak element nadrzędny.
 
+# "<AddProjectScreen>" – definicja całego ekranu dodawania projektu.
 <AddProjectScreen>:
     # Definicja ekranu dodawania nowego projektu.
 
+    # "canvas.before:" – rysujemy tło PRZED wszystkimi elementami.
     canvas.before:
         # Rysujemy fioletowe tło całego ekranu PRZED wszystkimi elementami.
         Color:
@@ -293,10 +315,15 @@
                 on_release: app.root.current = "home"
                 # "on_release" – po kliknięciu przełącz na ekran główny.
                 MDIcon:
+                    # "icon: chevron-left" – ikona strzałki w lewo (powrót do ekranu głównego).
                     icon: "chevron-left"
+                    # "theme_text_color: Custom" – używamy własnego koloru (nie domyślnego).
                     theme_text_color: "Custom"
+                    # "text_color: 1, 1, 1, 1" – biały kolor ikony (1,1,1 = biały RGB).
                     text_color: 1, 1, 1, 1
+                    # "font_size: sp(50)" – duży rozmiar ikony: 50 pikseli skalowalnych.
                     font_size: sp(50)
+                    # "adaptive_size: True" – ikona dopasowuje się do rozmiaru czcionki.
                     adaptive_size: True
 
             # Tytuł strony – wyśrodkowany w poziomie i pionie
@@ -305,11 +332,17 @@
             Label:
                 # "Label" – tytuł strony "Dodawanie projektu".
                 text: "Dodawanie projektu"
+                # "font_size: sp(20)" – rozmiar tytułu: 20 pikseli skalowalnych.
                 font_size: sp(20)
+                # "bold: True" – pogrubiona czcionka.
                 bold: True
+                # "color: 1, 1, 1, 1" – biały kolor tekstu (RGB).
                 color: 1, 1, 1, 1
+                # "halign: center" – wyśrodkuj tekst w poziomie.
                 halign: "center"
+                # "valign: middle" – wyśrodkuj tekst w pionie.
                 valign: "middle"
+                # "text_size: self.size" – ogranicza obszar tekstu do rozmiaru etykiety (dzięki czemu halign i valign działają).
                 text_size: self.size
 
             # Pusty odstępnik po prawej (symetryczny do strzałki)
@@ -362,14 +395,18 @@
                     orientation: "vertical"
                     # "orientation: vertical" – karta nad napisem "Podgląd".
                     size_hint_y: None
+                    # "height: dp(290)" – wysokość sekcji podglądu: 290 pikseli.
                     height: dp(290)
                     # "height: dp(290)" – wysokość sekcji podglądu: 290 pikseli.
                     spacing: dp(8)
+                    # "padding: [0, dp(30), 0, 0]" – odstęp wewnętrzny: 30 pikseli od góry.
                     padding: [0, dp(30), 0, 0]
 
+                    # "AnchorLayout" – kontener do wyśrodkowania karty projektu.
                     AnchorLayout:
                         # "AnchorLayout" – wyśrodkowuje kartę projektu.
                         size_hint_y: None
+                        # "height: dp(230)" – wysokość przeznaczona na kartę: 230 pikseli.
                         height: dp(230)
                         # "height: dp(230)" – miejsce na kartę.
                         anchor_x: "center"
@@ -377,6 +414,7 @@
                         anchor_y: "center"
                         # "anchor_y: center" – wyśrodkuj w pionie.
 
+                        # "ProjectCard" – podgląd karty projektu (widoczny podczas wypełniania formularza).
                         ProjectCard:
                             # "ProjectCard" – karta podglądu projektu.
                             id: preview_card
@@ -384,9 +422,13 @@
                             interactive: False
                             # "interactive: False" – podgląd, nie można kliknąć.
                             size_hint: None, None
+                            # "width: dp(200)" – szerokość karty: 200 pikseli.
                             width: dp(200)
+                            # "height: dp(220)" – wysokość karty: 220 pikseli.
                             height: dp(220)
+                            # "height_multiplier: 1" – mnożnik wysokości (1 = normalna wysokość).
                             height_multiplier: 1
+                            # "title" – tytuł na karcie: z pola tekstowego, albo domyślnie "Tytuł Projektu".
                             title: project_name_input.text if project_name_input.text else "Tytuł Projektu"
                             # "title" – tytuł z pola tekstowego. Jeśli puste, pokaż "Tytuł Projektu".
                             image_source: root.selected_image_path
@@ -396,20 +438,29 @@
                             card_color: root.selected_color
                             # "card_color" – wybrany kolor.
                             title_font_style: "H6"
+                            # "emoji_size: dp(45)" – rozmiar emoji na karcie: 45 pikseli.
                             emoji_size: dp(45)
+                            # "emoji_right_hint: 1.25" – przesunięcie emoji w prawo (współczynnik).
                             emoji_right_hint: 1.25
+                            # "emoji_right_hint_png: 1.05" – przesunięcie emoji dla obrazków PNG.
                             emoji_right_hint_png: 1.05
 
                     # Napis "Podgląd" pod kartą
                     Label:
                         # "Label" – podpis "Podgląd".
                         text: "Podgląd"
+                        # "font_size: sp(14)" – rozmiar czcionki podpisu: 14 pikseli skalowalnych.
                         font_size: sp(14)
                         color: utils.get_color_from_hex("#DDD0FF")
+                        # "size_hint_y: None" – stała wysokość (nie procentowa).
                         size_hint_y: None
+                        # "height: dp(22)" – wysokość podpisu: 22 piksele.
                         height: dp(22)
+                        # "halign: center" – wyśrodkuj w poziomie.
                         halign: "center"
+                        # "valign: middle" – wyśrodkuj w pionie.
                         valign: "middle"
+                        # "text_size: self.size" – ogranicz obszar tekstu do rozmiaru etykiety.
                         text_size: self.size
 
                 # ── Pole do wpisania nazwy projektu ──
@@ -431,24 +482,38 @@
                 BoxLayout:
                     # "BoxLayout" – wiersz z trzema przyciskami.
                     size_hint_y: None
+                    # "height: dp(80)" – wysokość wiersza z przyciskami: 80 pikseli.
                     height: dp(80)
+                    # "spacing: dp(12)" – odstęp między przyciskami: 12 pikseli.
                     spacing: dp(12)
 
+                    # "ProjectTileButton" – pierwszy przycisk: wybór zdjęcia.
                     ProjectTileButton:
+                        # "label_text" – podpis przycisku: "+ Zdjęcie".
                         label_text: "+ Zdjęcie"
+                        # "icon_text" – ikona przycisku: obrazek (image-outline).
                         icon_text: "image-outline"
+                        # "on_release" – po kliknięciu Python uruchamia funkcję select_photo().
                         on_release: root.select_photo()
                         # Po kliknięciu wywołaj "select_photo()" w Pythonie.
 
+                    # "ProjectTileButton" – drugi przycisk: wybór koloru.
                     ProjectTileButton:
+                        # "label_text" – podpis przycisku: "+ Kolor".
                         label_text: "+ Kolor"
+                        # "icon_text" – ikona przycisku: paleta kolorów (palette-outline).
                         icon_text: "palette-outline"
+                        # "on_release" – po kliknięciu Python uruchamia funkcję select_color().
                         on_release: root.select_color()
                         # Po kliknięciu wywołaj "select_color()".
 
+                    # "ProjectTileButton" – trzeci przycisk: wybór emoji.
                     ProjectTileButton:
+                        # "label_text" – podpis przycisku: "+ Emoji".
                         label_text: "+ Emoji"
+                        # "icon_text" – ikona przycisku: uśmiechnięta buźka (emoticon-happy-outline).
                         icon_text: "emoticon-happy-outline"
+                        # "on_release" – po kliknięciu Python uruchamia funkcję select_emoji().
                         on_release: root.select_emoji()
                         # Po kliknięciu wywołaj "select_emoji()".
 
@@ -476,7 +541,9 @@
             Ellipse:
                 # "Ellipse" – rysuje koło (tutaj: okrągły przycisk).
                 pos: self.pos
+                # "size: self.size" – rozmiar koła = rozmiar przycisku.
                 size: self.size
+        # "MDIcon" – ikona ptaszka (symbol zatwierdzenia).
         MDIcon:
             # "MDIcon" – ikona ptaszka (symbol zapisu).
             icon: "check"

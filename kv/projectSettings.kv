@@ -279,14 +279,20 @@
                         # "on_release" – po kliknięciu wywołaj funkcję "select_photo" w Pythonie (wybór zdjęcia).
 
                     ProjectTileButton:
+                        # "ProjectTileButton" – kwadratowy przycisk do wyboru koloru projektu.
                         label_text: "+ Kolor"
+                        # "label_text" – podpis wyświetlany pod ikoną przycisku.
                         icon_text: "palette-outline"
+                        # "icon_text" – ikona na przycisku (paleta malarska = kolory).
                         on_release: root.select_color()
                         # Po kliknięciu wywołaj funkcję "select_color" (wybór koloru).
 
                     ProjectTileButton:
+                        # "ProjectTileButton" – kwadratowy przycisk do usunięcia zdjęcia projektu.
                         label_text: "Bez zdjęcia"
+                        # "label_text" – podpis wyświetlany pod ikoną przycisku.
                         icon_text: "image-off-outline"
+                        # "icon_text" – ikona na przycisku (przekreślony obrazek = brak zdjęcia).
                         on_release: root.clear_photo()
                         # Po kliknięciu wywołaj funkcję "clear_photo" (usuń zdjęcie projektu).
 

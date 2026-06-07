@@ -1,36 +1,68 @@
 import datetime
+# Obsługa dat i czasu – potrzebne do odmierzania czasu, wyświetlania dat, kalkulacji okresów
 import json
+# Odczyt i zapis danych w formacie JSON (projekty, sesje, notatki, cele)
 import os
+# Operacje na plikach i ścieżkach (np. łączenie ścieżek, sprawdzanie czy plik istnieje)
 import re
+# Wyrażenia regularne – do przetwarzania tekstu (np. walidacja, parsowanie)
 import uuid
+# Generowanie unikalnych identyfikatorów (UID) dla projektów, notatek, celów
 from kivy.animation import Animation
+# Płynne animacje Kivy (np. przesuwanie, zmiana przezroczystości)
 from kivy.clock import Clock
+# Planowanie wywołań na później (opóźnienia, okresowe odświeżanie)
 from kivy.core.window import Window
+# Główne okno aplikacji – dostęp do rozmiaru ekranu, klawiatury
 from kivy.metrics import dp, sp
+# dp – piksele niezależne od gęstości; sp – to samo dla czcionek
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
+# Właściwości Kivy – automatycznie odświeżają interfejs gdy zmienia się wartość
 from kivy.graphics import Color, Ellipse, Line, Rectangle, RoundedRectangle
+# Instrukcje rysowania: kolory, koła/elipsy, linie, prostokąty, prostokąty z zaokrąglonymi rogami
 from kivy.uix.behaviors import ButtonBehavior
+# Dodaje zachowanie przycisku do dowolnego widgetu (np. Image, Label)
 from kivy.uix.button import Button
+# Zwykły przycisk Kivy
 from kivy.uix.image import Image
+# Widget wyświetlający obrazek (emoji, zdjęcia, ikony)
 from kivy.uix.floatlayout import FloatLayout
+# Układ swobodny – elementy pozycjonowane na dowolnych współrzędnych
 from kivy.uix.modalview import ModalView
+# Okno modalne – wyświetla treść na wierzchu, blokuje interakcję z resztą
 from kivy.uix.textinput import TextInput
+# Pole tekstowe (wpisywanie nazw, notatek)
 from kivy.uix.spinner import Spinner
+# Lista rozwijana – wybór z kilku opcji (np. okres resetu celu)
 from kivy.uix.label import Label
+# Etykieta tekstowa Kivy (lekka, nienależąca do KivyMD)
 from kivy.uix.widget import Widget
+# Podstawowy widget – używany jako odstęp/wypełniacz lub do rysowania własnych elementów
 from kivy.utils import get_color_from_hex, platform
+# get_color_from_hex – konwersja koloru z #FF00FF na liczby; platform – wykrywa system (android/linux)
 from kivy.uix.scrollview import ScrollView
+# Widok z przewijaniem – dla długich list i formularzy
 from kivymd.app import MDApp
+# Główna klasa aplikacji KivyMD – dostęp do ustawień, ekranów, danych
 from kivy.uix.boxlayout import BoxLayout
+# Układ liniowy Kivy (pionowy/poziomy) – wersja podstawowa
 from kivymd.uix.boxlayout import MDBoxLayout
+# Układ liniowy KivyMD – z materiałowym stylem (cień, kolor tła)
 from kivymd.uix.card import MDCard
+# Karta KivyMD – zaokrąglone rogi, cień, tło (Material Design)
 from kivymd.uix.label import MDLabel
+# Etykieta KivyMD – z materiałowym stylem czcionki
 from kivymd.uix.screen import MDScreen
+# Ekran KivyMD – każdy osobny widok to osobny MDScreen
 
 from screens.keyboard_inset import keyboard_inset, safe_keyboard_height
+# keyboard_inset – informacja o wysokości klawiatury; safe_keyboard_height – bezpieczna wysokość (z paddingiem)
 from screens import active_timer
+# Moduł aktywnego timera – uruchamianie/zatrzymywanie pomiaru czasu
 from screens.emoji_assets import emoji_path
+# Funkcja zwracająca ścieżkę do pliku emoji (np. "u1F600.png")
 from screens.session_store import record_session, schedule_home_last_session_refresh
+# record_session – zapisuje zakończoną sesję; schedule_home_last_session_refresh – odświeża ekran główny po sesji
 
 # Główny folder projektu = nadrzędny dla `screens/` (działa zarówno na telefonie, jak i komputerze).
 _PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -133,30 +165,37 @@ def _start_service_via_intent(autoclass, activity, class_name):
 
 # Uruchamia usługę na pierwszym planie, która wyświetla powiadomienia o aktywnym stoperze.
 def ensure_android_timer_service():
+    # Jeśli nie jesteśmy na Androidzie, nic nie robimy
     if platform != "android":
         return
+    # Spróbuj zaimportować pyjnius – most Pythona z Javą na Androidzie
     try:
         from jnius import autoclass
     except Exception as exc:
         _android_log(f"pyjnius unavailable: {exc!r}")
         return
 
+    # Pobierz referencję do głównej aktywności Androida (PythonActivity)
     try:
         activity = autoclass("org.kivy.android.PythonActivity").mActivity
     except Exception as exc:
         _android_log(f"PythonActivity lookup failed: {exc!r}")
         return
 
+    # Zbierz wszystkie serwisy zadeklarowane w AndroidManifest.xml
     candidates = []
     for name in _manifest_service_class_names(activity):
         _android_log(f"manifest service available: {name}")
         if name not in candidates:
             candidates.append(name)
+    # Dodaj domyślną klasę serwisu timera, jeśli jeszcze nie ma jej na liście
     if _ANDROID_SERVICE_CLASS not in candidates:
         candidates.append(_ANDROID_SERVICE_CLASS)
 
+    # Próbuj uruchomić każdy serwis po kolei – najpierw przez .start(), potem przez Intent
     last_error = None
     for class_name in candidates:
+        # Metoda 1: wywołaj statyczną metodę .start() na klasie serwisu
         try:
             service_cls = autoclass(class_name)
             service_cls.start(activity, "")
@@ -165,6 +204,7 @@ def ensure_android_timer_service():
         except Exception as exc:
             last_error = (class_name, exc)
 
+        # Metoda 2: uruchom serwis przez Intent (standardowe API Androida)
         try:
             _start_service_via_intent(autoclass, activity, class_name)
             _android_log(f"started service via Intent to {class_name}")
@@ -172,6 +212,7 @@ def ensure_android_timer_service():
         except Exception as exc:
             last_error = (class_name, exc)
 
+    # Żaden serwis nie wystartował – zaloguj błąd
     if last_error:
         _android_log(
             f"failed to start any service. Tried {candidates}. "
@@ -292,58 +333,75 @@ class RoundedSheetSpinner(_RoundedSheetBackground, Spinner):
 
 # Zaokrąglony przycisk wyboru okresu resetowania dla celu czasowego.
 class ResetPeriodChip(Button):
+    # Klasa przycisku wyboru okresu resetowania celu.
+    # Wyświetla się jako seria chipów w arkuszu – jeden z nich jest aktywny (selected).
+    # Samodzielnie rysuje tło, przez co wygląda bardziej ''materialnie'' niż standardowy Kivy Button.
 
     selected = BooleanProperty(False)
+    # Czy ten chip jest aktualnie wybrany (fioletowe tło).
 
-    # Przygotowuje przycisk wyboru okresu: przezroczyste tlo, stala wysokosc i szerokosc na caly dostepny obszar.
     def __init__(self, **kwargs):
+        # Usuwa domyślne tło Kivy – rysujemy własne.
         kwargs.setdefault("background_normal", "")
         kwargs.setdefault("background_down", "")
         kwargs.setdefault("background_color", (0, 0, 0, 0))
+        # Stała wysokość i szerokość na cały dostępny horyzontalnie obszar.
         kwargs.setdefault("size_hint_y", None)
         kwargs.setdefault("height", dp(40))
         kwargs.setdefault("size_hint_x", 1)
         kwargs.setdefault("font_size", sp(13))
         super().__init__(**kwargs)
+        # Przy każdej zmianie wyglądu (selected, pozycja, rozmiar, stan wciśnięcia) przerysowujemy tło.
         self.bind(
             selected=self._apply_visual,
             pos=self._apply_visual,
             size=self._apply_visual,
             state=self._apply_visual,
         )
+        # Pierwsze przerysowanie po utworzeniu – inaczej chip byłby przezroczysty.
         Clock.schedule_once(lambda _dt: self._apply_visual(), 0)
 
-    # Odswieza wyglad przycisku: zmienia kolor tla w zaleznosci od tego, czy jest wybrany.
     def _apply_visual(self, *_args):
+        # Odświeża wygląd chipa: zmienia kolor tła w zależności od selected i stanu wciśnięcia.
         r = float(_SHEET_BTN_RADIUS)
         if self.selected:
+            # Wybrany = wypełnienie fioletem, biały tekst.
             fill = list(_PURPLE)
             self.color = 1, 1, 1, 1
         else:
+            # Niewybrany = jasnofioletowe tło, ciemny tekst.
             fill = [0.93, 0.90, 0.98, 1]
             self.color = list(_PURPLE[:3]) + [1]
+        # Efekt wciśnięcia – lekkie przyciemnienie koloru wypełnienia.
         if self.state == "down":
             fill = [c * 0.92 for c in fill[:3]] + [fill[3]]
+        # Czyści starą grafikę i rysuje nowe zaokrąglone tło.
         self.canvas.before.clear()
         with self.canvas.before:
             Color(*fill)
             RoundedRectangle(pos=self.pos, size=self.size, radius=[r, r, r, r])
 
 
-# Zaokrąglony przycisk akcji w arkuszach (zastępuje płaskie przyciski MD w arkuszach).
+# Zaokrąglony przycisk akcji w arkuszach (zastępuje płaskie przyciski MD).
 class RoundedSheetButton(Button):
+    # Przycisk o jednolitym, zaokrąglonym tle – bez obramowania, z elastycznym kolorem.
+    # Używany w dolnych arkuszach (BottomSheet) jako główny przycisk akcji (np. 'Zapisz', 'Dodaj').
 
     bg_color = ListProperty([0.7, 0.5, 1, 1])
+    # Kolor wypełnienia przycisku (domyślnie fioletowy).
     text_rgb = ListProperty([1, 1, 1, 1])
+    # Kolor tekstu na przycisku (domyślnie biały).
     corner_radius = NumericProperty(_SHEET_BTN_RADIUS)
+    # Promień zaokrąglenia rogów – wartość globalna, ale można zmienić per-instancyjnie.
 
-    # Przygotowuje zaokraglony przycisk: przezroczyste tlo, pogrubiona czcionka, odswiezanie wygladu przy zmianie.
     def __init__(self, **kwargs):
+        # Usuwa domyślne tło Kivy – rysujemy własne.
         kwargs.setdefault("background_normal", "")
         kwargs.setdefault("background_down", "")
         kwargs.setdefault("background_color", (0, 0, 0, 0))
         kwargs.setdefault("bold", True)
         super().__init__(**kwargs)
+        # Subskrypcje: każda zmiana pozycji, rozmiaru, stanu lub kolorów wywołuje przerysowanie.
         self.bind(
             pos=self._redraw,
             size=self._redraw,
@@ -351,12 +409,14 @@ class RoundedSheetButton(Button):
             bg_color=lambda *_: self._redraw(),
             text_rgb=lambda *_: self._redraw(),
         )
+        # Pierwsze przerysowanie w następnej klatce – canvas nie istnieje w __init__.
         Clock.schedule_once(lambda _dt: self._redraw(), 0)
 
-    # Rysuje zaokraglone tlo przycisku z odpowiednim kolorem i przyciemnieniem po nacisnieciu.
     def _redraw(self, *_args):
+        # Rysuje zaokrąglone tło przycisku z odpowiednim kolorem i przyciemnieniem po naciśnięciu.
         bg = list(self.bg_color)
         if self.state == "down":
+            # Przyciemnienie tła o 10% podczas przytrzymania – efekt dotykowego feedbacku.
             bg = [c * 0.9 for c in bg[:3]] + [bg[3]]
         r = float(self.corner_radius)
         self.color = self.text_rgb
@@ -961,9 +1021,8 @@ class StageItemRow(MDBoxLayout):
         self._underline = underline
         underline.text = self.display_text
         if self.width > 1:
-            # Approximate width consumed by the fixed-width siblings:
-            #   spine(22) + sub_arrow_spacer(16 or 0) + status_btn(26)
-            #   + 3 spacings(8 each)
+            # Szerokość zajęta przez stałe elementy obok tekstu:
+            # spine(22) + sub_arrow_spacer(16 lub 0) + status_btn(26) + 3 odstępy(8 każdy)
             pad = dp(88) if self.is_sub else dp(72)
             underline.width = max(sp(40), self.width - pad)
         underline._relayout()
@@ -985,37 +1044,48 @@ class TimelineSpine(Widget):
         self.bind(pos=self._redraw, size=self._redraw, is_sub=self._redraw)
         self.bind(is_first=self._redraw, is_last=self._redraw, done=self._redraw)
 
-    # Rysuje pionowa linie osi czasu z wezlami i laczeniami miedzy krokami.
     def _redraw(self, *_args):
+        # Rysuje wizualną oś czasu: pionową linię z węzłami (kropkami lub grotami strzałek)
+        # w zależności od tego, czy krok jest podrzędny (sub), pierwszy, ostatni lub ukończony.
+
         self.canvas.clear()
+        # Zabezpieczenie przed rysowaniem na zerowej wysokości.
         if self.height < 1:
             return
+
+        # Środek poziomy – linia i węzeł będą wyśrodkowane względem widgetu.
         cx = self.center_x
+        # Pionowy środek widgetu – tutaj umieścimy kropkę/grot.
         node_cy = self.center_y
+
         with self.canvas:
-            # Always draw the connecting line so the timeline spine reads as
-            # one continuous chain — even through Podkroki and behind the
-            # arrow head.
+            # --- PIONOWA LINIA ŁĄCZĄCA (CIĄGŁA PRZEZ CAŁĄ WYSOKOŚĆ) ---
+            # Zawsze rysuj linię łączącą – oś czasu ma wyglądać jak jeden ciągły łańcuch,
+            # nawet przez Podkroki i za grotem strzałki.
             Color(*_GREY_NODE)
             Line(points=[cx, self.top, cx, self.y], width=dp(1.5))
+
+            # --- KOLOR WĘZŁA: FIOLETOWY (UKOŃCZONY) LUB SZARY (NIEUKOŃCZONY) ---
             Color(*(_PURPLE if self.done else _GREY_NODE))
+
             if self.is_sub:
-                # Right-pointing arrow head ( > ) drawn to the RIGHT of the
-                # spine line so the line itself stays uninterrupted. The
-                # arrow's left tip starts ~dp(4) past the line so there's a
-                # clear visual gap between line and arrow.
+                # --- PODKROK: GROT STRZAŁKI ( > ) Z BOKU ---
+                # Grot strzałki rysowany na PRAWO od linii osi czasu,
+                # żeby linia pozostała nieprzerwana. Grocik zaczyna się ~dp(4)
+                # za linią, żeby był wyraźny odstęp między linią a strzałką.
                 gap = dp(4)
-                tip_x = cx + gap
-                a = dp(5)
+                tip_x = cx + gap  # Pozycja X wierzchołka strzałki.
+                a = dp(5)  # Połowa wysokości strzałki – im większa, tym grubszy grot.
                 Line(
                     points=[
-                        tip_x, node_cy + a,
-                        tip_x + a, node_cy,
-                        tip_x, node_cy - a,
+                        tip_x, node_cy + a,      # Górny grot
+                        tip_x + a, node_cy,        # Czubek (skierowany w prawo)
+                        tip_x, node_cy - a,        # Dolny grot
                     ],
                     width=dp(1.8),
                 )
             else:
+                # --- KROK GŁÓWNY: WYPEŁNIONE KÓŁKO (WĘZEŁ) ---
                 node_r = dp(6)
                 Ellipse(
                     pos=(cx - node_r, node_cy - node_r),
@@ -1654,9 +1724,9 @@ class ProjectInfoScreen(MDScreen):
         old_index = self._etapy_selected_index
         self._etapy_selected_index = int(index)
         self._clamp_etapy_selection()
-        # Update existing chips in-place instead of rebuilding, so that
-        # double-click timing (_last_click_time) is preserved.
-        # Note: Kivy children are in reverse visual order (last added = first).
+        # Aktualizuj istniejące chipy w miejscu (nie przebudowuj od nowa),
+        # żeby zachować timing podwójnego kliknięcia (_last_click_time).
+        # Uwaga: dzieci Kivy są w odwrotnej kolejności wizualnej (ostatnio dodane = pierwsze).
         box = self.ids.get("etapy_chips_box")
         if box is not None:
             n = len(box.children)
@@ -2055,8 +2125,8 @@ class ProjectInfoScreen(MDScreen):
         if self.project_uid and state_uid:
             return state_uid == self.project_uid
         if state_uid or self.project_uid:
-            # One side has a uid and the other doesn't → assume mismatch to
-            # avoid falsely binding a renamed-but-shared-name project.
+            # Jedna strona ma uid a druga nie → zakładamy niezgodność,
+            # żeby nie powiązać projektu, który zmienił nazwę ale ma wspólną starą nazwę.
             return False
         return state.get("project_title") == self.project_title
 
@@ -2227,23 +2297,32 @@ class _BottomSheetKeyboardMixin:
             Window.unbind(size=self._on_sheet_window_resize)
             self._sheet_kb_bound = False
 
-    #
-    # O ile dolna krawędź okna Kivy znajduje się nad rzeczywistą górą klawiatury.
-    # Odjęcie tej wartości od okna modalnego usuwa widoczną przerwę na urządzeniach z trybem adjustResize.
     def _keyboard_unreserved_gap(self):
+        # O ile dolna krawędź okna Kivy znajduje się nad rzeczywistą górą klawiatury.
+        # Odjęcie tej wartości od okna modalnego usuwa widoczną przerwę na urządzeniach z trybem adjustResize.
+
+        # Wysokość okna przed pojawieniem się klawiatury – punkt odniesienia.
         baseline = float(getattr(self, "_win_h_baseline", 0) or 0)
+        # Aktualna wysokość okna (może być zmniejszone przez klawiaturę w trybie resize).
         win_h = float(Window.height or 0)
+        # O ile okno się skurczyło w porównaniu do baseline (różnica wysokości).
         shrink = max(0.0, baseline - win_h) if baseline > win_h + dp(8) else 0.0
+        # Wysokość zajęta przez klawiaturę (od inset systemowego).
         inset = keyboard_inset(baseline) if baseline > 0 else 0.0
+        # Bezpieczna wysokość klawiatury – fallback, gdy inset nie działa.
         kh = safe_keyboard_height(baseline)
 
+        # Luk = obszar klawiatury pomniejszony o shrink (część już "schowana" w zmniejszonym oknie).
         gap = max(0.0, inset - shrink)
+        # Jeśli bezpieczna wysokość jest większa niż shrink, dodajemy różnicę.
         if kh > shrink + dp(4):
             gap = max(gap, kh - shrink)
 
+        # Gdy pole jest edytowane, a przerwa bardzo mała – wymuszamy minimalny odstęp.
         if self._sheet_input_focused() and gap < dp(16):
             gap = dp(20)
 
+        # Przycinamy do rozsądnego maksimum, żeby nie odjechać za daleko od dołu.
         return min(gap + dp(5), dp(27))
 
     # Ustawia wysokosc okna modalnego tak, by nie zachodzilo na klawiature.
@@ -2322,42 +2401,61 @@ class _BottomSheetKeyboardMixin:
         win_h = float(Window.height or 0)
         return baseline > win_h + dp(40)
 
-    # Dodatkowy odstęp na dole tylko wtedy, gdy okno się NIE zmniejszyło (klawiatura nakłada się na pełny ekran).
     def _keyboard_lift(self):
+        # Dodatkowy odstęp na dole tylko wtedy, gdy okno się NIE zmniejszyło.
+        # Gdy okno jest w trybie resize – klawiatura przesuwa je fizycznie i nie trzeba liftu.
+
+        # Okno już się zmniejszyło – klawiatura jest "wbudowana", nie trzeba dodatkowego uniesienia.
         if self._window_shrunk_for_keyboard():
             return 0.0
 
+        # Wysokość klawiatury odczytana z insetów systemowych.
         baseline = float(getattr(self, "_win_h_baseline", 0) or 0)
         kh = keyboard_inset(baseline)
+        # Zapamiętujemy najwyższą odnotowaną wartość liftu – zapobiega skakaniu UI.
         peak = float(getattr(self, "_kb_lift_peak", 0) or 0)
         if kh > peak:
             self._kb_lift_peak = kh
         lift = max(kh, peak)
 
+        # Gdy pole jest edytowane, a lift zbyt mały – windujemy do ~36% wysokości ekranu.
+        # Dotyczy tylko urządzeń mobilnych (Android/iOS).
         if self._sheet_input_focused() and lift < dp(200) and platform not in ("win", "linux", "macosx"):
             win_h = float(Window.height or 640)
             lift = max(lift, win_h * 0.36)
         return lift
 
-    # Zlicza stałe elementy (marginesy, tytuł, przyciski), żeby pole tekstowe nie zakrywało paska akcji.
     def _measure_panel_chrome(self, panel, exclude=()):
+        # Zlicza stałe elementy panelu (marginesy, tytuł, przyciski akcji), żeby pole tekstowe
+        # nie zachodziło na pasek akcji na dole arkusza.
+
+        # Suma górnego i dolnego paddingu panelu.
         chrome = float(panel.padding[1]) + float(panel.padding[3])
+        # Dzieci do pominięcia (np. scroll, który liczymy osobno).
         excluded = set(exclude)
         for child in panel.children:
             if child in excluded:
                 continue
             chrome += float(child.height)
+        # Odstępy między dziećmi – każda para dodaje spacing.
         n = len(panel.children)
         if n > 1:
             chrome += float(panel.spacing) * (n - 1)
+        # Dodatkowy mały margines bezpieczeństwa.
         return chrome + dp(4)
 
-    # Określa położenie dolnej krawędzi panelu — kotwiczy do dołu okna (przyciętego do klawiatury).
     def _sheet_bottom_y(self, win_h):
+        # Określa położenie dolnej krawędzi panelu – kotwiczy do dołu okna, przyciętego do klawiatury.
+        # Zwraca przesunięcie w górę (Y), by panel nie nachodził na klawiaturę.
+
+        # Bazowa wysokość okna (przed pojawieniem się klawiatury).
         baseline = float(getattr(self, "_win_h_baseline", 0) or 0)
+        # O ile okno się skurczyło – w trybie resize klawiatura zmniejsza dostępną przestrzeń.
         shrink = max(0.0, baseline - win_h) if baseline > 0 else 0.0
+        # Wysokość zajęta przez klawiaturę (inset systemowy).
         inset = keyboard_inset(baseline) if baseline > 0 else safe_keyboard_height(baseline)
 
+        # Jeśli klawiatura nie jest widoczna i nic nie wymaga przesunięcia – zwracamy 0.
         if not (
             self._sheet_input_focused()
             or shrink > dp(40)
@@ -2365,42 +2463,59 @@ class _BottomSheetKeyboardMixin:
         ):
             return 0.0
 
+        # Gdy okno znacznie się skurczyło – klawiatura jest już uwzględniona w rozmiarze okna.
         if shrink > dp(40):
             return 0.0
 
+        # Ostateczne uniesienie = max z inset, safe_height i keyboard_lift.
         lift = max(inset, safe_keyboard_height(baseline), self._keyboard_lift())
+        # Odejmujemy przerwę niezarezerwowaną przez system (unreserved gap).
         gap = self._keyboard_unreserved_gap()
         return max(0.0, lift - gap)
 
-    # Zwraca (panel_height, target_y, inner_height) — wysokość, pozycję i wnętrze arkusza.
     def _sheet_panel_geometry(
         self, max_panel_dp, chrome_dp, field_max_dp=None, fill_available=False
     ):
+        # Zwraca (panel_height, target_y, inner_height) – wysokość panelu, pozycję Y, wysokość wnętrza.
+        # Używane przez klasy pochodne do precyzyjnego ustawienia rozmiaru arkusza względem klawiatury.
+
+        # Aktualna wysokość okna modalnego (lub fallback 640).
         win_h = float(self.height or Window.height or 640)
+        # Wysokość stałych elementów panelu (padding, tytuł, przyciski).
         chrome = float(chrome_dp)
+        # Docelowa pozycja Y dolnej krawędzi panelu (uwzględnia klawiaturę).
         target_y = self._sheet_bottom_y(win_h)
+        # Czy klawiatura jest widoczna (lub pole ma focus).
         keyboard_up = target_y > 0 or self._sheet_input_focused()
 
+        # --- DOSTĘPNA PRZESTRZEŃ DLA PANELU ---
         if keyboard_up:
+            # Przestrzeń nad klawiaturą – minimalnie 160dp.
             available = max(dp(160), win_h - target_y - dp(4))
         else:
+            # Bez klawiatury – maksymalnie max_panel_dp lub 85% ekranu.
             available = min(float(max_panel_dp), win_h * 0.85)
             target_y = dp(8)
 
+        # Wstępne wymiary: panel nie większy niż dostępna przestrzeń, wnętrze po odjęciu chrome.
         panel_h = min(float(max_panel_dp), available)
         inner_h = max(dp(44), panel_h - chrome)
 
+        # --- KOREKTY W ZALEŻNOŚCI OD TRYBU ---
         if keyboard_up and fill_available:
+            # Tryb "wypełnij całość" – panel zajmuje całą dostępną przestrzeń.
             panel_h = available
             inner_h = max(dp(44), panel_h - chrome)
         elif keyboard_up and field_max_dp is not None:
+            # Tryb "ograniczone pole" – wnętrze przycięte do maksymalnej wysokości.
             inner_h = min(inner_h, float(field_max_dp))
             panel_h = chrome + inner_h
         else:
+            # Tryb domyślny – minimalna wysokość panelu to 180dp.
             panel_h = max(dp(180), panel_h)
             inner_h = max(dp(44), panel_h - chrome)
 
-        if panel_h > available:
+        # Zabezpieczenie: panel nie może być większy niż dostępna przestrzeń.
             inner_h = max(dp(44), available - chrome)
             panel_h = chrome + inner_h
 
@@ -2457,9 +2572,11 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.background_color = (0, 0, 0, 0)
         self.background = ""
 
+        # Główny kontener – przezroczyste tło z przyciemnieniem
         root = FloatLayout()
         self._fl = root
 
+        # Przycisk przyciemniający tło – kliknięcie zamyka arkusz
         dim = Button(
             size_hint=(1, 1),
             pos_hint={"x": 0, "y": 0},
@@ -2469,6 +2586,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         dim.bind(on_release=lambda *a: self.dismiss())
         root.add_widget(dim)
 
+        # Główny panel – biała karta z zaokrąglonymi górnymi rogami
         self.panel = MDCard(
             orientation="vertical",
             padding=[dp(14), dp(10), dp(14), 0],
@@ -2481,6 +2599,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         root.add_widget(self.panel)
 
+        # Tytuł arkusza – "Nowa notatka" lub "Edytuj notatkę"
         title = "Edytuj notatkę" if note_row else "Nowa notatka"
         self.panel.add_widget(
             MDLabel(
@@ -2495,6 +2614,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Pole tekstowe – treść notatki
         self.field = RoundedSheetTextInput(
             hint_text="Treść notatki…",
             text=note_row.display_text if note_row else "",
@@ -2509,6 +2629,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         self.panel.add_widget(self.field)
 
+        # Dolny pasek z przyciskami – Anuluj, (opcjonalnie Usuń) i Dodaj/Zapisz
         bar = MDBoxLayout(
             orientation="horizontal",
             size_hint_y=None,
@@ -2524,6 +2645,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
             btn_delete.bind(on_release=lambda *a: self._delete_note_and_close())
             bar.add_widget(btn_delete)
+        # Sprężysty odstęp – rozpycha przyciski do prawej strony
         bar.add_widget(Widget(size_hint_x=1))
         btn_cancel = RoundedSheetButton(
             text="Anuluj",
@@ -2546,6 +2668,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         bar.add_widget(btn_add)
         self.panel.add_widget(bar)
 
+        # Dodanie głównego kontenera do widoku
         self.add_widget(root)
 
     # Przelicza uklad panelu po zmianie klawiatury (woluje wlasciwe ustawienie).
@@ -2625,16 +2748,22 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
     # Przygotowuje okno do dodania nowego celu czasowego z polami na nazwe, godziny, minuty i reset.
     def __init__(self, project_screen, draft=None, **kwargs):
         super().__init__(**kwargs)
+        # Zapamiętaj ekran projektu – potrzebny do zapisu po dodaniu celu
         self.project_screen = project_screen
         self._closing = False
+        # Wczytaj szkic (istniejące dane do edycji) lub zacznij od pustego
         self._draft = dict(draft) if isinstance(draft, dict) else {}
+        # Wyciągnij dane geofence ze szkicu (jeśli są)
         self._geofence = dict(self._draft.get("geofence") or {})
+        # Ustawienia okna modalnego – wypełnia cały ekran, nie zamyka się po kliknięciu w tło
         self.size_hint = (1, 1)
         self.auto_dismiss = False
         self.background_color = (0, 0, 0, 0)
         self.background = ""
 
+        # Główny kontener – przezroczyste tło z przyciemnieniem
         root = FloatLayout()
+        # Przycisk przyciemniający tło – kliknięcie zamyka okno
         dim = Button(
             size_hint=(1, 1),
             pos_hint={"x": 0, "y": 0},
@@ -2644,6 +2773,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         dim.bind(on_release=lambda *a: self.dismiss())
         root.add_widget(dim)
 
+        # Biały panel (karta) z zaokrąglonymi górnymi rogami
         self.panel = MDCard(
             orientation="vertical",
             padding=[dp(12), dp(8), dp(12), 0],
@@ -2656,6 +2786,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         root.add_widget(self.panel)
 
+        # Tytuł okna
         self.panel.add_widget(
             MDLabel(
                 text="Nowy cel czasowy",
@@ -2669,6 +2800,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Obszar przewijany z polami formularza
         self._body_scroll = ScrollView(
             size_hint_y=None,
             height=dp(220),
@@ -2682,6 +2814,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             height=dp(210),
         )
 
+        # Pole tekstowe – nazwa celu
         self.title_field = RoundedSheetTextInput(
             hint_text="Nazwa celu",
             text=str(self._draft.get("title", "")),
@@ -2694,6 +2827,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         self._body.add_widget(self.title_field)
 
+        # Wiersz z polami: Godziny i Minuty – dwa pola obok siebie
         time_row = MDBoxLayout(
             orientation="horizontal",
             spacing=dp(10),
@@ -2704,6 +2838,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             ("Godziny", str(self._draft.get("hours", "1")), "hours_field"),
             ("Minuty", str(self._draft.get("minutes", "0")), "minutes_field"),
         ):
+            # Kolumna z etykietą i polem tekstowym
             col = MDBoxLayout(
                 orientation="vertical",
                 spacing=dp(4),
@@ -2711,6 +2846,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
                 size_hint_y=None,
                 height=dp(62),
             )
+            # Etykieta (np. "Godziny")
             col.add_widget(
                 MDLabel(
                     text=label_text,
@@ -2722,6 +2858,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
                     valign="middle",
                 )
             )
+            # Pole tekstowe z filtrem na liczby całkowite
             field = RoundedSheetTextInput(
                 text=default_val,
                 hint_text="0",
@@ -2739,6 +2876,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             time_row.add_widget(col)
         self._body.add_widget(time_row)
 
+        # Etykieta sekcji resetu
         self._body.add_widget(
             MDLabel(
                 text="Reset postępu",
@@ -2750,6 +2888,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Przyciski wyboru okresu resetu: Codziennie / Tygodniowo / Bez resetu
         self._selected_reset_mode = RESET_WEEKLY
         self._reset_chips = {}
         chip_row = MDBoxLayout(
@@ -2768,10 +2907,12 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             self._reset_chips[mode] = chip
             chip_row.add_widget(chip)
         self._body.add_widget(chip_row)
+        # Ustaw domyślny lub wczytany tryb resetu
         self._select_reset_mode(
             parse_reset_mode(self._draft.get("reset_mode")) if self._draft.get("reset_mode") else RESET_WEEKLY
         )
 
+        # Podpowiedź – jak działa związek długości celu z szybkością auta na osi czasu
         self._body.add_widget(
             MDLabel(
                 text="Krótszy cel = szybszy przejazd auta na osi czasu.",
@@ -2786,12 +2927,15 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Sekcja geofence – wybór lokalizacji
         self._body.add_widget(self._build_geofence_section())
 
+        # Podepnij przewijanie do panelu
         self._body_scroll.add_widget(self._body)
         self.panel.add_widget(self._body_scroll)
         self._sync_goal_body_height()
 
+        # Dolny pasek z przyciskami Anuluj i Dodaj cel
         bar = MDBoxLayout(
             orientation="horizontal",
             size_hint_y=None,
@@ -2799,6 +2943,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             spacing=dp(8),
         )
         bar.add_widget(Widget(size_hint_x=1))
+        # Przycisk anulowania – zamyka okno bez zapisu
         btn_cancel = RoundedSheetButton(
             text="Anuluj",
             size_hint_x=None,
@@ -2808,6 +2953,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         btn_cancel.bind(on_release=lambda *a: self.dismiss())
         app = MDApp.get_running_app()
+        # Przycisk dodania celu – zapisuje i zamyka
         btn_add = RoundedSheetButton(
             text="Dodaj cel",
             size_hint_x=None,
@@ -2842,6 +2988,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     # Tworzy i zwraca pionowy panel z przyciskami "Mapa" i "Usun" oraz opisem wybranej lokalizacji.
     def _build_geofence_section(self):
+        # Główny kontener sekcji geofence
         container = MDBoxLayout(
             orientation="vertical",
             spacing=dp(4),
@@ -2849,6 +2996,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             height=dp(96),
         )
 
+        # Wiersz przycisków: mapa oraz opcjonalnie „Usuń"
         app = MDApp.get_running_app()
         button_row = MDBoxLayout(
             orientation="horizontal",
@@ -2865,6 +3013,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         btn_map.bind(on_release=lambda *_a: self._open_geofence_picker())
         button_row.add_widget(btn_map)
 
+        # Przycisk do czyszczenia zapisanego geofence (widoczny tylko gdy geofence jest ustawiony)
         if self._geofence:
             btn_clear = RoundedSheetButton(
                 text="Usuń",
@@ -2876,9 +3025,11 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             btn_clear.bind(on_release=lambda *_a: self._clear_geofence())
             button_row.add_widget(btn_clear)
 
+        # Wypełniacz i dodanie wiersza przycisków do kontenera
         button_row.add_widget(Widget(size_hint_x=1))
         container.add_widget(button_row)
 
+        # Etykieta opisowa – informacja o automatycznym pomiarze czasu
         container.add_widget(
             MDLabel(
                 text="Zaznacz miejsce gdzie chcesz mierzyć czas automatycznie po wejściu",
@@ -2894,6 +3045,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Etykieta podsumowująca aktualny geofence (lub placeholder)
         self._geofence_summary_lbl = MDLabel(
             text=self._geofence_summary_text(),
             font_style="Caption",
@@ -2906,8 +3058,8 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         container.add_widget(self._geofence_summary_lbl)
 
-        # The descriptive label needs proper text wrapping. Bind text_size to
-        # its own width so it can wrap when the panel is narrow.
+        # Etykieta opisowa musi zawijać tekst. Podpinamy text_size do jej
+        # własnej szerokości, żeby tekst zawijał się gdy panel jest wąski.
         def _bind_wrap(lbl):
             def _sync(*_a):
                 lbl.text_size = (lbl.width, None)
@@ -3077,7 +3229,9 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.background_color = (0, 0, 0, 0)
         self.background = ""
 
+        # Główny kontener – przezroczyste tło nakładane na ekran
         root = FloatLayout()
+        # Przyciemniona nakładka – kliknięcie zamyka arkusz
         dim = Button(
             size_hint=(1, 1),
             background_normal="",
@@ -3086,6 +3240,7 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         root.add_widget(dim)
 
+        # Główny panel – biała karta z zaokrąglonymi górnymi rogami
         self.panel = MDCard(
             orientation="vertical",
             padding=[dp(14), dp(10), dp(14), 0],
@@ -3098,6 +3253,7 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         root.add_widget(self.panel)
 
+        # Tytuł arkusza – "Nowy cel" lub "Edytuj cel"
         title = "Edytuj cel" if goal_row else "Nowy cel"
         self.panel.add_widget(
             MDLabel(
@@ -3110,6 +3266,7 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
                 height=dp(24),
             )
         )
+        # Pole tekstowe do wpisania opisu celu
         self.field = RoundedSheetTextInput(
             hint_text="Opis celu…",
             text=goal_row.display_text if goal_row else "",
@@ -3123,7 +3280,9 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         self.panel.add_widget(self.field)
 
+        # Dolny pasek z przyciskami akcji
         bar = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(12))
+        # Przycisk "Usuń" – widoczny tylko podczas edycji istniejącego celu
         if goal_row is not None:
             btn_delete = RoundedSheetButton(
                 text="Usuń",
@@ -3133,6 +3292,7 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
             btn_delete.bind(on_release=lambda *a: self._delete_and_close())
             bar.add_widget(btn_delete)
+        # Elastyczny odstęp, a następnie przyciski "Anuluj" i "Dodaj/Zapisz"
         bar.add_widget(Widget(size_hint_x=1))
         btn_cancel = RoundedSheetButton(
             text="Anuluj",
@@ -3255,6 +3415,7 @@ class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.background_color = (0, 0, 0, 0)
         self.background = ""
 
+        # Przyciemnienie tła pod arkuszem
         root = FloatLayout()
         dim = Button(
             size_hint=(1, 1),
@@ -3264,6 +3425,7 @@ class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         root.add_widget(dim)
 
+        # Główny panel – karta z zaokrąglonymi górnymi rogami
         self.panel = MDCard(
             orientation="vertical",
             padding=[dp(14), dp(10), dp(14), 0],
@@ -3276,6 +3438,7 @@ class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         root.add_widget(self.panel)
 
+        # Nagłówek arkusza
         self.panel.add_widget(
             MDLabel(
                 text="Nowa grupa etapów",
@@ -3288,6 +3451,7 @@ class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Pole do wpisania nazwy grupy
         self.field = RoundedSheetTextInput(
             hint_text="Nazwa grupy (np. Salto)…",
             multiline=False,
@@ -3300,6 +3464,7 @@ class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         self.panel.add_widget(self.field)
 
+        # Przyciski Anuluj / Dodaj
         bar = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(12))
         bar.add_widget(Widget(size_hint_x=1))
         btn_cancel = RoundedSheetButton(
@@ -3415,6 +3580,7 @@ class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         except (IndexError, KeyError, TypeError):
             self._initial_name = ""
 
+        # Tworzy główny kontener i przyciemnione tło.
         root = FloatLayout()
         dim = Button(
             size_hint=(1, 1),
@@ -3424,6 +3590,7 @@ class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         root.add_widget(dim)
 
+        # Tworzy kartę panelu dolnego.
         self.panel = MDCard(
             orientation="vertical",
             padding=[dp(14), dp(10), dp(14), 0],
@@ -3436,6 +3603,7 @@ class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         root.add_widget(self.panel)
 
+        # Dodaje nagłówek "Edytuj grupę etapów".
         self.panel.add_widget(
             MDLabel(
                 text="Edytuj grupę etapów",
@@ -3448,6 +3616,7 @@ class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Dodaje pole tekstowe do edycji nazwy grupy.
         self.field = RoundedSheetTextInput(
             hint_text="Nazwa grupy (np. Salto)…",
             text=self._initial_name,
@@ -3461,7 +3630,10 @@ class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         self.panel.add_widget(self.field)
 
+        # Tworzy dolny pasek z przyciskami.
         bar = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(12))
+
+        # Przycisk "Usuń" – czerwony, usuwa grupę.
         btn_delete = RoundedSheetButton(
             text="Usuń",
             size_hint_x=None,
@@ -3471,6 +3643,8 @@ class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         btn_delete.bind(on_release=lambda *a: self._delete_and_close())
         bar.add_widget(btn_delete)
         bar.add_widget(Widget(size_hint_x=1))
+
+        # Przycisk "Anuluj" – zamyka arkusz bez zapisu.
         btn_cancel = RoundedSheetButton(
             text="Anuluj",
             size_hint_x=None,
@@ -3480,6 +3654,8 @@ class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         btn_cancel.bind(on_release=lambda *a: self.dismiss())
         app = MDApp.get_running_app()
+
+        # Przycisk "Zapisz" – zatwierdza zmiany i zamyka.
         btn_save = RoundedSheetButton(
             text="Zapisz",
             size_hint_x=None,
@@ -3669,6 +3845,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
         root = FloatLayout()
         self._fl = root
+        # Przyciemnione tlo za arkuszem
         dim = Button(
             size_hint=(1, 1),
             pos_hint={"x": 0, "y": 0},
@@ -3678,6 +3855,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         dim.bind(on_release=lambda *a: self.dismiss())
         root.add_widget(dim)
 
+        # Bialy panel z zawartoscia
         self.panel = MDCard(
             orientation="vertical",
             padding=[dp(14), dp(10), dp(14), 0],
@@ -3691,6 +3869,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         root.add_widget(self.panel)
 
         title = "Edytuj krok" if item_index is not None else "Nowy krok"
+        # Tytul okna
         self.panel.add_widget(
             MDLabel(
                 text=title,
@@ -3704,6 +3883,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Pole do wpisania nazwy kroku
         self.name_field = RoundedSheetTextInput(
             hint_text="Nazwa kroku…",
             text=self._initial_text,
@@ -3717,6 +3897,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         self.panel.add_widget(self.name_field)
 
+        # Naglowek sekcji podkrokow
         self.panel.add_widget(
             MDLabel(
                 text="Podkroki",
@@ -3730,12 +3911,14 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             )
         )
 
+        # Przewijana lista podkrokow
         self._podkrok_scroll = ScrollView(
             size_hint_y=None,
             height=dp(150),
             do_scroll_x=False,
             bar_width=dp(4),
         )
+        # Kontener na wiersze podkrokow
         self._podkrok_box = MDBoxLayout(
             orientation="vertical",
             spacing=dp(6),
@@ -3747,6 +3930,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         self.panel.add_widget(self._podkrok_scroll)
 
         app = MDApp.get_running_app()
+        # Przycisk do dodawania nowego podkroku
         add_pod_btn = RoundedSheetButton(
             text="+ Dodaj podkrok",
             size_hint_y=None,
@@ -3757,9 +3941,11 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         add_pod_btn.bind(on_release=lambda *_: self._add_podkrok_row())
         self.panel.add_widget(add_pod_btn)
 
+        # Wczytuje zapisane podkroki
         for child in self._initial_children:
             self._add_podkrok_row(child.get("text", ""), child.get("done", False))
 
+        # Dolny pasek z przyciskami
         bar = MDBoxLayout(
             orientation="horizontal",
             size_hint_y=None,
@@ -3767,6 +3953,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             spacing=dp(12),
         )
         if item_index is not None:
+            # Przycisk usuwania calego kroku
             btn_delete = RoundedSheetButton(
                 text="Usuń",
                 size_hint_x=None,
@@ -3776,6 +3963,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             btn_delete.bind(on_release=lambda *a: self._delete_and_close())
             bar.add_widget(btn_delete)
         bar.add_widget(Widget(size_hint_x=1))
+        # Przycisk anulowania
         btn_cancel = RoundedSheetButton(
             text="Anuluj",
             size_hint_x=None,
@@ -3785,6 +3973,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         )
         btn_cancel.bind(on_release=lambda *a: self.dismiss())
         save_label = "Zapisz" if item_index is not None else "Dodaj"
+        # Przycisk zapisu/dodania
         btn_save = RoundedSheetButton(
             text=save_label,
             size_hint_x=None,
@@ -3795,6 +3984,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         bar.add_widget(btn_cancel)
         bar.add_widget(btn_save)
         self.panel.add_widget(bar)
+        # Dodaje caly uklad do okna
         self.add_widget(root)
 
     # --- Podkrok list management ---
