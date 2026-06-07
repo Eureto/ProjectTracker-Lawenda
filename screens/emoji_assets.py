@@ -8,27 +8,45 @@
 # ---------------------------------------------------------------------------
 
 import os
+# "import os" – moduł do obsługi systemu plików (foldery, ścieżki).
+
 import zipfile
+# "import zipfile" – moduł do obsługi plików ZIP (pakowanie i rozpakowywanie).
 
 
+# "os.path.abspath(__file__)" – pełna ścieżka do bieżącego pliku.
+# "os.path.dirname" – folder nadrzędny (dwa razy, żeby przejść z screens/ do głównego folderu projektu).
 _PKG_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# "_PKG_ROOT" – główny folder projektu (ten z main.py).
+
 _SOURCE_DIR = os.path.join(_PKG_ROOT, "assets", "Emoji_PNG")
+# "_SOURCE_DIR" – folder, w którym są oryginalne pliki PNG z emoji (na komputerze).
+
 _ZIP_PATH = os.path.join(_PKG_ROOT, "assets", "Emoji_PNG.zip")
+# "_ZIP_PATH" – plik ZIP z emoji (używany na Androidzie).
+
 _EXTRACTED_DIR_NAME = "Emoji_PNG"
-_STAMP_FILE = ".emoji_assets_zip_mtime"  # Specjalny plik pomocniczy, w którym zapisujemy datę ostatniej zmiany pliku ZIP – dzięki temu wiemy, czy trzeba ponownie rozpakować emoji
+# "_EXTRACTED_DIR_NAME" – nazwa folderu, do którego rozpakujemy ZIP.
+
+_STAMP_FILE = ".emoji_assets_zip_mtime"
+# "_STAMP_FILE" – Specjalny plik pomocniczy, w którym zapisujemy datę ostatniej
+# zmiany pliku ZIP – dzięki temu wiemy, czy trzeba ponownie rozpakować emoji.
 
 
 # Zwraca ścieżkę do prywatnego folderu aplikacji (user_data_dir).
 # To miejsce gdzie aplikacja może zapisywać własne pliki (np. rozpakowane emoji).
 # Jeśli nie można uzyskać user_data_dir (np. podczas testów), używa bieżącego folderu.
 def _user_data_dir():
+    # Próbujemy zdobyć folder aplikacji przez KivyMD
     try:
         from kivymd.app import MDApp
         app = MDApp.get_running_app()
+        # Jeśli aplikacja działa i ma user_data_dir – używamy go
         if app is not None and getattr(app, "user_data_dir", ""):
             return app.user_data_dir
     except Exception:
         pass
+    # Jeśli nie działa – używamy zmiennej środowiskowej albo bieżącego folderu
     return os.environ.get("PROJECTTRACKER_USER_DATA_DIR") or os.getcwd()
 
 
@@ -36,8 +54,10 @@ def _user_data_dir():
 # "mtime" = modification time. Służy do sprawdzenia, czy trzeba ponownie rozpakować ZIP.
 def _zip_mtime():
     try:
+        # Pobiera datę modyfikacji pliku – zwraca jako tekst
         return str(os.path.getmtime(_ZIP_PATH))
     except OSError:
+        # Jeśli plik nie istnieje – zwracamy pusty string
         return ""
 
 
@@ -52,6 +72,7 @@ def _extracted_dir():
 # Jeśli ZIP został zmodyfikowany (np. dodaliśmy nowe emoji) – trzeba rozpakować ponownie.
 def _needs_extract(target_dir):
     if not os.path.exists(_ZIP_PATH):
+        # Jeśli nie ma pliku ZIP – nie ma co rozpakowywać
         return False
     stamp_path = os.path.join(target_dir, _STAMP_FILE)
     if not os.path.isdir(target_dir):
@@ -76,6 +97,8 @@ def _extract_zip(target_dir):
         with open(os.path.join(target_dir, _STAMP_FILE), "w", encoding="utf-8") as f:
             f.write(_zip_mtime())
     except OSError:
+        # Jeśli nie uda się zapisać znacznika – to nie jest wielki problem,
+        # przy następnym uruchomieniu rozpakujemy ZIP od nowa.
         pass
 
 
@@ -109,6 +132,7 @@ def emoji_path(filename):
 #    – wtedy szukamy pliku w folderze z emoji i zwracamy pełną ścieżkę.
 # 3. Jeśli źródło jest puste – zwraca domyślną ikonę "folder-outline".
 def resolve_emoji_source(source):
+    # "source" – to co użytkownik wybrał jako ikonę dla projektu (może być nazwą lub ścieżką).
     value = str(source or "").strip()
     if not value:
         return "folder-outline"

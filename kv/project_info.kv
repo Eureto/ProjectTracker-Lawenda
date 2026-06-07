@@ -1,20 +1,53 @@
 #:import utils kivy.utils
+# "utils" – narzędzia Kivy (np. zamiana kolorów).
+
 #:import Label kivy.uix.label.Label
+# "Label" – standardowa etykieta tekstowa z Kivy.
+
 #:import BoxLayout kivy.uix.boxlayout.BoxLayout
+# "BoxLayout" – standardowe pudełko układające elementy (z Kivy).
+
 #:import ProjectNoteRow screens.project_info.ProjectNoteRow
+# "ProjectNoteRow" – własny wiersz notatki (z screens/project_info.py).
+
 #:import TimeGoalTrackRow screens.project_info.TimeGoalTrackRow
+# "TimeGoalTrackRow" – własny wiersz celu czasowego z samochodzikiem.
+
 #:import CarProgressButton screens.project_info.CarProgressButton
+# "CarProgressButton" – własny przycisk samochodzika.
+
 #:import ChecklistGoalRow screens.project_info.ChecklistGoalRow
+# "ChecklistGoalRow" – własny wiersz celu z listy celów.
+
 #:import StageItemRow screens.project_info.StageItemRow
+# "StageItemRow" – własny wiersz etapu na osi czasu.
+
 #:import StageTextTap screens.project_info.StageTextTap
+# "StageTextTap" – klikalny tekst etapu.
+
 #:import UnderlineTextBlock screens.project_info.UnderlineTextBlock
+# "UnderlineTextBlock" – własny element: tekst z podkreśleniem.
+
 #:import TimelineSpine screens.project_info.TimelineSpine
+# "TimelineSpine" – własny element: pionowa linia osi czasu.
+
 #:import StatusCircleButton screens.project_info.StatusCircleButton
+# "StatusCircleButton" – własny okrągły przycisk statusu (zrobione/niezrobione).
+
 #:import EtapyPlusRow screens.project_info.EtapyPlusRow
+# "EtapyPlusRow" – własny wiersz "Dodaj krok" na osi czasu.
+
 #:import EtapyPlusSpine screens.project_info.EtapyPlusSpine
+# "EtapyPlusSpine" – własna linia z plusem dla nowego kroku.
+
 #:import ZrobioneSection screens.project_info.ZrobioneSection
+# "ZrobioneSection" – własna sekcja "Zrobione" (ukończone cele).
+
 #:import ZrobioneHeaderBar screens.project_info.ZrobioneHeaderBar
+# "ZrobioneHeaderBar" – własny nagłówek sekcji "Zrobione".
+
 #:import NoteTextTap screens.project_info.NoteTextTap
+# "NoteTextTap" – klikalny tekst notatki.
 
 # ---------------------------------------------------------------------------
 # DEFINICJE ELEMENTÓW INTERFEJSU
@@ -33,23 +66,34 @@
 # "size_hint_y: None" – wysokość nie jest procentowa tylko ustalana przez kod.
 # "spacing" – odstęp między elementami w pikselach.
 <ProjectNoteRow>:
+    # "<ProjectNoteRow>" – wiersz notatki (tekst + przycisk usuwania).
     orientation: "horizontal"
+    # "orientation: horizontal" – notatka po lewej, przycisk "×" po prawej.
     spacing: dp(10)
+    # "spacing: dp(10)" – odstęp między notatką a przyciskiem: 10 pikseli.
     size_hint_y: None
+    # "size_hint_y: None" – wysokość zależna od treści (nie procentowa).
 
     # Białe pudełko z zaokrąglonymi rogami – tło dla tekstu notatki, klikalne (otwiera edytor)
     NoteTextTap:
+        # "NoteTextTap" – klikalny obszar z tekstem notatki.
         size_hint_x: 1
+        # "size_hint_x: 1" – zajmij całą dostępną szerokość.
         size_hint_y: 1
+        # "size_hint_y: 1" – zajmij całą dostępną wysokość.
         padding: dp(2)
         on_release: root.open_edit_from_row()
+        # "on_release" – po kliknięciu otwórz edytor notatki.
         canvas.before:
+            # Rysujemy białe tło PRZED tekstem.
             Color:
                 rgba: 1, 1, 1, 1
+                # Kolor biały.
             RoundedRectangle:
                 pos: self.pos
                 size: self.size
                 radius: [dp(12), dp(12), dp(12), dp(12)]
+                # Zaokrąglenie rogów: 12 pikseli.
 
         # "MDLabel" – etykieta z tekstem notatki.
         # "height: self.texture_size[1]" – wysokość automatycznie
@@ -57,47 +101,70 @@
         # "max_lines: 0" – brak limitu linii (nie potrzebuje ScrollView).
         # AnchorLayout wyśrodkowuje tekst w pionie w białym pudełku
         AnchorLayout:
+            # "AnchorLayout" – wyśrodkowuje tekst w pionie w białym pudełku.
             size_hint: 1, 1
             anchor_x: "left"
+            # "anchor_x: left" – tekst przy lewej krawędzi.
             anchor_y: "center"
+            # "anchor_y: center" – wyśrodkuj w pionie.
             padding: [dp(8), dp(6), dp(8), dp(6)]
+            # "padding" – odstęp od krawędzi pudełka.
 
             MDLabel:
+                # "MDLabel" – treść notatki.
                 id: note_label
                 text: root.display_text
+                # "text: root.display_text" – tekst notatki (z Pythona).
                 halign: "left"
                 valign: "middle"
                 theme_text_color: "Custom"
                 text_color: (0.45, 0.45, 0.48, 1) if not root.display_text else (0.12, 0.12, 0.12, 1)
+                # "text_color" – szary gdy brak treści (placeholder), ciemny gdy jest treść.
                 font_size: sp(14)
                 size_hint_y: None
                 height: self.texture_size[1]
+                # "height: self.texture_size[1]" – wysokość dopasowana do długości tekstu.
                 shorten: False
+                # "shorten: False" – nie skracaj tekstu.
                 max_lines: 0
+                # "max_lines: 0" – brak limitu linii (wszystkie linie widoczne).
                 line_height: 1.2
+                # "line_height: 1.2" – odstęp między liniami: 120% standardowego.
 
     # Przycisk "×" do usunięcia notatki (fioletowe kółko)
     # "background_normal: ''" i "background_color: 0,0,0,0" – usuwa domyślne
     # tło przycisku, bo rysujemy własne (fioletowe koło przez canvas.before).
     # "Ellipse" – rysuje owal/koło. "self.center_x/y" – środek przycisku.
     Button:
+        # "Button" – przycisk "×" do usunięcia notatki.
         id: delete_btn
         size_hint_x: None
+        # "size_hint_x: None" – stała szerokość.
         size_hint_y: 1
         width: dp(48)
+        # "width: dp(48)" – szerokość 48 pikseli.
         text: "×"
+        # "text: ×" – symbol mnożenia (używany jako ikona zamknięcia).
         color: 1, 1, 1, 1
         font_size: sp(22)
         bold: True
         background_normal: ""
+        # "background_normal: ''" – usuwa domyślne tło przycisku.
         background_color: 0, 0, 0, 0
+        # "background_color: 0, 0, 0, 0" – całkowicie przezroczyste tło.
         on_press: root.request_delete()
+        # "on_press" – po naciśnięciu wywołaj "request_delete()" (potwierdzenie usunięcia).
         canvas.before:
+            # Rysujemy fioletowe koło jako tło przycisku.
             Color:
                 rgba: utils.get_color_from_hex("#7e57c2")
+                # Kolor fioletowy.
             Ellipse:
+                # "Ellipse" – rysuje fioletowe koło.
                 pos: self.center_x - dp(18), self.center_y - dp(18)
+                # "pos" – wyśrodkuj koło (36x36) na środku przycisku (48x48).
                 size: dp(36), dp(36)
+                # "size: dp(36), dp(36)" – rozmiar koła 36x36 pikseli.
 
 # ---------------------------------------------------------------------------
 # WIERSZ Z CELAMI CZASOWYMI – pokazuje samochodzik, timer i informacje o celu
@@ -111,49 +178,69 @@
 # "pos_hint" – pozycjonowanie procentowe: {"right": 1} = prawa krawędź na 100%.
 
 <TimeGoalTrackRow>:
+    # "<TimeGoalTrackRow>" – wiersz celu czasowego z samochodzikiem.
     orientation: "horizontal"
     spacing: dp(10)
     size_hint_y: None
     height: dp(140)
+    # "height: dp(140)" – wysokość całego wiersza (pasek + podpis).
 
     MDBoxLayout:
+        # "MDBoxLayout" – lewa kolumna: pasek postępu i podpis.
         orientation: "vertical"
         size_hint_x: 1
         spacing: dp(4)
 
         # Pasek z samochodzikiem – "RelativeLayout" nakłada elementy na siebie
         RelativeLayout:
+            # "RelativeLayout" – obszar, w którym elementy mogą na siebie nachodzić.
             id: goal_track
             size_hint_y: None
             height: dp(110)
+            # "height: dp(110)" – wysokość paska z samochodzikiem.
 
             # "canvas.before:" – rysuje czarną linię (drogę) pod samochodzikiem
             # "Line" – linia między punktami (points: [x1,y1, x2,y2])
             canvas.before:
+                # Rysujemy czarną linię (drogę) PRZED samochodzikiem.
                 Color:
                     rgba: 0, 0, 0, 1
+                    # Kolor czarny.
                 Line:
+                    # "Line" – rysuje linię między dwoma punktami (drogę).
                     width: dp(2.5)
+                    # "width: dp(2.5)" – grubość linii.
                     points: [dp(8), dp(16), self.width - dp(8), dp(16)]
+                    # "points" – punkty: [x1,y1, x2,y2] = od lewej (8px) do prawej (8px przed końcem),
+                    # na wysokości 16 pikseli od dołu.
 
             # Samochodzik – zmienia obrazek gdy cel jest aktywny (jedzie) lub nieaktywny (śpi)
             # "pos_hint: {"center_x": root.car_hint_x}" – pozycja pozioma samochodzika
             # zależy od postępu (0% = lewo, 100% = prawo).
             # "Scale:" – odwraca samochodzik w poziomie (x: -1) gdy jedzie w lewo.
             CarProgressButton:
+                # "CarProgressButton" – obrazek samochodzika (klikalny).
                 id: car_btn
                 source: root.car_source_active if root.tracking_active else root.car_source_idle
+                # "source" – obrazek: aktywny (jedzie) gdy timer włączony, nieaktywny (śpi) gdy wyłączony.
                 size_hint: None, None
                 size: dp(96), dp(68)
+                # "size: dp(96), dp(68)" – rozmiar samochodzika.
                 allow_stretch: True
+                # "allow_stretch: True" – pozwól na rozciąganie obrazka.
                 keep_ratio: True
+                # "keep_ratio: True" – zachowaj proporcje obrazka.
                 pos_hint: {"center_x": root.car_hint_x}
+                # "pos_hint" – pozycja pozioma zależna od postępu (0-100%).
                 y: -dp(9)
+                # "y: -dp(9)" – przesuń samochodzik lekko w dół, żeby "stał" na linii.
                 on_release: root.on_car_button_release()
+                # "on_release" – po kliknięciu samochodzika (np. reset timera).
                 canvas.before:
                     PushMatrix
                     Scale:
                         x: root.car_scale_x
+                        # "x: root.car_scale_x" – odwróć w poziomie (-1) gdy samochodzik jedzie w lewo.
                         y: 1
                         origin: self.center
                 canvas.after:
@@ -162,16 +249,19 @@
             # Flaga na mecie (prawa strona) – ikona szachownicy
             # "Scale: x: -1" – odwraca ikonę (bo domyślnie patrzy w lewo).
             MDIcon:
+                # "MDIcon" – flaga na mecie (szachownica).
                 icon: "flag-checkered"
                 theme_text_color: "Custom"
                 text_color: 1, 1, 1, 1
                 icon_size: dp(22)
                 adaptive_size: True
                 pos_hint: {"right": 1, "top": 0.42}
+                # "pos_hint" – prawa krawędź (100%), 42% od góry.
                 canvas.before:
                     PushMatrix
                     Scale:
                         x: -1
+                        # Odwróć w poziomie (bo domyślnie flaga patrzy w lewo).
                         y: 1
                         origin: self.center
                 canvas.after:
@@ -181,8 +271,11 @@
             # "opacity: 1 if root.elapsed_text else 0" – widoczny tylko gdy
             # minęła co najmniej 1 sekunda.
             MDLabel:
+                # "MDLabel" – czas wyświetlany nad samochodzikiem.
                 text: root.elapsed_text
+                # "text: root.elapsed_text" – czas (np. "0:30").
                 opacity: 1 if root.elapsed_text else 0
+                # "opacity" – widoczny tylko gdy minęła co najmniej 1 sekunda.
                 font_size: sp(11)
                 theme_text_color: "Custom"
                 text_color: 1, 1, 1, 1
@@ -194,13 +287,17 @@
                 size_hint: None, None
                 height: dp(16)
                 width: max(dp(44), self.texture_size[0])
+                # "width" – minimalnie 44dp, ale może być szerszy jeśli tekst jest dłuższy.
                 pos_hint: {"center_x": root.car_hint_x}
+                # "pos_hint" – pozycja nad samochodzikiem.
                 y: car_btn.top - self.height - dp(2)
+                # "y" – nad górną krawędzią samochodzika (z 2dp odstępem).
 
         # Dolny pasek: nazwa celu i informacja o przedziale czasu (np. "1h / tydzień")
         # "text_size: (dp(200), None)" – ogranicza szerokość tekstu do 200dp
         # (zapewnia prawidłowe zawijanie i pozycjonowanie).
         BoxLayout:
+            # "BoxLayout" – dolny pasek: nazwa celu po lewej, okres po prawej.
             id: goal_caption_box
             orientation: "horizontal"
             size_hint_y: None
@@ -209,6 +306,7 @@
             spacing: dp(8)
 
             Label:
+                # "Label" – nazwa celu (np. "Nauka Pythona").
                 id: goal_title_lbl
                 text: root.title_text
                 color: 1, 1, 1, 1
@@ -222,6 +320,7 @@
                 shorten_from: "right"
 
             Label:
+                # "Label" – informacja o przedziale (np. "2h / tydzień").
                 id: goal_period_lbl
                 text: root.goal_text
                 color: 1, 1, 1, 1
@@ -229,40 +328,48 @@
                 size_hint_x: None
                 size_hint_y: 1
                 width: dp(80)
+                # "width: dp(80)" – stała szerokość 80 pikseli.
                 text_size: (dp(80), None)
                 halign: "right"
                 valign: "middle"
 
     # Prawa kolumna: procent postępu i przycisk usuwania
     MDBoxLayout:
+        # "MDBoxLayout" – prawa kolumna: procent u góry, usuwanie na dole.
         orientation: "vertical"
         size_hint_x: None
         width: dp(48)
+        # "width: dp(48)" – wąska kolumna 48 pikseli.
         spacing: dp(8)
         padding: [0, dp(2), 0, 0]
 
         AnchorLayout:
+            # "AnchorLayout" – wyśrodkowuje kartę z procentem u góry.
             size_hint_y: None
             height: dp(52)
             anchor_x: "center"
             anchor_y: "top"
 
             RelativeLayout:
+                # "RelativeLayout" – karta procentu i korona nachodzą na siebie.
                 size_hint: None, None
                 size: dp(46), dp(48)
 
                 # Karta z procentem postępu (zmienia kolor na zielony po osiągnięciu 100%)
                 # "md_bg_color: root.percent_card_color" – kolor zmienia się dynamicznie.
                 MDCard:
+                    # "MDCard" – karta z procentem postępu.
                     id: percent_card
                     size_hint: None, None
                     size: dp(46), dp(40)
                     pos: 0, 0
                     radius: [dp(8), dp(8), dp(8), dp(8)]
                     md_bg_color: root.percent_card_color
+                    # "md_bg_color" – kolor z Python: szary/fioletowy/zielony w zależności od postępu.
                     elevation: 0
 
                     MDLabel:
+                        # "MDLabel" – tekst procentu (np. "75%").
                         text: root.percent_text
                         halign: "center"
                         valign: "middle"
@@ -277,24 +384,31 @@
                 # "nocache: True" – nie przechowuj w pamięci (obrazek może
                 # się zmieniać dynamicznie).
                 Image:
+                    # "Image" – obrazek korony (gdy cel ukończony).
                     source: root.crown_source
+                    # "source: root.crown_source" – ścieżka do obrazka korony.
                     opacity: 1 if root.is_goal_complete else 0
+                    # "opacity" – widoczna tylko gdy postęp = 100%.
                     size_hint: None, None
                     size: dp(26), dp(26)
                     allow_stretch: True
                     keep_ratio: True
                     pos_hint: {"center_x": 0.5}
                     y: dp(30)
+                    # "y: dp(30)" – korona nad kartą procentu.
                     nocache: True
+                    # "nocache: True" – nie przechowuj w pamięci (obrazek może się zmieniać).
 
         # Czerwony przycisk usuwania celu
         AnchorLayout:
+            # "AnchorLayout" – wyśrodkowuje przycisk usuwania.
             size_hint_y: None
             height: dp(44)
             anchor_x: "center"
             anchor_y: "top"
 
             Button:
+                # "Button" – czerwony przycisk "×" do usuwania celu.
                 id: delete_btn
                 size_hint: None, None
                 size: dp(40), dp(40)
@@ -306,8 +420,10 @@
                 background_color: 0, 0, 0, 0
                 on_press: root.request_delete()
                 canvas.before:
+                    # Rysujemy czerwone koło jako tło przycisku.
                     Color:
                         rgba: utils.get_color_from_hex("#c62828")
+                        # Kolor czerwony.
                     Ellipse:
                         pos: self.pos
                         size: self.size
@@ -320,6 +436,7 @@
 # "SectionHeaderAction@MDIconButton" – tworzy nowy szablon na bazie MDIconButton.
 
 <SectionHeaderAction@MDIconButton>:
+    # "SectionHeaderAction" – przycisk "+" w nagłówkach sekcji.
     size_hint: None, None
     width: dp(48)
     height: dp(28)
@@ -327,6 +444,7 @@
     text_color: 1, 1, 1, 1
     icon_size: dp(24)
     md_bg_color: 0, 0, 0, 0
+    # "md_bg_color: 0, 0, 0, 0" – całkowicie przezroczyste tło.
 
 # ---------------------------------------------------------------------------
 # NAGŁÓWEK SEKCJI "ZROBIONE" (można go zwinąć/rozwinąć)
@@ -337,9 +455,11 @@
 # chevron do prawej strony (wypełniacz).
 
 <ZrobioneHeaderBar>:
+    # "<ZrobioneHeaderBar>" – nagłówek sekcji "Zrobione" (z możliwością zwijania).
     size_hint_y: None
     height: dp(28)
     MDLabel:
+        # "MDLabel" – tytuł "Zrobione".
         id: zrobione_title
         text: "Zrobione"
         font_size: sp(14)
@@ -350,14 +470,17 @@
         valign: "middle"
         text_size: self.size
     Widget:
+        # "Widget" – pusty wypełniacz, odpycha strzałkę do prawej strony.
         size_hint_x: 1
     AnchorLayout:
+        # "AnchorLayout" – strzałka (chevron) po prawej stronie.
         size_hint_x: None
         size_hint_y: 1
         width: dp(48)
         anchor_x: "center"
         anchor_y: "center"
         MDIcon:
+            # "MDIcon" – ikona strzałki (zmienia kierunek gdy sekcja jest rozwinięta/złożona).
             id: zrobione_chevron
             icon: "chevron-down"
             theme_text_color: "Custom"
@@ -373,14 +496,17 @@
 # "size_hint_y: None" – wysokość sekcji zależy od liczby celów w środku.
 
 <ZrobioneSection>:
+    # "<ZrobioneSection>" – sekcja z ukończonymi celami.
     orientation: "vertical"
     spacing: dp(8)
     size_hint_y: None
 
     ZrobioneHeaderBar:
+        # "ZrobioneHeaderBar" – klikalny nagłówek "Zrobione".
         id: zrobione_header
 
     MDBoxLayout:
+        # "MDBoxLayout" – lista ukończonych celów.
         id: checklist_done_list
         orientation: "vertical"
         spacing: dp(14)
@@ -396,17 +522,22 @@
 # "compact_rule: True" – mniejszy odstęp między tekstem a linią.
 
 <ChecklistGoalRow>:
+    # "<ChecklistGoalRow>" – wiersz celu z listy celów.
     size_hint_y: None
     valign: "middle"
     AnchorLayout:
+        # "AnchorLayout" – numer celu (jeśli jest).
         id: index_anchor
         size_hint_x: None
         size_hint_y: None
         width: dp(22) if root.index_label else 0
+        # "width" – 22dp tylko gdy jest numer, 0 gdy brak (pierwszy cel bez numeru).
         opacity: 1 if root.index_label else 0
+        # "opacity" – widoczny tylko gdy jest numer.
         anchor_x: "right"
         anchor_y: "center"
         Label:
+            # "Label" – numer celu (np. "1.", "2.").
             id: index_lbl
             text: root.index_label
             size_hint: None, None
@@ -416,12 +547,16 @@
             valign: "middle"
             shorten: False
     UnderlineTextBlock:
+        # "UnderlineTextBlock" – tekst celu z podkreśleniem.
         id: underline_block
         compact_rule: True
+        # "compact_rule: True" – mniejszy odstęp między tekstem a linią.
         size_hint_x: 1
         size_hint_y: None
         text: root.display_text
+        # "text: root.display_text" – treść celu.
     AnchorLayout:
+        # "AnchorLayout" – przycisk statusu (kółko: puste / zaznaczone).
         id: status_anchor
         size_hint_x: None
         size_hint_y: None
@@ -429,9 +564,12 @@
         anchor_x: "center"
         anchor_y: "center"
         StatusCircleButton:
+            # "StatusCircleButton" – okrągły przycisk: zrobione/niezrobione.
             id: status_btn
             show_crown: False
+            # "show_crown: False" – nie pokazuj korony (tylko kółko).
             white_style: True
+            # "white_style: True" – biały styl (pasuje do ciemnego tła).
             size_hint: None, None
             size: dp(26), dp(26)
 
@@ -445,25 +583,35 @@
 # "is_last" – czy to ostatni element (linia kończy się, a nie ciągnie dalej).
 
 <StageItemRow>:
+    # "<StageItemRow>" – wiersz etapu na osi czasu.
     TimelineSpine:
+        # "TimelineSpine" – pionowa linia łącząca etapy.
         id: spine
     Widget:
-        # Odstęp który przesuwa tekst podkroku w prawo, aby był za strzałką
+        # "Widget" – odstęp dla podkroku (przesuwa tekst w prawo za strzałkę).
         id: sub_arrow
         size_hint_x: None
         width: dp(16) if root.is_sub else 0
+        # "width" – 16dp dla podkroku, 0 dla normalnego kroku.
         opacity: 0
+        # "opacity: 0" – niewidoczny, tylko zajmuje miejsce (przesuwa tekst).
     StageTextTap:
+        # "StageTextTap" – klikalny tekst etapu (otwiera edytor).
         id: tap_area
         size_hint_x: 1
         on_release: root._open_editor()
+        # "on_release" – po kliknięciu otwórz edytor tekstu.
         UnderlineTextBlock:
+            # "UnderlineTextBlock" – tekst etapu z podkreśleniem.
             id: underline_block
             size_hint_x: 1
             text: root.display_text
             font_size: sp(13) if root.is_sub else sp(16)
+            # "font_size" – mniejsza czcionka dla podkroków (13), większa dla kroków (16).
             show_rule: not root.is_last
+            # "show_rule" – pokaż linię pod tekstem, chyba że to ostatni element.
     StatusCircleButton:
+        # "StatusCircleButton" – kółko statusu (zrobione/niezrobione).
         id: status_btn
         show_crown: False
         white_style: True
@@ -477,12 +625,16 @@
 # "connect_top" – czy rysować linię łączącą z poprzednim elementem.
 
 <EtapyPlusRow>:
+    # "<EtapyPlusRow>" – wiersz "Dodaj krok" na końcu osi czasu.
     EtapyPlusSpine:
+        # "EtapyPlusSpine" – linia z fioletowym kółkiem i plusem.
         id: plus_spine
         size_hint_x: None
         width: dp(22)
         connect_top: root.connect_top
+        # "connect_top" – czy rysować linię od poprzedniego elementu.
     MDLabel:
+        # "MDLabel" – tekst "Dodaj krok".
         text: "Dodaj krok"
         font_size: sp(13)
         bold: True
@@ -513,19 +665,27 @@
 # dynamicznego ustawiania wysokości etykiety tytułu).
 
 <ProjectInfoScreen>:
+    # "<ProjectInfoScreen>" – ekran szczegółów projektu (najważniejszy ekran).
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
+    # "md_bg_color" – kolor tła ekranu (z motywu aplikacji).
 
     FloatLayout:
+        # "FloatLayout" – nakłada na siebie: zawartość przewijaną i dolny pasek.
+
         MDBoxLayout:
+            # "MDBoxLayout" – główne pudełko z zawartością (tytuł + przewijane sekcje).
             orientation: "vertical"
             size_hint: 1, 1
             padding: [dp(18), dp(28), dp(18), dp(67)]
+            # "padding" – [lewy 18, górny 28 (pasek stanu), prawy 18, dolny 67 (pasek nawigacji)].
 
             # Nazwa projektu na górze ekranu
             # "height: self.texture_size[1] + dp(4)" – wysokość automatycznie
             # dopasowuje się do długości tytułu.
             MDLabel:
+                # "MDLabel" – tytuł projektu na górze ekranu.
                 text: root.project_title or "Projekt"
+                # "text" – nazwa projektu lub "Projekt" gdy brak.
                 font_size: sp(17)
                 bold: True
                 theme_text_color: "Custom"
@@ -536,8 +696,10 @@
                 shorten_from: "right"
                 size_hint_y: None
                 height: self.texture_size[1] + dp(4)
+                # "height" – wysokość dopasowana do długości tytułu (z 4dp zapasem).
 
             Widget:
+                # "Widget" – odstęp 10 pikseli pod tytułem.
                 size_hint_y: None
                 height: dp(10)
 
@@ -547,6 +709,7 @@
             # "size_hint_y: 1" – zajmij całą dostępną wysokość.
             # "bar_width: 0" – ukryj pasek przewijania.
             ScrollView:
+                # "ScrollView" – kontener przewijany z sekcjami projektu.
                 do_scroll_x: False
                 size_hint_y: 1
                 bar_width: 0
@@ -554,25 +717,30 @@
                 # "height: self.minimum_height" – wysokość dopasowuje się
                 # automatycznie do zawartości (sumy wszystkich elementów w środku).
                 MDBoxLayout:
+                    # "MDBoxLayout" – pudełko z sekcjami (notatki, czas, cele, etapy).
                     orientation: "vertical"
                     spacing: dp(8)
                     size_hint_y: None
                     height: self.minimum_height
+                    # "height: self.minimum_height" – wysokość = suma wszystkich sekcji.
                     padding: [0, dp(20), 0, dp(8)]
 
                     # ── SEKCJA: Notatki ──
                     # "MDBoxLayout" – pionowe pudełko. "height: self.minimum_height"
                     # – wysokość dopasowuje się do zawartości.
                     MDBoxLayout:
+                        # "MDBoxLayout" – sekcja notatek.
                         orientation: "vertical"
                         spacing: dp(12)
                         size_hint_y: None
                         height: self.minimum_height
 
                         MDBoxLayout:
+                            # "MDBoxLayout" – nagłówek sekcji: tytuł "Notatki" + przycisk "+".
                             size_hint_y: None
                             height: dp(48)
                             MDLabel:
+                                # "MDLabel" – nagłówek "Notatki".
                                 text: "Notatki"
                                 font_size: sp(34)
                                 bold: True
@@ -582,12 +750,16 @@
                                 valign: "middle"
                                 text_size: self.size
                             Widget:
+                                # "Widget" – wypełniacz, odpycha przycisk "+" do prawej.
                                 size_hint_x: 1
                             SectionHeaderAction:
+                                # "SectionHeaderAction" – przycisk "+" do dodawania notatki.
                                 icon: "plus"
                                 on_release: root.open_add_note_sheet()
+                                # Po kliknięciu otwórz arkusz dodawania notatki.
 
                         MDBoxLayout:
+                            # "MDBoxLayout" – lista notatek (wypełniana przez Python).
                             id: notes_list
                             orientation: "vertical"
                             spacing: dp(12)
@@ -595,17 +767,20 @@
                             height: self.minimum_height
 
                     Widget:
+                        # "Widget" – odstęp między sekcjami: 28 pikseli.
                         size_hint_y: None
                         height: dp(28)
 
                     # ── SEKCJA: Czas (stoper) ──
                     MDBoxLayout:
+                        # "MDBoxLayout" – sekcja stopera.
                         orientation: "vertical"
                         spacing: dp(14)
                         size_hint_y: None
                         height: self.minimum_height
 
                         MDLabel:
+                            # "MDLabel" – nagłówek "Czas".
                             text: "Czas"
                             font_size: sp(34)
                             bold: True
@@ -618,56 +793,72 @@
                         # Wyświetlacz stopera (HH:MM:SS)
                         # "font_size: sp(44)" – duża, czytelna czcionka.
                         MDLabel:
+                            # "MDLabel" – wyświetlacz stopera (np. "01:30:00").
                             text: root.timer_display
+                            # "text: root.timer_display" – czas stopera z Pythona.
                             font_size: sp(44)
+                            # "font_size: sp(44)" – duża czcionka, żeby czas był dobrze widoczny.
                             bold: False
                             theme_text_color: "Custom"
                             text_color: 1, 1, 1, 1
                             halign: "center"
                             size_hint_y: None
                             height: self.texture_size[1]
+                            # "height" – wysokość dopasowana do rozmiaru czcionki.
 
                         # Przycisk Start / Stop
                         # Przycisk zmienia kolor: zielony (Start) lub czerwony (Stop).
                         # "canvas.before:" – rysuje zaokrąglony prostokąt jako tło
                         # przycisku (zamiast domyślnego, bo background_normal jest '').
                         AnchorLayout:
+                            # "AnchorLayout" – wyśrodkowuje przycisk start/stop.
                             size_hint_y: None
                             height: dp(44)
                             anchor_x: "center"
                             anchor_y: "center"
 
                             Button:
+                                # "Button" – przycisk START (zielony) lub STOP (czerwony).
                                 text: root.timer_button_caption
+                                # "text" – "START" gdy timer wyłączony, "STOP" gdy włączony.
                                 font_size: sp(16)
                                 bold: False
                                 color: 1, 1, 1, 1
                                 size_hint: None, None
                                 width: self.texture_size[0] + dp(48)
+                                # "width" – szerokość dopasowana do tekstu + 48dp zapasu.
                                 height: dp(38)
                                 background_normal: ""
                                 background_color: 0, 0, 0, 0
                                 on_release: root.toggle_timer()
+                                # "on_release" – włącz/wyłącz stoper.
                                 canvas.before:
+                                    # Rysujemy kolorowe tło przycisku.
                                     Color:
                                         rgba: utils.get_color_from_hex("#43a047") if not root.timer_running else utils.get_color_from_hex("#e53935")
+                                        # Kolor: zielony (#43a047) gdy timer wyłączony (START).
+                                        # Czerwony (#e53935) gdy timer włączony (STOP).
                                     RoundedRectangle:
                                         pos: self.pos
                                         size: self.size
                                         radius: [dp(19), dp(19), dp(19), dp(19)]
+                                        # "radius" – zaokrąglenie rogów: 19 pikseli (owalny kształt).
 
                     Widget:
+                        # "Widget" – odstęp między sekcjami.
                         size_hint_y: None
                         height: dp(28)
 
                     # ── SEKCJA: Cele czasowe (z samochodzikiem) ──
                     MDBoxLayout:
+                        # "MDBoxLayout" – sekcja celów czasowych.
                         orientation: "vertical"
                         spacing: dp(16)
                         size_hint_y: None
                         height: self.minimum_height
 
                         MDBoxLayout:
+                            # "MDBoxLayout" – nagłówek "Cele czasowe" + przycisk "+".
                             size_hint_y: None
                             height: dp(48)
                             MDLabel:
@@ -682,8 +873,10 @@
                             SectionHeaderAction:
                                 icon: "plus"
                                 on_release: root.on_goals_add_clicked()
+                                # Po kliknięciu otwórz formularz dodawania celu czasowego.
 
                         MDBoxLayout:
+                            # "MDBoxLayout" – lista celów czasowych (wypełniana przez Python).
                             id: goals_list
                             orientation: "vertical"
                             spacing: dp(16)
@@ -691,11 +884,13 @@
                             height: self.minimum_height
 
                     Widget:
+                        # "Widget" – odstęp między sekcjami.
                         size_hint_y: None
                         height: dp(28)
 
                     # ── SEKCJA: Lista celów (checklista) ──
                     MDBoxLayout:
+                        # "MDBoxLayout" – sekcja listy celów.
                         id: lista_celow_box
                         orientation: "vertical"
                         spacing: dp(14)
@@ -703,6 +898,7 @@
                         height: self.minimum_height
 
                         MDBoxLayout:
+                            # "MDBoxLayout" – nagłówek "Lista celów" + przycisk "+".
                             size_hint_y: None
                             height: dp(48)
                             MDLabel:
@@ -717,32 +913,39 @@
                             SectionHeaderAction:
                                 icon: "plus"
                                 on_release: root.open_add_checklist_goal_sheet()
+                                # Po kliknięciu otwórz formularz dodawania celu.
 
                         MDBoxLayout:
+                            # "MDBoxLayout" – lista celów (wypełniana przez Python).
                             id: checklist_goals_list
                             orientation: "vertical"
                             spacing: dp(14)
                             size_hint_y: None
                             height: self.minimum_height
                             on_minimum_height: self.height = self.minimum_height
+                            # Gdy zmienia się wysokość listy, automatycznie ją aktualizuj.
 
                         # Sekcja "Zrobione" – przenoszone są tu ukończone cele
                         ZrobioneSection:
+                            # "ZrobioneSection" – sekcja z ukończonymi celami.
                             id: zrobione_section
                             done_count: 0
 
                     Widget:
+                        # "Widget" – odstęp między sekcjami.
                         size_hint_y: None
                         height: dp(28)
 
                     # ── SEKCJA: Etapy (oś czasu) ──
                     MDBoxLayout:
+                        # "MDBoxLayout" – sekcja etapów.
                         orientation: "vertical"
                         spacing: dp(12)
                         size_hint_y: None
                         height: self.minimum_height
 
                         MDBoxLayout:
+                            # "MDBoxLayout" – nagłówek "Etapy" + przycisk "+".
                             size_hint_y: None
                             height: dp(48)
                             MDLabel:
@@ -759,29 +962,35 @@
                             SectionHeaderAction:
                                 icon: "plus"
                                 on_release: root.open_add_etapy_group_sheet()
+                                # Po kliknięciu otwórz formularz dodawania grupy etapów.
 
                         # Przewijane poziomo "żetony" (chipsy) z nazwami grup etapów
                         # "ScrollView" z "do_scroll_x: True" – przewijanie w poziomie.
                         # "height: dp(40)" – stała wysokość paska z żetonami.
                         ScrollView:
+                            # "ScrollView" – poziomo przewijany pasek z żetonami grup.
                             size_hint_y: None
                             height: dp(40)
                             do_scroll_x: True
+                            # "do_scroll_x: True" – przewijanie w poziomie.
                             do_scroll_y: False
                             bar_width: 0
 
                             MDBoxLayout:
+                                # "MDBoxLayout" – żetony (chipsy) grup etapów.
                                 id: etapy_chips_box
                                 orientation: "horizontal"
                                 spacing: dp(8)
                                 size_hint_x: None
                                 width: self.minimum_width
+                                # "width: self.minimum_width" – szerokość = suma szerokości żetonów.
                                 height: dp(36)
                                 padding: [0, dp(2), 0, dp(2)]
 
                         # Oś czasu z krokami i podkrokami
                         # "spacing: dp(2)" – mały odstęp między elementami osi.
                         MDBoxLayout:
+                            # "MDBoxLayout" – oś czasu z krokami i podkrokami.
                             id: etapy_timeline_list
                             orientation: "vertical"
                             spacing: dp(2)
@@ -794,11 +1003,13 @@
         # "MDFloatLayout" umieszczony na dole ("pos_hint: {"y": 0}").
         # "height: dp(60)" – wysokość paska nawigacji.
         MDFloatLayout:
+            # "MDFloatLayout" – dolny pasek nawigacyjny.
             size_hint: 1, None
             height: dp(60)
             pos_hint: {"center_x": 0.5, "y": 0}
 
             MDCard:
+                # "MDCard" – biała karta paska nawigacyjnego.
                 size_hint: 1, 1
                 pos_hint: {"x": 0, "y": 0}
                 radius: [0, 0, 0, 0]
@@ -806,6 +1017,7 @@
                 md_bg_color: 1, 1, 1, 1
 
                 MDBoxLayout:
+                    # "MDBoxLayout" – trzy kolumny: dom, pusto, statystyki.
                     AnchorLayout:
                         anchor_x: "center"
                         anchor_y: "center"
@@ -813,8 +1025,10 @@
                             icon: "home-outline"
                             icon_size: dp(30)
                             on_release: root.go_home()
+                            # Po kliknięciu przejdź do ekranu głównego.
 
                     Widget:
+                        # "Widget" – pusty odstępnik (miejsce pod przycisk ustawień).
 
                     AnchorLayout:
                         anchor_x: "center"
@@ -823,16 +1037,21 @@
                             icon: "chart-arc"
                             icon_size: dp(30)
                             on_release: root.go_statistics()
+                            # Po kliknięciu przejdź do ekranu statystyk.
 
             # Przycisk ustawień (trybik) – unosi się nad paskiem nawigacyjnym
             # "size: dp(120), dp(56)" – szeroki, niski prostokąt.
             # "pos_hint: {"center_y": 0.67}" – 67% od dołu, unosi się nad paskiem.
             ClickableAnchorLayout:
+                # "ClickableAnchorLayout" – przycisk ustawień (trybik).
                 size_hint: None, None
                 size: dp(120), dp(56)
                 pos_hint: {"center_x": 0.5, "center_y": 0.67}
+                # "pos_hint" – wyśrodkowany, 67% od dołu (unosi się nad paskiem).
                 on_release: root.open_project_settings()
+                # Po kliknięciu otwórz ustawienia projektu.
                 canvas.before:
+                    # Rysujemy fioletowe tło przycisku.
                     Color:
                         rgba: utils.get_color_from_hex(app.theme_card_bg)
                     RoundedRectangle:
@@ -841,6 +1060,7 @@
                         radius: [dp(18)]
 
                 MDIcon:
+                    # "MDIcon" – ikona trybika (ustawienia).
                     icon: "cog-outline"
                     theme_text_color: "Custom"
                     text_color: 1, 1, 1, 1

@@ -10,9 +10,17 @@
 # ---------------------------------------------------------------------------
 
 import os
+# "import os" – moduł do obsługi systemu operacyjnego (foldery, pliki, ścieżki).
+
 import uuid
+# "import uuid" – moduł do generowania unikalnych identyfikatorów (UUID).
+# UUID = Universally Unique Identifier – losowy ciąg znaków, który jest
+# praktycznie niepowtarzalny. Używamy go do nazywania plików graficznych.
 
 from PIL import Image, ImageOps
+# "PIL" (Python Imaging Library) – biblioteka do obróbki obrazków.
+# "Image" – podstawowa klasa do otwierania i zapisywania obrazków.
+# "ImageOps" – dodatkowe operacje na obrazkach (np. obracanie według EXIF).
 
 
 # Funkcja główna: przetwarza wybrane zdjęcie.
@@ -62,4 +70,5 @@ def prepare_project_image(source_path, cache_dir):
         # 92 to dobry kompromis między jakością a rozmiarem pliku.
         img.save(dest, format="JPEG", quality=92)
 
+    # Zwróć ścieżkę do przetworzonego pliku (do wyświetlenia w aplikacji).
     return dest

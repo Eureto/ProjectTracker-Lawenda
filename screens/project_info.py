@@ -60,11 +60,17 @@ _PURPLE = get_color_from_hex("#7e57c2")
 _GREY_NODE = get_color_from_hex("#9e9e9e")
 _CHIP_INACTIVE = get_color_from_hex("#5e35b1")
 _CHIP_ACTIVE = get_color_from_hex("#b388ff")
+# Złoty kolor korony – pojawia się gdy cel został osiągnięty
 _CROWN_GOLD = get_color_from_hex("#ffc107")
+# Fioletowe tło karty celu (domyślne)
 _GOAL_CARD_PURPLE = list(get_color_from_hex("#7e57c2"))
+# Zielone tło karty celu (gdy osiągnięty)
 _GOAL_CARD_GREEN = list(get_color_from_hex("#43a047"))
+# Ścieżka do obrazka złotej koronki (emoji U+1F451)
 _CROWN_EMOJI_PATH = _emoji_asset_path("u1F451.png")
+# Nazwa pakietu Androida (do uruchamiania serwisu timera)
 _ANDROID_PACKAGE = "org.stokrotka.stokrotka"
+# Pełna nazwa klasy serwisu Androida
 _ANDROID_SERVICE_CLASS = f"{_ANDROID_PACKAGE}.ServiceTimerservice"
 
 ETAPY_ADD_GROUP = "Grupa etapów"
@@ -1115,16 +1121,26 @@ class ProjectInfoScreen(MDScreen):
     # używamy tytułu jako klucza zapasowego, żeby nadal znaleźć dane.
     project_uid = StringProperty("")
     project_title = StringProperty("")
+    # Wyświetlany czas timera (np. "01:23:45")
     timer_display = StringProperty("00:00:00")
+    # Czy timer w tej chwili odlicza?
     timer_running = BooleanProperty(False)
+    # Napis na przycisku: "start" albo "stop"
     timer_button_caption = StringProperty("start")
 
+    # Zdarzenie cykliczne (co sekundę) – aktualizuje timer_display
     _timer_ev = None
+    # Suma sekund od początku bieżącego pomiaru
     _timer_elapsed_seconds = 0
+    # Sekundy które już były naliczone przed uruchomieniem (z poprzednich sesji)
     _run_base_elapsed = 0
+    # Kiedy rozpoczął się bieżący pomiar (timestamp)
     _run_started_at = None
+    # Lista grup etapów (każda grupa ma nazwę i listę kroków)
     _etapy_groups = []
+    # Która grupa etapów jest aktualnie wybrana (indeks)
     _etapy_selected_index = 0
+    # Zdarzenie do okresowego odświeżania celów czasowych (codziennie/tygodniowo)
     _goal_period_ev = None
 
     # Przygotowuje ekran projektu: wczytuje dane, ustawia zmienne i przygotowuje interfejs.
@@ -1254,6 +1270,7 @@ class ProjectInfoScreen(MDScreen):
 
     # Wczytuje wszystkie dane projektu z pliku i odtwarza interfejs.
     def load_project_content(self):
+        # Zatrzymaj timer jeśli działał
         if self.timer_running:
             self.timer_running = False
             self.timer_button_caption = "start"
@@ -1261,34 +1278,40 @@ class ProjectInfoScreen(MDScreen):
         self._run_started_at = None
         self._loading_project_content = True
         try:
+            # Usuń stare widżety, żeby zacząć od zera
             self._clear_dynamic_widgets()
             key = self._state_key()
             blob = self._read_all_states().get(key)
             if blob:
+                # Wczytaj stan timera
                 self._timer_elapsed_seconds = int(blob.get("timer_elapsed", 0))
                 self._refresh_timer_label()
+                # Wczytaj notatki
                 for n in blob.get("notes") or []:
                     t = (n.get("text") or "").strip()
                     if not t:
                         continue
                     self.add_note(text=n.get("text", ""), tall=bool(n.get("tall", False)))
+                # Wczytaj cele czasowe
                 for g in blob.get("goals") or []:
                     goal = g.get("goal", "1h/tydzień")
                     tgt = g.get("goal_target_seconds")
                     if tgt is None:
                         tgt = parse_goal_target_seconds(goal)
                     logged = float(g.get("logged_seconds", 0))
+                    # Obsługa starego formatu (procent zamiast logged_seconds)
                     if logged <= 0 and "percent" in g:
                         try:
                             p = float(g.get("percent", 0))
                             logged = max(0.0, (p / 100.0) * float(tgt))
                         except (TypeError, ValueError):
                             logged = 0.0
+                    # Sprawdź czy minął okres resetu (codzienny/tygodniowy)
                     rm = parse_reset_mode(g.get("reset_mode", ""))
                     saved_pk = g.get("period_key")
                     cur = current_period_key(rm)
                     if rm != RESET_NEVER and saved_pk is not None and saved_pk != cur:
-                        logged = 0.0
+                        logged = 0.0  # Nowy okres – zeruj naliczony czas
                         pk = cur
                     elif saved_pk is None:
                         pk = cur
@@ -1304,20 +1327,24 @@ class ProjectInfoScreen(MDScreen):
                         uid=g.get("uid") or "",
                         geofence=g.get("geofence") or None,
                     )
+                # Wczytaj cele checklisty
                 for cg in blob.get("checklist_goals") or []:
                     t = (cg.get("text") or "").strip()
                     if t:
                         self.add_checklist_goal(text=t, done=bool(cg.get("done", False)))
+                # Wczytaj etapy
                 et = blob.get("etapy") or {}
                 self._etapy_groups = et.get("groups") or []
                 self._etapy_selected_index = int(et.get("selected_index", 0))
             else:
+                # Brak danych – zacznij od zera
                 self._timer_elapsed_seconds = 0
                 self._refresh_timer_label()
                 self._etapy_groups = []
                 self._etapy_selected_index = 0
             self._run_base_elapsed = self._timer_elapsed_seconds
             self._clamp_etapy_selection()
+            # Odtwórz interfejs etapów
             self._rebuild_etapy_chips()
             self._rebuild_etapy_timeline()
         finally:
@@ -1740,7 +1767,9 @@ class ProjectInfoScreen(MDScreen):
         if not self._etapy_groups:
             return
         for idx, group in enumerate(self._etapy_groups):
+            # Czy ten przycisk jest aktywny (wybrany)?
             active = idx == self._etapy_selected_index
+            # Tworzymy przycisk – przezroczyste tło, sam tekst
             chip = Button(
                 text=group.get("name", "Etap"),
                 size_hint=(None, None),
@@ -1751,11 +1780,13 @@ class ProjectInfoScreen(MDScreen):
                 color=(0.12, 0.12, 0.12, 1) if active else (1, 1, 1, 1),
                 font_size=sp(13),
             )
+            # Dopasowujemy szerokość do długości tekstu
             chip.texture_update()
             chip.width = chip.texture_size[0] + dp(28)
 
             chip._chip_active = bool(active)
 
+            # Funkcja rysująca zaokrąglone tło (fioletowe gdy aktywne, ciemniejsze gdy nie)
             def _paint_chip(btn, *_a):
                 is_active = getattr(btn, '_chip_active', False)
                 btn.canvas.before.clear()
@@ -1771,10 +1802,12 @@ class ProjectInfoScreen(MDScreen):
 
             chip._refresh_chip = _paint_chip
             _paint_chip(chip)
+            # Przerysuj tło gdy przycisk zmieni pozycję/rozmiar
             chip.bind(pos=_paint_chip, size=_paint_chip)
             gi = idx
             # Single click: select group. Double-click: open edit/delete sheet.
             chip._last_click_time = 0
+            # Kliknięcie: pojedyńcze = wybierz grupę, podwójne = edytuj
             def _on_chip_release(*_a, i=gi, c=chip):
                 now = Clock.get_time()
                 if now - c._last_click_time < 0.4:
@@ -1794,13 +1827,11 @@ class ProjectInfoScreen(MDScreen):
         timeline.clear_widgets()
         group = self._selected_etapy_group()
         if group is None:
-            # No group → no in-timeline '+'. The header '+' is the only path
-            # for creating the first group.
             return
         items = group.get("items") or []
         gi = self._etapy_selected_index
-        # Pre-compute (item_index, child_index) of the visually last row so
-        # we can mark it `is_last` and suppress its trailing underline.
+        # Znajdujemy ostatni wiersz (główny krok lub podkrok),
+        # żeby oznaczyć go jako "ostatni" i ukryć podkreślenie.
         last_ii = -1
         last_ci = -1
         if items:
@@ -1808,6 +1839,7 @@ class ProjectInfoScreen(MDScreen):
             last_children = items[last_ii].get("children") or []
             last_ci = len(last_children) - 1 if last_children else -1
         seq = 0
+        # Dla każdego głównego kroku...
         for ii, item in enumerate(items):
             seq += 1
             is_last_row = (ii == last_ii and last_ci == -1)
@@ -1815,7 +1847,7 @@ class ProjectInfoScreen(MDScreen):
                 StageItemRow(
                     display_text=item.get("text", ""),
                     done=bool(item.get("done", False)),
-                    is_sub=False,
+                    is_sub=False,      # To jest główny krok (nie podkrok)
                     is_first=(seq == 1),
                     is_last=is_last_row,
                     parent_screen=self,
@@ -1824,6 +1856,7 @@ class ProjectInfoScreen(MDScreen):
                     child_index=-1,
                 )
             )
+            # ... i dla każdego podkroku w tym kroku
             children = item.get("children") or []
             for ci, child in enumerate(children):
                 seq += 1
@@ -1832,7 +1865,7 @@ class ProjectInfoScreen(MDScreen):
                     StageItemRow(
                         display_text=child.get("text", ""),
                         done=bool(child.get("done", False)),
-                        is_sub=True,
+                        is_sub=True,   # To jest podkrok
                         is_first=False,
                         is_last=is_last_row,
                         parent_screen=self,
@@ -1841,10 +1874,8 @@ class ProjectInfoScreen(MDScreen):
                         child_index=ci,
                     )
                 )
-        # Persistent in-timeline '+' node — only when a group is selected.
-        # The spine's upward line is only drawn when there's at least one
-        # Krok above, so an empty group doesn't show an orphan vertical line
-        # trailing from the top of the screen down to the '+' button.
+        # Przycisk "+" na dole osi czasu – dodaje nowy krok do grupy
+        # Linia nad "+" rysowana jest tylko gdy są już jakieś kroki
         timeline.add_widget(
             EtapyPlusRow(parent_screen=self, connect_top=bool(items))
         )
@@ -3999,30 +4030,53 @@ class CarProgressButton(ButtonBehavior, Image):
 # Pasek celu czasowego: dotknięcie samochodzika = start/pauza; × po prawej = usuwanie.
 class TimeGoalTrackRow(MDBoxLayout):
 
+    # Nazwa celu wyświetlana na karcie
     title_text = StringProperty("")
+    # Opis celu (np. "2h / dzien")
     goal_text = StringProperty("")
+    # Docelowa liczba sekund (np. 7200 = 2 godziny)
     goal_target_seconds = NumericProperty(3600.0)
+    # Tyle sekund już naliczono (w bieżącym okresie)
     logged_seconds = NumericProperty(0.0)
+    # Czy ten cel jest teraz śledzony (samochodzik jedzie)?
     tracking_active = BooleanProperty(False)
+    # Pozycja samochodzika w poziomie (0.0 = start, 1.0 = meta)
     car_hint_x = NumericProperty(0.08)
+    # Skala samochodzika (1.0 = normalny rozmiar)
     car_scale_x = NumericProperty(1.0)
+    # Tekst procentowy (np. "75%")
     percent_text = StringProperty("0%")
+    # Czy cel został osiągnięty (samochodzik na mecie)?
     is_goal_complete = BooleanProperty(False)
+    # Kolor tła karty – fioletowy (w trakcie) lub zielony (osiągnięty)
     percent_card_color = ListProperty(_GOAL_CARD_PURPLE)
+    # Źródło obrazka koronki (pokazuje się gdy cel osiągnięty)
     crown_source = StringProperty(_CROWN_EMOJI_PATH)
+    # Tekst z naliczonym czasem (np. "1h 30min")
     elapsed_text = StringProperty("")
+    # Tryb resetowania: "never", "daily" lub "weekly"
     reset_mode = StringProperty(RESET_WEEKLY)
+    # Klucz okresu (np. "2026-06-07" dla dziennego, "2026-W23" dla tygodniowego)
     period_key = StringProperty("")
+    # Unikalny identyfikator aktywnego śledzenia
     active_uid = StringProperty("")
+    # Obrazek samochodzika gdy stoi (chrapie: ZZzz)
     car_source_idle = StringProperty(_car_asset_path("ZZzz 1.png"))
+    # Obrazek samochodzika gdy jedzie (CCcc)
     car_source_active = StringProperty(_car_asset_path("CCcc 1.png"))
+    # Referencja do ekranu projektu (żeby móc wywoływać metody)
     parent_screen = ObjectProperty(None, allownone=True)
+    # Dane geofence (opcjonalne – lokalizacja do automatycznego śledzenia)
     geofence = ObjectProperty({})
 
+    # Zdarzenie cykliczne – aktualizuje pozycję samochodzika (co 0.05s)
     _tick_ev = None
     _caption_scheduled = False
+    # Czy samochodzik dotarł już do mety (cel osiągnięty)
     _has_reached_goal = False
+    # Pozycja samochodzika gdy "przegalopował" metę (animacja wahadłowa)
     _overflow_cx = None
+    # Kierunek wahadła po przekroczeniu mety (+1 = prawo, -1 = lewo)
     _overflow_dir = -1
 
     # Wywolywane po utworzeniu widoku - podlacza aktualizacje wygladu i obsluge przycisku usuwania.
@@ -4166,30 +4220,41 @@ class TimeGoalTrackRow(MDBoxLayout):
 
     # Przelicza postep celu na procenty, aktualizuje tekst i przesuwa samochodzik na pasku.
     def _update_progress_from_time(self, dt=0):
+        # Sprawdź czy minął okres resetu (codzienny/tygodniowy)
         self._ensure_period()
+        # Zabezpieczenie przed dzieleniem przez zero
         t = max(10.0, float(self.goal_target_seconds))
+        # Procent wykonania celu
         p_raw = 100.0 * float(self.logged_seconds) / t
         pct_int = int(round(p_raw))
         self.percent_text = f"{pct_int}%"
 
+        # Czy cel został osiągnięty (100% lub więcej)?
         if pct_int >= 100:
             self._has_reached_goal = True
         self.is_goal_complete = self._has_reached_goal
+        # Zmień kolor karty na zielony gdy cel osiągnięty
         self.percent_card_color = _GOAL_CARD_GREEN if self._has_reached_goal else _GOAL_CARD_PURPLE
 
+        # Oblicz pozycję samochodzika na pasku
         tw, min_cx, max_cx = self._road_bounds()
 
         if self.tracking_active and self._has_reached_goal:
+            # Samochodzik "przegalopował" metę – jedzie tam i z powrotem
             cx = self._advance_overflow_car(min_cx, max_cx, dt)
         elif self._overflow_cx is not None:
+            # Zachowaj poprzednią pozycję wahadłową
             cx = self._overflow_cx
             self.car_scale_x = -1.0 if self._overflow_dir < 0 else 1.0
         else:
+            # Normalna pozycja – proporcjonalnie do postępu
             self.car_scale_x = 1.0
             p_track = min(100.0, p_raw)
             cx = min_cx + (p_track / 100.0) * (max_cx - min_cx)
 
+        # Przelicz pozycję na ułamek szerokości paska
         self.car_hint_x = cx / tw if tw > 0 else 0.5
+        # Tekst z naliczonym czasem (np. "1h 30min")
         self.elapsed_text = format_goal_elapsed(self.logged_seconds) if self.logged_seconds >= 1 else ""
 
     # Wywolywane po kliknieciu samochodzika - przelacza miedzy startem a zatrzymaniem pomiaru czasu.

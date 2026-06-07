@@ -13,9 +13,19 @@
 # ---------------------------------------------------------------------------
 
 import math
+# "math" – funkcje matematyczne (logarytmy, cosinus). Potrzebne do
+# obliczania przybliżenia na mapie (zoom) i odległości.
+
 from kivy.clock import Clock
+# "Clock" – planowanie zadań na później (np. odświeżanie mapy,
+# przytrzymanie przycisku zoom).
+
 from kivy.logger import Logger
+# "Logger" – zapisuje wiadomości do logów Kivy (pomocne przy debugowaniu).
+
 from kivy.metrics import dp, sp
+# "dp" – punkty niezależne od gęstości ekranu (piksele które wyglądają
+# tak samo na każdym ekranie). "sp" – to samo, ale dla rozmiaru czcionki.
 
 
 # Wysyła pojedyncze linie logów (do Kivy i logcat Androida) dla ekranu wyboru lokalizacji.
@@ -26,21 +36,39 @@ def _log(message):
         pass
     
 from kivy.properties import NumericProperty, ObjectProperty, StringProperty
+# Właściwości Kivy – gdy zmieniają wartość, interfejs odświeża się sam.
+
 from kivy.uix.anchorlayout import AnchorLayout
+# AnchorLayout – układa element w konkretnym miejscu (np. lewy górny róg).
+
 from kivy.uix.behaviors import ButtonBehavior
+# ButtonBehavior – dodaje zachowanie przycisku do dowolnego widgetu.
+
 from kivy.uix.boxlayout import BoxLayout
+# BoxLayout – układa elementy w rzędzie lub kolumnie.
+
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex, platform
+# "get_color_from_hex" – zamienia kolor z #FF00FF na liczby.
+# "platform" – mówi czy działamy na Androidzie, komputerze itd.
+
 from kivy.uix.floatlayout import FloatLayout
+# FloatLayout – układa elementy na dowolnych współrzędnych.
+
 from kivy.graphics import Color, Ellipse, Line
+# "Color" – ustawia kolor rysowania. "Ellipse" – rysuje koło/elipsę.
+# "Line" – rysuje linie i okręgi.
+
 from kivymd.app import MDApp
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.label import MDIcon, MDLabel
 from kivymd.uix.screen import MDScreen
+# KivyMD – Material Design dla Kivy (ładne przyciski, kolory, ekrany).
 
 from screens.project_info import RoundedSheetButton
+# "RoundedSheetButton" – przycisk z zaokrąglonymi rogami (wspólny dla całej aplikacji).
 
 
 class _TapAnchor(ButtonBehavior, AnchorLayout):
@@ -70,13 +98,16 @@ if _MAPVIEW_AVAILABLE:
         def on_touch_up(self, touch):
             if touch.grab_current == self:
                 touch.ungrab(self)
+                # Zmniejsz licznik dotyków – gdy zejdzie do 0, wznów normalne działanie
                 self._touch_count = max(0, self._touch_count - 1)
                 if self._touch_count == 0:
                     self._pause = False
                 return True
             return Widget.on_touch_up(self, touch)
+    # Gdy mapa jest dostępna – używamy płynnej wersji
     _StableMapView = _SmoothMapView
 else:
+    # Gdy mapy nie ma – nie ma czego użyć
     _StableMapView = None
 
 
@@ -84,15 +115,15 @@ class _TouchBarrierBox(MDBoxLayout):
     # Przezroczysta warstwa, która "łapie" dotknięcia, żeby nie przeszły do elementów pod spodem.
     # Dzieci wewnątrz działają normalnie, ale to co jest pod spodem – nie reaguje na dotyk.
     def on_touch_down(self, touch):
+        # Najpierw sprawdź czy dziecko obsłużyło dotyk
         handled = super().on_touch_down(touch)
         if handled:
             return True
+        # Jeśli dotyk jest w obszarze tej bariery – zablokuj (nie puszczaj dalej)
         if self.collide_point(*touch.pos):
             return True
         return False
-    # Gdy użytkownik przesuwa palec, ta funkcja sprawdza, czy dotknięcie
-    # zostało obsłużone przez dzieci; jeśli nie – blokuje je, żeby nie
-    # przeszło do elementów pod spodem.
+
     def on_touch_move(self, touch):
         handled = super().on_touch_move(touch)
         if handled:
@@ -100,9 +131,7 @@ class _TouchBarrierBox(MDBoxLayout):
         if self.collide_point(*touch.pos):
             return True
         return False
-    # Gdy użytkownik puści palec, ta funkcja sprawdza, czy dotknięcie
-    # zostało obsłużone przez dzieci; jeśli nie, blokuje je, żeby nie
-    # przeszło do elementów pod spodem.
+
     def on_touch_up(self, touch):
         handled = super().on_touch_up(touch)
         if handled:
@@ -138,13 +167,17 @@ def _zoom_for_radius(radius_m, lat_deg, viewport_short_px):
     # (w metrach) zmieściło się na ekranie. Im większy promień, tym bardziej trzeba oddalić mapę.
     if radius_m <= 0 or viewport_short_px <= 0:
         return _DEFAULT_ZOOM
+    # Średnica koła w pikselach (= krótszy bok widoku)
     visual_d = viewport_short_px * _VIEWPORT_FRACTION
     if visual_d <= 0:
         return _DEFAULT_ZOOM
+    # Docelowe metry na piksel – tak żeby promień zmieścił się w widoku
     target_mpp = (2.0 * radius_m) / visual_d
+    # Wartość bazowa dla równika przy zoom=0
     base = 156543.03392 * math.cos(lat_deg * math.pi / 180.0)
     if target_mpp <= 0 or base <= 0:
         return _DEFAULT_ZOOM
+    # log2(base/target_mpp) = poziom zoomu potrzebny do osiągnięcia target_mpp
     return max(_MIN_ZOOM, min(_MAX_ZOOM, math.log2(base / target_mpp)))
 
 
@@ -152,11 +185,14 @@ def _zoom_for_radius(radius_m, lat_deg, viewport_short_px):
 # Standardowo zoom to liczba całkowita, ale mapa może mieć dodatkowy atrybut scale,
 # który pozwala na płynne przybliżanie (np. 15.3 zamiast 15).
 def _effective_zoom(mapview):
+    # Podstawowy zoom (liczba całkowita, np. 15)
     z = float(getattr(mapview, "zoom", _DEFAULT_ZOOM))
+    # Skala – dodatkowe płynne przybliżenie (np. 1.3 = 130% zoomu)
     scale = getattr(mapview, "scale", None)
     if scale is None or float(scale) <= 0:
         return z
     try:
+        # Zoom + skala przeliczona na stopnie (log2)
         return z + math.log2(float(scale))
     except (ValueError, TypeError):
         return z
@@ -169,14 +205,18 @@ class GeofenceCircleOverlay(Widget):
     # Użytkownik widzi to jako kolorowe koło z obwódką i celownikiem
     # na środku.
     
+    # Kolor obwódki koła (fioletowy, nieprzezroczysty)
     ring_color = ObjectProperty((0.55, 0.31, 0.78, 1.0))
+    # Kolor wypełnienia koła (fioletowy, przezroczysty – widać mapę)
     fill_color = ObjectProperty((0.55, 0.31, 0.78, 0.18))
+    # Średnica koła w pikselach (zmienia się gdy zoom się zmienia)
     diameter_px = NumericProperty(dp(120))
 
     # Przygotowuje nakładkę: zapamiętuje, że ma przerysowywać koło,
     # gdy zmieni się położenie, rozmiar, kolor lub średnica.
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        # Wypełnia cały dostępny obszar (mapę)
         self.size_hint = (1, 1)
         self.bind(
             pos=self._redraw,
@@ -211,7 +251,9 @@ class GeofenceCircleOverlay(Widget):
         self.canvas.clear()
         if self.width < 1 or self.height < 1 or self.diameter_px < 2:
             return
+        # Rzeczywista średnica = mniejsza z: zadana średnica lub rozmiar widoku (minus margines)
         d = min(float(self.diameter_px), min(self.width, self.height) - dp(4))
+        # Minimalna średnica = 8dp (żeby koło było zawsze widoczne)
         d = max(d, dp(8))
         cx = self.center_x
         cy = self.center_y
@@ -237,14 +279,20 @@ class GeofencePickerScreen(MDScreen):
     return_screen = StringProperty("home")
     radius_text = StringProperty(f"{int(_DEFAULT_RADIUS_M)} m")
 
+    # Funkcja zwrotna – wywoływana gdy użytkownik zapisze/anuluje wybór
     _on_done = None
+    # Początkowe współrzędne (domyślnie Warszawa)
     _initial_lat = _DEFAULT_LAT
     _initial_lon = _DEFAULT_LON
     _initial_zoom = float(_DEFAULT_ZOOM)
     _initial_radius_m = _DEFAULT_RADIUS_M
+    # Czy użytkownik jawnie ustawił zoom? (Gdy nie – obliczamy go z promienia)
     _initial_zoom_explicit = False
+    # Czy użytkownik podał konkretne współrzędne? (Gdy nie – szukamy GPS)
     _initial_location_explicit = False
+    # Czy GPS został już uruchomiony?
     _gps_started = False
+    # Czy znaleźliśmy już lokalizację przez GPS?
     _location_acquired = False
 
     # Przygotowuje ekran wyboru lokalizacji: ustawia fioletowe tło,
@@ -264,6 +312,7 @@ class GeofencePickerScreen(MDScreen):
         # po zapisaniu. Wywołaj TĘ funkcję PRZED przełączeniem na ten ekran.
         # "on_done" to funkcja która zostanie wywołana z wynikiem
         # (współrzędne i promień lub anulowanie).
+        # Czy podano konkretne współrzędne (edytujemy istniejący geofence)?
         self._initial_location_explicit = (initial_lat is not None and initial_lon is not None)
         self._initial_lat = float(initial_lat) if initial_lat is not None else _DEFAULT_LAT
         self._initial_lon = float(initial_lon) if initial_lon is not None else _DEFAULT_LON
@@ -291,6 +340,7 @@ class GeofencePickerScreen(MDScreen):
             self._kickoff_location_acquisition()
             return
         target_zoom = self._initial_zoom
+        # Jeśli zoom nie był podany – oblicz go z promienia
         if not self._initial_zoom_explicit:
             short_px = min(self._mapview.width, self._mapview.height)
             if short_px > 1:
@@ -326,6 +376,8 @@ class GeofencePickerScreen(MDScreen):
     # Jeśli użytkownik wyrazi zgodę – uruchamia GPS. Jeśli nie – pokazuje
     # komunikat "Brak uprawnień GPS". Na innych systemach pomija ten krok.
     def _request_location_permission_then_start(self):
+        # used_callback pozostaje False, bo request_permissions z callbackiem
+        # może się nie powieść (starsze API). Wtedy próbujemy bez callbacka.
         used_callback = False
         # Prosi użytkownika o zgodę na dostęp do lokalizacji (wymagane
         # na Androidzie 6+). Jeśli użytkownik zezwoli – uruchamia GPS.
@@ -344,6 +396,8 @@ class GeofencePickerScreen(MDScreen):
             request_permissions([Permission.ACCESS_FINE_LOCATION, Permission.ACCESS_COARSE_LOCATION], _cb)
         except Exception as exc:
             _log(f"request_permissions with callback failed: {exc!r}")
+        # Jeśli request_permissions z callbackiem się nie powiódł (starsze API),
+        # spróbuj bez callbacka – niektóre wersje androida tak obsługują.
         if not used_callback:
             try:
                 from android.permissions import (
@@ -360,17 +414,19 @@ class GeofencePickerScreen(MDScreen):
                 _log("request_permissions (no callback) succeeded")
             except Exception as exc:
                 _log(f"request_permissions (no callback) failed: {exc!r}")
-            # Try to start GPS anyway — permissions may already be granted
-            # from a previous session.
+            # Uruchom GPS niezależnie – uprawnienia mogą być już nadane
+            # z poprzedniej sesji.
             Clock.schedule_once(lambda _dt: self._start_gps(), 0)
 
     # Włącza GPS, żeby znaleźć bieżącą pozycję telefonu.
     # Jeśli GPS jest już włączony lub pozycja już została znaleziona –
     # nic nie robi. W razie błędu pokazuje odpowiedni komunikat.
     def _start_gps(self):
+        # Nie uruchamiaj GPS jeśli już działa lub mamy już pozycję
         if self._gps_started or self._location_acquired:
             _log("skip _start_gps (already started or fix acquired)")
             return
+        # Jeśli użytkownik podał konkretne współrzędne – nie potrzebujemy GPS
         if self._initial_location_explicit:
             return
         try:
@@ -380,10 +436,12 @@ class GeofencePickerScreen(MDScreen):
             self._set_status("Brak GPS (plyer)")
             return
         try:
+            # Ustaw funkcje zwrotne: gdy znajdzie pozycję i gdy zmieni się status
             gps.configure(
                 on_location=self._on_gps_location,
                 on_status=self._on_gps_status,
             )
+            # Uruchom GPS – aktualizacja co 1 sekundę, bez minimalnej odległości
             gps.start(minTime=1000, minDistance=0)
             self._gps_started = True
             _log("plyer.gps started (requesting location updates)")
@@ -394,8 +452,8 @@ class GeofencePickerScreen(MDScreen):
             _log(f"plyer.gps start failed: {exc!r}")
             self._set_status(f"Błąd GPS: {exc!r}")
 
-    # Wyłącza GPS, żeby oszczędzać baterię, gdy już nie jest potrzebny.
     def _stop_gps(self):
+        # Wyłącz GPS jeśli działa – oszczędzamy baterię
         if not self._gps_started:
             return
         try:
@@ -406,9 +464,8 @@ class GeofencePickerScreen(MDScreen):
             _log(f"plyer.gps stop failed: {exc!r}")
         self._gps_started = False
 
-    # Otrzymuje informacje o stanie GPS (np. czy szuka sygnału).
-    # Zapisuje to w dzienniku, ale nie pokazuje użytkownikowi.
     def _on_gps_status(self, status_type, status_message):
+        # Otrzymujemy status GPS (np. "szukam sygnału") – tylko logujemy
         _log(f"gps status: {status_type} {status_message}")
 
     def _on_gps_location(self, **kwargs):
@@ -643,6 +700,7 @@ class GeofencePickerScreen(MDScreen):
             height=dp(30),
             spacing=dp(10),
         )
+        # Etykieta "Promień:" – po lewej
         radius_caption = Label(
             text="Promień:",
             font_size=sp(15),
@@ -655,6 +713,7 @@ class GeofencePickerScreen(MDScreen):
         radius_caption.bind(
             size=lambda lbl, *_: setattr(lbl, "text_size", lbl.size)
         )
+        # Wartość promienia – po prawej, pogrubiona
         self._radius_label = Label(
             text=self.radius_text,
             font_size=sp(15),
@@ -761,13 +820,14 @@ class GeofencePickerScreen(MDScreen):
         # 1 = przybliż, -1 = oddal.
         # Przytrzymanie przycisku powoduje płynne przybliżanie.
         app = MDApp.get_running_app()
+        # Kolor tła przycisku z motywu aplikacji
         bg = list(
             get_color_from_hex(
                 getattr(app, "theme_card_bg", "#B388FF") if app else "#B388FF"
             )
         )
         btn = RoundedSheetButton(
-            text=glyph,
+            text=glyph,  # "+" lub "−"
             font_size=sp(22),
             size_hint=(None, 1),
             width=dp(56),
@@ -791,12 +851,12 @@ class GeofencePickerScreen(MDScreen):
         # przybliżać lub oddalać mapę. Od razu robimy jeden skok
         # (0.18 poziomu zoomu), a potem kontynuujemy co klatkę animacji
         # (60 razy na sekundę) z mniejszym przyrostem (0.035).
-        self._zoom_press_stop()
+        self._zoom_press_stop()  # Wyczyść poprzednią sesję zoomu
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return
-        self._zoom_direction = int(1 if direction > 0 else -1)
-        self._apply_smooth_zoom_delta(self._zoom_direction * 0.18)
-        self._zoom_clock = Clock.schedule_interval(self._zoom_tick, 1.0 / 60.0)
+        self._zoom_direction = int(1 if direction > 0 else -1)  # +1 = przybliż, -1 = oddal
+        self._apply_smooth_zoom_delta(self._zoom_direction * 0.18)  # Natychmiastowy skok
+        self._zoom_clock = Clock.schedule_interval(self._zoom_tick, 1.0 / 60.0)  # Płynne dalej
 
     # Wywoływana przy każdym "tiknięciu" zegara podczas przytrzymania
     # przycisku zoomu – dodaje mały przyrost przybliżenia (ok. 0.035),
@@ -814,11 +874,11 @@ class GeofencePickerScreen(MDScreen):
     # Gdy użytkownik puści przycisk zoomu – zatrzymujemy płynne
     # przybliżanie i wyłączamy zegar, który je napędzał.
     def _zoom_press_stop(self, *_):
-        self._zoom_direction = 0
+        self._zoom_direction = 0  # Zatrzymaj kierunek zoomu
         clk = getattr(self, "_zoom_clock", None)
         if clk is not None:
             try:
-                clk.cancel()
+                clk.cancel()  # Zatrzymaj zegar animacji
             except Exception:
                 pass
             self._zoom_clock = None
@@ -833,19 +893,21 @@ class GeofencePickerScreen(MDScreen):
         if mv is None or abs(d) < 1e-6:
             return
         eff = _effective_zoom(mv)
+        # Nie przekraczaj minimalnego/maksymalnego zoomu
         if d > 0 and eff >= _MAX_ZOOM:
             return
         if d < 0 and eff <= _MIN_ZOOM:
             return
         cx, cy = mv.center_x, mv.center_y
         try:
-            mv.diff_scale_at(float(d), cx, cy)
+            mv.diff_scale_at(float(d), cx, cy)  # Płynna zmiana zoomu
         except Exception:
             try:
+                # Awaryjnie – skokowa zmiana zoomu
                 mv.zoom = int(round(float(mv.zoom) + (1 if d > 0 else -1)))
             except Exception:
                 pass
-        self._refresh_overlay()
+        self._refresh_overlay()  # Odśwież nakładkę koła po zmianie zoomu
 
     def _current_radius_m(self):
         # Oblicza aktualny promień geofence w metrach na podstawie tego
@@ -855,17 +917,17 @@ class GeofencePickerScreen(MDScreen):
         # Maksymalny promień to 1000 metrów.
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return _DEFAULT_RADIUS_M
-        short_px = min(self._mapview.width, self._mapview.height)
+        short_px = min(self._mapview.width, self._mapview.height)  # Krótszy bok ekranu w pikselach
         if short_px <= 1:
             return _DEFAULT_RADIUS_M
-        zoom = _effective_zoom(self._mapview)
-        lat = float(self._mapview.lat)
-        mpp = _meters_per_pixel(lat, zoom)
+        zoom = _effective_zoom(self._mapview)  # Bieżący poziom przybliżenia
+        lat = float(self._mapview.lat)  # Szerokość geograficzna środka mapy
+        mpp = _meters_per_pixel(lat, zoom)  # Metrów na piksel przy tym zoomie
         if mpp <= 0:
             return _DEFAULT_RADIUS_M
-        visual_d_px = short_px * _VIEWPORT_FRACTION
-        radius_m = (visual_d_px / 2.0) * mpp
-        return max(1.0, min(_MAX_RADIUS_M, radius_m))
+        visual_d_px = short_px * _VIEWPORT_FRACTION  # Średnica w pikselach (60% krótszego boku)
+        radius_m = (visual_d_px / 2.0) * mpp  # Promień w metrach = (średnica_px / 2) * mpp
+        return max(1.0, min(_MAX_RADIUS_M, radius_m))  # Ogranicz do [1, MAX_RADIUS_M]
 
     def _refresh_overlay(self):
         # Odświeża nakładkę koła i etykietę z promieniem.
@@ -875,42 +937,23 @@ class GeofencePickerScreen(MDScreen):
         # Aktualizuje też tekst z promieniem (np. "150 m").
         if not _MAPVIEW_AVAILABLE or self._mapview is None or self._overlay is None:
             return
-        short_px = min(self._mapview.width, self._mapview.height)
+        short_px = min(self._mapview.width, self._mapview.height)  # Krótszy bok ekranu
         if short_px <= 1:
             return
-        zoom = _effective_zoom(self._mapview)
-        lat = float(self._mapview.lat)
-        mpp = _meters_per_pixel(lat, zoom)
+        zoom = _effective_zoom(self._mapview)  # Bieżący zoom mapy
+        lat = float(self._mapview.lat)  # Szer. geogr. środka mapy
+        mpp = _meters_per_pixel(lat, zoom)  # Metrów na piksel
         if mpp <= 0:
             return
         target_radius_m = (short_px * _VIEWPORT_FRACTION / 2.0) * mpp
-        actual_radius_m = max(1.0, min(_MAX_RADIUS_M, target_radius_m))
-        diameter_px = max(dp(12), (2.0 * actual_radius_m) / mpp)
-        self._overlay.pos = self._mapview.pos
-        self._overlay.size = self._mapview.size
-        self._overlay.diameter_px = diameter_px
-        self.radius_text = f"{int(round(actual_radius_m))} m"
+        actual_radius_m = max(1.0, min(_MAX_RADIUS_M, target_radius_m))  # Ogranicz do [1, MAX]
+        diameter_px = max(dp(12), (2.0 * actual_radius_m) / mpp)  # Średnica koła w pikselach
+        self._overlay.pos = self._mapview.pos  # Dopasuj pozycję nakładki do mapy
+        self._overlay.size = self._mapview.size  # Dopasuj rozmiar nakładki do mapy
+        self._overlay.diameter_px = diameter_px  # Ustaw średnicę koła na nakładce
+        self.radius_text = f"{int(round(actual_radius_m))} m"  # Aktualizuj tekst promienia
         if self._radius_label is not None:
-            self._radius_label.text = self.radius_text
-
-    # Próbuje ustawić daną właściwość na obiekcie – jeśli się nie uda,
-    # po prostu pomija błąd (zabezpieczenie przed brakującą właściwością).
-    @staticmethod
-    def _safe_set(obj, attr, value):
-        try:
-            setattr(obj, attr, value)
-        except Exception:
-            pass
-
-    # Ustawia przybliżenie mapy na podaną wartość (w zakresie 12–19).
-    def _set_smooth_zoom(self, zoom):
-        if not _MAPVIEW_AVAILABLE or self._mapview is None:
-            return
-        z = max(_MIN_ZOOM, min(_MAX_ZOOM, float(zoom)))
-        try:
-            self._mapview.zoom = z
-        except Exception:
-            self._mapview.zoom = int(round(z))
+            self._radius_label.text = self.radius_text  # Odśwież etykietę w panelu
 
     # Zwraca aktualne ustawienia geofence: szerokość i długość geograficzną
     # środka, promień w metrach oraz poziom przybliżenia mapy.
@@ -918,10 +961,10 @@ class GeofencePickerScreen(MDScreen):
         if not _MAPVIEW_AVAILABLE or self._mapview is None:
             return None
         return {
-            "lat": float(self._mapview.lat),
-            "lon": float(self._mapview.lon),
-            "radius_m": float(self._current_radius_m()),
-            "zoom": float(_effective_zoom(self._mapview)),
+            "lat": float(self._mapview.lat),          # Szerokość geograficzna środka
+            "lon": float(self._mapview.lon),          # Długość geograficzna środka
+            "radius_m": float(self._current_radius_m()),  # Promień geofence w metrach
+            "zoom": float(_effective_zoom(self._mapview)),  # Poziom przybliżenia mapy
         }
 
     # Zapisuje wybrany geofence i wraca do poprzedniego ekranu.
@@ -946,12 +989,12 @@ class GeofencePickerScreen(MDScreen):
     # do poprzedniego ekranu.
     def _finish(self, result):
         cb = self._on_done
-        self._on_done = None
+        self._on_done = None  # Wyzeruj, żeby nie wywołać dwa razy
         try:
             if cb is not None:
-                cb(result)
+                cb(result)  # Przekaż wynik do funkcji zwrotnej
         finally:
-            self._navigate_back()
+            self._navigate_back()  # Wróć do ekranu nadrzędnego
 
     # Przełącza aplikację z powrotem na ekran, z którego przyszliśmy
     # (np. ekran projektu lub strony głównej).
@@ -963,4 +1006,4 @@ class GeofencePickerScreen(MDScreen):
         try:
             app.root.current = target
         except Exception:
-            app.root.current = "home"
+            app.root.current = "home"  # Awaryjnie – strona główna

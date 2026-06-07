@@ -1,5 +1,9 @@
 #:import utils kivy.utils
+# "utils" to narzędzia z biblioteki Kivy, np. do zamiany kolorów z zapisu szesnastkowego (jak #8A4BF4) na format RGBA (czerwony-zielony-niebieski-przezroczystość).
+
 #:import ProjectCard screens.home.ProjectCard
+# "ProjectCard" to własny element wizualny (karta projektu) zdefiniowany w pliku "screens/home.py".
+# Dzięki temu importowi możemy go używać w tym pliku.
 
 # ---------------------------------------------------------------------------
 # EKRAN USTAWIEŃ PROJEKTU
@@ -13,60 +17,113 @@
 # Potem na tym tle układane są pozostałe elementy.
 
 <ProjectSettingsScreen>:
+    # Definicja ekranu ustawień projektu. Wszystko poniżej (aż do końca pliku)
+    # to elementy, które będą wyświetlane na tym ekranie.
+
     canvas.before:
+        # "canvas.before" – polecenie "narysuj tło PRZED wszystkim innym".
+        # Działa jak podkładka – najpierw rysujemy fioletowe tło, a potem
+        # na nim układamy przyciski, pola tekstowe itd.
+
         Color:
+            # "Color" – ustawia kolor, który będzie używany przez następny element graficzny.
             rgba: utils.get_color_from_hex("#8A4BF4")
+            # "rgba" – kolor w formacie: Red (czerwony), Green (zielony), Blue (niebieski), Alpha (przezroczystość).
+            # "utils.get_color_from_hex" – zamienia zapis szesnastkowy (#8A4BF4 = fioletowy) na wartości RGBA.
+
         Rectangle:
+            # "Rectangle" – rysuje prostokąt na ekranie.
             pos: self.pos
+            # "pos" – pozycja prostokąta (górny-lewy róg). "self.pos" oznacza "taka sama pozycja jak ekran".
             size: self.size
+            # "size" – rozmiar prostokąta. "self.size" oznacza "wypełnij cały ekran".
 
     # "MDBoxLayout" – główny pionowy układ. Wszystkie sekcje są ułożone
     # jedna pod drugą. "padding" daje odstęp od krawędzi ekranu: lewy 24,
     # górny 44 (żeby ominąć pasek stanu telefonu), prawy 24, dolny 0.
     MDBoxLayout:
+        # "MDBoxLayout" – pudełko z biblioteki KivyMD (Material Design).
+        # Układa elementy jeden pod drugim (pionowo) lub obok siebie (poziomo).
         orientation: "vertical"
+        # "orientation: vertical" – układaj elementy jeden pod drugim (pionowo).
         padding: dp(24), dp(44), dp(24), dp(0)
+        # "padding" – odstęp wewnętrzny od krawędzi: [lewy, górny, prawy, dolny].
+        # "dp(24)" – 24 piksele niezależne od rozdzielczości ekranu.
+        # "dp(44)" na górze – więcej miejsca, żeby ominąć pasek stanu telefonu (bateria, godzina).
         spacing: dp(0)
+        # "spacing" – odstęp między elementami wewnątrz pudełka. Tutaj 0, czyli brak odstępu.
 
         # ── Górny pasek z tytułem i przyciskiem powrotu ──
         # "BoxLayout" domyślnie układa elementy w poziomie. Trzy elementy:
         # strzałka (klikalna), tytuł (wyśrodkowany), pusty odstępnik (dla symetrii).
         BoxLayout:
-            size_hint_y: None       # Nie rozciągaj procentowo – użyj stałej wysokości
+            # "BoxLayout" – pudełko układające elementy obok siebie w poziomie.
+            size_hint_y: None
+            # "size_hint_y: None" – wysokość ma być stała, a nie procentowa.
+            # Gdyby było "size_hint_y: 0.5", element zajmowałby połowę wysokości rodzica.
             height: dp(60)
+            # "height: dp(60)" – ustaw stałą wysokość na 60 pikseli.
             spacing: dp(0)
+            # "spacing: dp(0)" – brak odstępu między elementami w środku.
 
             # "ClickableAnchorLayout" – klikalny obszar, który ustawia ikonę
             # po lewej stronie ("anchor_x: left").
             # "on_release: root.cancel()" – po kliknięciu anuluj zmiany i wróć.
             ClickableAnchorLayout:
+                # "ClickableAnchorLayout" – obszar, który można kliknąć
+                # i który umieszcza zawartość w konkretnym punkcie.
                 size_hint_x: None
+                # "size_hint_x: None" – szerokość ma być stała, nie procentowa.
                 width: dp(56)
+                # "width: dp(56)" – stała szerokość 56 pikseli.
                 anchor_x: "left"
+                # "anchor_x: left" – umieść ikonę przy lewej krawędzi obszaru.
                 on_release: root.cancel()
+                # "on_release" – co ma się stać, gdy użytkownik kliknie i puści.
+                # "root.cancel()" – wywołaj funkcję "cancel" w Pythonie (anuluj zmiany).
                 MDIcon:
+                    # "MDIcon" – ikona z biblioteki Material Design (KivyMD).
                     icon: "chevron-left"
+                    # "icon" – nazwa ikony (strzałka w lewo).
                     theme_text_color: "Custom"
+                    # "theme_text_color: Custom" – używamy własnego koloru, nie domyślnego.
                     text_color: 1, 1, 1, 1
+                    # "text_color: 1, 1, 1, 1" – kolor biały (RGBA: wszystko maksymalnie).
                     font_size: sp(50)
+                    # "font_size: sp(50)" – rozmiar czcionki 50 pikseli skalowalnych
+                    # (sp = scale-independent pixels, skaluje się z ustawieniami czcionki użytkownika).
                     adaptive_size: True
+                    # "adaptive_size: True" – automatycznie dopasuj rozmiar ikony do jej treści.
 
             # Tytuł strony – wyśrodkowany ("halign: center, valign: middle")
             # "text_size: self.size" – ogranicza obszar tekstu do rozmiaru
             # etykiety, wymagane aby wyśrodkowanie działało.
             Label:
+                # "Label" – etykieta tekstowa (napis).
                 text: "Ustawienia projektu"
+                # "text" – treść etykiety, czyli co ma być napisane.
                 font_size: sp(20)
+                # "font_size: sp(20)" – rozmiar czcionki 20 pikseli skalowalnych.
                 bold: True
+                # "bold: True" – pogrubiona czcionka.
                 color: 1, 1, 1, 1
+                # "color: 1, 1, 1, 1" – kolor tekstu: biały.
                 halign: "center"
+                # "halign: center" – wyrównaj tekst do środka w poziomie.
                 valign: "middle"
+                # "valign: middle" – wyrównaj tekst do środka w pionie.
                 text_size: self.size
+                # "text_size: self.size" – ogranicz obszar tekstu do rozmiaru etykiety.
+                # To jest potrzebne, żeby wyśrodkowanie (halign/valign) działało poprawnie.
 
             # Pusty odstępnik po prawej – symetryczny do strzałki
             Widget:
+                # "Widget" – pusty element, który nie wyświetla niczego.
+                # Służy jako "wypełniacz" – zajmuje miejsce, żeby tytuł był na środku.
                 size_hint_x: None
+                # "size_hint_x: None" – stała szerokość.
                 width: dp(56)
+                # "width: dp(56)" – szerokość 56 pikseli (symetrycznie do strzałki po lewej).
 
         # ── Przewijana zawartość ──
         # "ScrollView" – kontener przewijany. Gdy formularz jest dłuższy niż
@@ -75,19 +132,31 @@
         # "size_hint_y: 1" – zajmij całą dostępną wysokość (wypełnij resztę).
         # "bar_width: 0" – ukryj pasek przewijania (czystszy wygląd).
         ScrollView:
+            # "ScrollView" – kontener, który pozwala przewijać zawartość palcem.
             do_scroll_x: False
+            # "do_scroll_x: False" – wyłącz przewijanie w poziomie (tylko góra-dół).
             size_hint_y: 1
+            # "size_hint_y: 1" – zajmij całą dostępną wysokość (100% miejsca jakie zostało).
             bar_width: 0
+            # "bar_width: 0" – ukryj pasek przewijania (wygląda czyściej).
 
             # "adaptive_height: True" – automatyczna wysokość dopasowana
             # do liczby elementów wewnątrz.
             # "padding: [0, dp(24), 0, dp(120)]" – dodatkowy odstęp 120dp
             # na dole, żeby przycisk zapisu nie zasłaniał ostatniego elementu.
             MDBoxLayout:
+                # "MDBoxLayout" – pudełko układające elementy pionowo.
                 orientation: "vertical"
+                # "orientation: vertical" – układaj elementy jeden pod drugim.
                 adaptive_height: True
+                # "adaptive_height: True" – wysokość dopasowuje się automatycznie
+                # do liczby elementów w środku. Im więcej treści, tym wyższe pudełko.
                 spacing: dp(18)
+                # "spacing: dp(18)" – odstęp między elementami: 18 pikseli.
                 padding: [0, dp(24), 0, dp(120)]
+                # "padding" – odstęp wewnętrzny: [lewy, górny, prawy, dolny].
+                # "dp(120)" na dole – dodatkowe miejsce, żeby przycisk zapisu
+                # (który unosi się nad dolną krawędzią) nie zasłaniał ostatniego pola.
 
                 # ── Podgląd karty projektu (pokazuje bieżące zmiany) ──
                 # Żywy podgląd: gdy użytkownik zmienia nazwę lub kolor,
@@ -95,117 +164,204 @@
                 # "AnchorLayout" – centruje kartę ("anchor_x/y: center").
                 # "size_hint: None, None" – stały rozmiar karty, nie procentowy.
                 BoxLayout:
+                    # "BoxLayout" – pudełko do układania elementów.
                     orientation: "vertical"
+                    # "orientation: vertical" – układaj elementy pionowo (jeden nad drugim).
                     size_hint_y: None
+                    # "size_hint_y: None" – wysokość ma być stała, nie procentowa.
                     height: dp(290)
+                    # "height: dp(290)" – stała wysokość 290 pikseli.
                     spacing: dp(8)
+                    # "spacing: dp(8)" – odstęp między elementami: 8 pikseli.
                     padding: [0, dp(30), 0, 0]
+                    # "padding: [0, dp(30), 0, 0]" – odstęp wewnętrzny: 30 pikseli od góry.
 
                     AnchorLayout:
+                        # "AnchorLayout" – układ, który umieszcza dziecko w konkretnym punkcie
+                        # (np. na środku, z lewej, z prawej).
                         size_hint_y: None
+                        # "size_hint_y: None" – stała wysokość.
                         height: dp(230)
+                        # "height: dp(230)" – wysokość 230 pikseli.
                         anchor_x: "center"
+                        # "anchor_x: center" – umieść zawartość na środku w poziomie.
                         anchor_y: "center"
+                        # "anchor_y: center" – umieść zawartość na środku w pionie.
 
                         ProjectCard:
+                            # "ProjectCard" – własna karta projektu (zdefiniowana w home.py).
                             id: preview_card
+                            # "id" – unikalna nazwa, po której można odnieść się do tego elementu z Pythona.
                             interactive: False
+                            # "interactive: False" – karta jest tylko podglądem, nie można w nią kliknąć.
                             size_hint: None, None
+                            # "size_hint: None, None" – stały rozmiar (width i height poniżej).
                             width: dp(200)
+                            # "width: dp(200)" – szerokość karty 200 pikseli.
                             height: dp(220)
+                            # "height: dp(220)" – wysokość karty 220 pikseli.
                             height_multiplier: 1
+                            # "height_multiplier: 1" – mnożnik wysokości (1 = normalna).
                             title: name_input.text if name_input.text else "Tytuł Projektu"
+                            # "title" – tekst tytułu. Jeśli pole "name_input" jest puste,
+                            # pokaż "Tytuł Projektu" (tekst zastępczy).
                             image_source: root.selected_image_path
+                            # "image_source" – ścieżka do zdjęcia projektu (wybranego przez użytkownika).
                             emoji_source: root.selected_icon
+                            # "emoji_source" – wybrana ikona/emoji dla projektu.
                             card_color: root.selected_color
+                            # "card_color" – kolor tła karty (wybrany przez użytkownika).
                             title_font_style: "H6"
+                            # "title_font_style: H6" – styl czcionki tytułu (nagłówek poziomu 6).
                             emoji_size: dp(45)
+                            # "emoji_size: dp(45)" – rozmiar emoji: 45 pikseli.
                             emoji_right_hint: 1.25
+                            # "emoji_right_hint" – pozycja emoji po prawej stronie karty (1.25 = 25% poza kartą).
                             emoji_right_hint_png: 1.05
+                            # "emoji_right_hint_png" – pozycja emoji dla obrazków PNG.
 
                     # Napis "Podgląd" pod kartą
                     Label:
+                        # "Label" – etykieta tekstowa.
                         text: "Podgląd"
+                        # "text: Podgląd" – wyświetlany tekst.
                         font_size: sp(14)
+                        # "font_size: sp(14)" – rozmiar czcionki 14 pikseli skalowalnych.
                         color: utils.get_color_from_hex("#DDD0FF")
+                        # "color" – kolor tekstu (jasny fiolet).
                         size_hint_y: None
+                        # "size_hint_y: None" – stała wysokość.
                         height: dp(22)
+                        # "height: dp(22)" – wysokość 22 piksele.
                         halign: "center"
+                        # "halign: center" – wyśrodkuj w poziomie.
                         valign: "middle"
+                        # "valign: middle" – wyśrodkuj w pionie.
                         text_size: self.size
+                        # "text_size: self.size" – ogranicz obszar tekstu do rozmiaru etykiety.
 
                 # ── Pole do zmiany nazwy projektu ──
                 # "on_text: root.on_name_input(self.text)" – za każdym razem
                 # gdy użytkownik wpisuje tekst, podgląd karty od razu się aktualizuje.
                 ProjectTextInput:
+                    # "ProjectTextInput" – własne pole tekstowe (zdefiniowane w addProject.kv).
+                    # Ma zaokrąglone rogi i ikonkę po prawej stronie.
                     id: name_input
+                    # "id" – unikalna nazwa, żeby Python mógł odczytać wartość tego pola.
                     hint_text: "Nazwa Projektu"
+                    # "hint_text" – podpowiedź wyświetlana w polu gdy jest puste ("Nazwa Projektu").
                     icon_text: "pencil-outline"
+                    # "icon_text" – ikonka wyświetlana po prawej stronie pola (ołówek).
                     text: root.name_text
+                    # "text" – początkowa wartość pola. "root.name_text" – aktualna nazwa projektu.
                     on_text: root.on_name_input(self.text)
+                    # "on_text" – zdarzenie wywoływane za każdym razem, gdy użytkownik coś wpisze.
+                    # "root.on_name_input(self.text)" – aktualizuj podgląd karty na bieżąco.
 
                 # ── Przyciski: zdjęcie, kolor, usuń zdjęcie ──
                 # Trzy przyciski obok siebie w jednym wierszu.
                 BoxLayout:
+                    # "BoxLayout" – pudełko układające przyciski obok siebie w poziomie.
                     size_hint_y: None
+                    # "size_hint_y: None" – stała wysokość, nie procentowa.
                     height: dp(80)
+                    # "height: dp(80)" – wysokość 80 pikseli.
                     spacing: dp(12)
+                    # "spacing: dp(12)" – odstęp między przyciskami: 12 pikseli.
 
                     ProjectTileButton:
+                        # "ProjectTileButton" – własny kwadratowy przycisk (zdefiniowany w addProject.kv).
                         label_text: "+ Zdjęcie"
+                        # "label_text" – podpis pod ikoną.
                         icon_text: "image-outline"
+                        # "icon_text" – ikona na przycisku (obrazek).
                         on_release: root.select_photo()
+                        # "on_release" – po kliknięciu wywołaj funkcję "select_photo" w Pythonie (wybór zdjęcia).
 
                     ProjectTileButton:
                         label_text: "+ Kolor"
                         icon_text: "palette-outline"
                         on_release: root.select_color()
+                        # Po kliknięciu wywołaj funkcję "select_color" (wybór koloru).
 
                     ProjectTileButton:
                         label_text: "Bez zdjęcia"
                         icon_text: "image-off-outline"
                         on_release: root.clear_photo()
+                        # Po kliknięciu wywołaj funkcję "clear_photo" (usuń zdjęcie projektu).
 
                 # ── Czerwony przycisk "Usuń projekt" ──
                 # "ClickableBoxLayout" – klikalny wiersz z ikoną kosza i tekstem.
                 # Czerwone tło ("#D94646") sygnalizuje niebezpieczną operację.
                 ClickableBoxLayout:
+                    # "ClickableBoxLayout" – pudełko, które można kliknąć.
+                    # Łączy cechy przycisku (reaguje na kliknięcie) i pudełka (układa elementy).
                     size_hint_y: None
+                    # "size_hint_y: None" – stała wysokość.
                     height: dp(54)
+                    # "height: dp(54)" – wysokość 54 piksele.
                     padding: dp(15), 0, dp(15), 0
+                    # "padding" – odstęp wewnętrzny: 15 pikseli z lewej i prawej.
                     spacing: dp(10)
+                    # "spacing: dp(10)" – odstęp między ikoną a tekstem.
                     on_release: root.delete_project()
+                    # "on_release" – po kliknięciu wywołaj funkcję "delete_project" (usuń projekt).
                     canvas.before:
+                        # Rysujemy czerwone tło PRZED zawartością przycisku.
                         Color:
                             rgba: utils.get_color_from_hex("#D94646")
+                            # Kolor czerwony (#D94646) – ostrzegawczy, symbolizuje niebezpieczną operację.
                         RoundedRectangle:
+                            # "RoundedRectangle" – prostokąt z zaokrąglonymi rogami.
                             pos: self.pos
+                            # "pos: self.pos" – pozycja prostokąta = pozycja przycisku.
                             size: self.size
+                            # "size: self.size" – rozmiar prostokąta = rozmiar przycisku.
                             radius: [dp(12)]
+                            # "radius: [dp(12)]" – zaokrąglenie rogów: 12 pikseli (wszystkie rogi).
 
                     # Ikona kosza na śmieci wyśrodkowana w pionie
                     AnchorLayout:
+                        # "AnchorLayout" – umieszcza ikonę w wybranym punkcie.
                         size_hint_x: None
+                        # "size_hint_x: None" – stała szerokość.
                         width: dp(28)
+                        # "width: dp(28)" – szerokość 28 pikseli.
                         anchor_x: "center"
+                        # "anchor_x: center" – wyśrodkuj w poziomie.
                         anchor_y: "center"
+                        # "anchor_y: center" – wyśrodkuj w pionie.
 
                         MDIcon:
+                            # "MDIcon" – ikona Material Design.
                             icon: "trash-can-outline"
+                            # "icon" – nazwa ikony (kosz na śmieci).
                             theme_text_color: "Custom"
+                            # "theme_text_color: Custom" – własny kolor.
                             text_color: 1, 1, 1, 1
+                            # "text_color: 1, 1, 1, 1" – biały kolor ikony.
                             font_size: sp(22)
+                            # "font_size: sp(22)" – rozmiar ikony 22 piksele skalowalne.
                             adaptive_size: True
+                            # "adaptive_size: True" – automatyczny rozmiar dopasowany do ikony.
 
                     # Tekst "Usuń projekt" po prawej stronie ikony
                     Label:
+                        # "Label" – etykieta tekstowa.
                         text: "Usuń projekt"
+                        # "text" – wyświetlany tekst.
                         color: 1, 1, 1, 1
+                        # "color: 1, 1, 1, 1" – biały kolor tekstu.
                         font_size: sp(16)
+                        # "font_size: sp(16)" – rozmiar czcionki 16 pikseli skalowalnych.
                         bold: True
+                        # "bold: True" – pogrubiona czcionka.
                         halign: "left"
+                        # "halign: left" – wyrównaj tekst do lewej.
                         valign: "middle"
+                        # "valign: middle" – wyśrodkuj w pionie.
                         text_size: self.size
+                        # "text_size: self.size" – ogranicz obszar tekstu do rozmiaru etykiety.
 
     # ── Przycisk zapisu (okrągły, unosi się nad dolną krawędzią) ──
     # "pos_hint: {"center_x": 0.5, "y": 0.04}" – wyśrodkowany poziomo,
@@ -213,19 +369,37 @@
     # "Ellipse" – rysuje owal (tutaj koło) w tle.
     # "on_release: root.save()" – po kliknięciu zapisz zmiany.
     ClickableAnchorLayout:
+        # "ClickableAnchorLayout" – klikalny obszar, który wyśrodkowuje zawartość.
         size_hint: None, None
+        # "size_hint: None, None" – stały rozmiar (nie procentowy).
         size: dp(68), dp(68)
+        # "size: dp(68), dp(68)" – rozmiar przycisku: 68x68 pikseli (kwadrat).
         pos_hint: {"center_x": 0.5, "y": 0.04}
+        # "pos_hint" – pozycja procentowa względem ekranu.
+        # "center_x: 0.5" – wyśrodkuj poziomo (50% szerokości od lewej).
+        # "y: 0.04" – 4% od dołu ekranu (przycisk unosi się nad dolną krawędzią).
         on_release: root.save()
+        # "on_release" – po kliknięciu wywołaj funkcję "save()" w Pythonie (zapisz zmiany).
         canvas.before:
+            # Rysujemy tło przycisku (jasne kółko) PRZED ikoną.
             Color:
                 rgba: utils.get_color_from_hex("#F3EAFF")
+                # Kolor jasnofioletowy (prawie biały z fioletowym odcieniem).
             Ellipse:
+                # "Ellipse" – rysuje elipsę/koło. Tutaj: idealne koło.
                 pos: self.pos
+                # "pos: self.pos" – pozycja koła = pozycja przycisku.
                 size: self.size
+                # "size: self.size" – rozmiar koła = rozmiar przycisku.
         MDIcon:
+            # "MDIcon" – ikona Material Design (ptaszek "check" = zapisz).
             icon: "check"
+            # "icon: check" – ikona ptaszka (symbol zatwierdzenia/zapisu).
             icon_size: sp(34)
+            # "icon_size: sp(34)" – rozmiar ikony 34 piksele skalowalne.
             theme_text_color: "Custom"
+            # "theme_text_color: Custom" – własny kolor.
             text_color: utils.get_color_from_hex("#333333")
+            # "text_color" – kolor ikony: ciemnoszary (#333333).
             adaptive_size: True
+            # "adaptive_size: True" – automatyczny rozmiar.

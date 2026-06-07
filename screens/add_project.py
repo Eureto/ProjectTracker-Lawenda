@@ -70,6 +70,8 @@ class EmojiButton(RectangularRippleBehavior, ButtonBehavior, Image):
         if self.screen:
             self.screen._on_emoji_selected(self.source)
 
+# Rejestruje przycisk emoji w Kivy Factory – dzięki temu można go
+# używać w plikach .kv (np. "Factory: EmojiButton") bez importowania.
 Factory.register('EmojiButton', cls=EmojiButton)
 
 
@@ -99,9 +101,11 @@ class EmojiMetadata:
         Mapuje emoji do jednej z głównych kategorii na podstawie Unicode info.
         Zwraca kategorię taką jak 'People & body', 'Animals' itd.
         """
+        # Jeśli nie ma znaku – nie wiemy co to, więc dajemy "Symbols"
         if not char:
             return "Symbols"
         
+        # "ord" zamienia znak na liczbę (kod Unicode)
         codepoint = ord(char)
         
         # Flagi: Regional Indicator Symbols (U+1F1E6 to U+1F1FF)
@@ -114,6 +118,7 @@ class EmojiMetadata:
             0x1F900 <= codepoint <= 0x1F9FF):   # Supplemental Symbols and Pictographs
             
             # Lepsze rozróżnienie na podstawie nazwy
+            # Szukamy słów kluczowych w nazwie emoji – np. "cat" = zwierzę
             if name:
                 name_lower = name.lower()
                 if any(x in name_lower for x in ['person', 'people', 'man', 'woman', 'boy', 'girl', 'face', 'head', 'hair', 'body', 'hand', 'heart', 'kiss', 'couple']):
@@ -140,10 +145,11 @@ class EmojiMetadata:
             
             if name:
                 name_lower = name.lower()
+                # Niektóre symbole geometryczne (kółka, kwadraty, krzyżyki)
                 if any(x in name_lower for x in ['heavy_large_circle', 'white_circle', 'black_circle', 'square', 'cross', 'x', 'heavy_check', 'ballot', 'heavy_multiplication']):
                     return "Symbols"
         
-        # Domyślnie: symbole
+        # Jeśli nic nie pasowało – dajemy kategorię "Symbols"
         return "Symbols"
     
     # Odczytuje z nazwy pliku kod znaku Unicode.
@@ -156,30 +162,39 @@ class EmojiMetadata:
     # Np. 1F600 w systemie szesnastkowym = 128512 w dziesiętnym.
     @staticmethod
     def extract_unicode_codepoint(filename):
+        # Odcinamy rozszerzenie .png – zostaje np. "u1F600"
         base = os.path.splitext(filename)[0]
         
         hex_value = None
+        # "uni1F600" → "1F600" (odcinamy "uni")
         if base.startswith('uni') and len(base) > 3:
             hex_value = base[3:]
+        # "u1F600" → "1F600" (odcinamy "u")
         elif base.startswith('u') and len(base) > 1:
             hex_value = base[1:]
         
+        # Jeśli nie znaleźliśmy kodu hex – nie wiemy co to za emoji
         if not hex_value:
             return None, None, None, None
         
         try:
+            # "int(hex, 16)" zamienia zapis szesnastkowy na zwykłą liczbę
             codepoint = int(hex_value, 16)
+            # "chr" zamienia liczbę na znak (np. 128512 → 😀)
             char = chr(codepoint)
             try:
+                # "unicodedata.name" – nazwa znaku po polsku (np. "grinning face")
                 name = unicodedata.name(char).lower()
             except ValueError:
+                # Jeśli znak nie ma nazwy – używamy kategorii Unicode
                 category = unicodedata.category(char)
                 name = f"category_{category}".lower()
             
-            # Get emoji category
+            # Na podstawie znaku i nazwy ustalamy kategorię (Ludzie, Zwierzęta,它d.)
             category = EmojiMetadata.get_emoji_category(char, name)
             return hex_value.lower(), char, name, category
         except (ValueError, OverflowError):
+            # Jeśli hex jest niepoprawny – zwracamy None
             return None, None, None, None
     
     # Buduje listę wszystkich dostępnych emoji z podanego folderu.
@@ -188,12 +203,15 @@ class EmojiMetadata:
     # Lista jest wstępnie posortowana po kategoriach dla szybkiego przewijania.
     @staticmethod
     def build_emoji_index(emoji_dir):
+        # Jeśli folder nie istnieje – nie ma emoji do pokazania
         if not os.path.exists(emoji_dir):
             return []
         emoji_index = []
+        # Lista plików posortowana alfabetycznie, tylko .png
         for filename in sorted([f for f in os.listdir(emoji_dir) if f.lower().endswith(".png")]):
             hex_val, char, name, category = EmojiMetadata.extract_unicode_codepoint(filename)
             if hex_val:
+                # Słowa kluczowe = kod hex + fragmenty nazwy (np. "grinning", "face")
                 keywords = [hex_val] + (name.split('_') if name else [])
                 emoji_index.append({
                     'source': os.path.join(emoji_dir, filename),
@@ -209,8 +227,10 @@ class EmojiMetadata:
         def category_sort_key(emoji):
             cat = emoji.get('category', 'Symbols')
             try:
+                # Kolejność z CATEGORY_ORDER – "People" pierwsze, "Flags" ostatnie
                 return EmojiMetadata.CATEGORY_ORDER.index(cat)
             except ValueError:
+                # Nieznane kategorie lądują na końcu
                 return len(EmojiMetadata.CATEGORY_ORDER)
         
         emoji_index.sort(key=category_sort_key)
@@ -223,11 +243,14 @@ class EmojiMetadata:
     def filter_emojis(emoji_index, search_term):
         if not search_term or not search_term.strip():
             return emoji_index  # Zwraca wszystkie emoji (posortowane po kategoriach)
+        # Zamieniamy na małe litery i usuwamy spacje z brzegów
         search_term = search_term.lower().strip()
         filtered = []
         for emoji in emoji_index:
+            # Szukamy po kodzie szesnastkowym (np. "1f600")
             if search_term in emoji['hex']:
                 filtered.append(emoji)
+            # Albo po słowach kluczowych (np. "face", "uśmiech")
             elif any(search_term in keyword for keyword in emoji['keywords']):
                 filtered.append(emoji)
         return filtered
@@ -240,7 +263,9 @@ class AddProjectScreen(Screen):
     selected_color = ColorProperty([0.7, 0.5, 1, 1])  # Domyślny fiolet
     selected_icon = StringProperty("emoticon-happy-outline")
     selected_image_path = StringProperty("")
+    # Lista wszystkich emoji (raz załadowana z folderu)
     _emoji_index = []
+    # Wyfiltrowane emoji – początkowo wszystkie, potem zawężone wyszukiwaniem
     _filtered_emojis = []
     _search_input = None
     _recycle_view = None
@@ -270,8 +295,11 @@ class AddProjectScreen(Screen):
             self._emoji_index = EmojiMetadata.build_emoji_index(emoji_dir)
             print(f"[EmojiPicker] Built index with {len(self._emoji_index)} emojis")
 
+        # Na początek pokazujemy wszystkie emoji (bez filtrowania)
         self._filtered_emojis = self._emoji_index
+        # Słownik: nazwa kategorii → przycisk na pasku kategorii
         self._category_tabs = {}
+        # Kategoria domyślnie wybrana – pierwsza z listy ("People & body")
         self._current_active_category = EmojiMetadata.CATEGORY_ORDER[0] if EmojiMetadata.CATEGORY_ORDER else "Symbols"
 
         # Create main container
@@ -337,7 +365,9 @@ class AddProjectScreen(Screen):
 
         emoji_size = dp(60)
         emoji_spacing = dp(5)
+        # Szerokość okna dialogowego = 90% szerokości ekranu, minus marginesy
         available_width = Window.width * 0.9 - dp(20)
+        # Obliczamy ile emoji zmieści się obok siebie (minimum 3)
         cols = max(3, int(available_width / (emoji_size + emoji_spacing)))
         
         # GridLayout with dynamic columns
@@ -351,15 +381,18 @@ class AddProjectScreen(Screen):
         )
         self._emoji_grid.bind(minimum_height=self._emoji_grid.setter('height'))
         
+        # Wypełniamy siatkę emoji – pierwsze załadowanie (wszystkie emoji)
         self._populate_emoji_grid(self._filtered_emojis)
         
+        # Dwa puste Widgety po bokach – wyśrodkowują siatkę w poziomie
         grid_wrapper.add_widget(Widget(size_hint_x=1))
         grid_wrapper.add_widget(self._emoji_grid)
         grid_wrapper.add_widget(Widget(size_hint_x=1))
         scroll.add_widget(grid_wrapper)
         container.add_widget(scroll)
         
-        # Dialog with proper size
+        # Dialog z emoji – 95% szerokości ekranu, 700dp wysokości
+        # "type=custom" – używamy własnego układu zamiast standardowego
         self.emoji_dialog = MDDialog(
             title="Wybierz ikonę projektu",
             type="custom",
@@ -415,6 +448,7 @@ class AddProjectScreen(Screen):
     def _scroll_to_category(self, category):
         # Scroll do pierwszego emoji w podanej kategorii
         # Znajduje indeks pierwszego emoji w kategorii i scroll do niego
+        # Jeśli nie ma emoji – nie ma do czego scrollować
         if not self._filtered_emojis:
             return
         
@@ -425,6 +459,7 @@ class AddProjectScreen(Screen):
                 target_index = i
                 break
         
+        # Jeśli nie znaleziono emoji tej kategorii – nic nie robimy
         if target_index is None:
             return
         
@@ -440,8 +475,11 @@ class AddProjectScreen(Screen):
             # Normalize scroll_y: 1.0 = top, 0.0 = bottom
             total_height = self._emoji_grid.height
             view_height = self._emoji_scroll.height
+            # Scroll'ujemy tylko jeśli siatka jest wyższa niż widok
             if total_height > view_height:
+                # scroll_y = ile procent treści jest PONIŻEJ widoku
                 scroll_y = 1.0 - (y_offset / (total_height - view_height))
+                # Zabezpieczenie przed wartościami poza zakresem 0-1
                 scroll_y = max(0, min(1, scroll_y))
                 self._emoji_scroll.scroll_y = scroll_y
     
@@ -601,6 +639,9 @@ class AddProjectScreen(Screen):
         if not project_name:
             return
 
+        # Tworzymy słownik z danymi projektu do zapisania w pliku JSON
+        # "uid" – unikalny identyfikator (UUID), żeby odróżnić projekty
+        # "list(color)" – konwersja na zwykłą listę (JSON nie rozumie kolorów Kivy)
         project_data = {
             "uid": f"proj-{uuid.uuid4().hex}",
             "title": project_name,
@@ -624,6 +665,7 @@ class AddProjectScreen(Screen):
             json.dump(projects, f)
 
         # Dodaj kartę projektu na ekranie głównym
+        # 0.1 = 10% od lewej, 0.9 = 90% od dołu (pozycja domyślna)
         home_screen = app.root.get_screen('home')
         home_screen.add_project_card(
             project_name, self.selected_image_path, self.selected_icon,
@@ -631,6 +673,7 @@ class AddProjectScreen(Screen):
             uid=project_data["uid"],
         )
 
+        # Czyścimy formularz i wracamy do ekranu głównego
         self._clear_form()
         app.root.current = "home"
 

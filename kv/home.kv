@@ -1,7 +1,14 @@
 #:import utils kivy.utils
+# "utils" – narzędzia Kivy (np. zamiana kolorów z zapisu szesnastkowego na RGBA).
+
 #:import DotProgressBar screens.home.DotProgressBar
+# "DotProgressBar" – własny pasek postępu z kropek (zdefiniowany w screens/home.py).
+
 #:import ProjectCard screens.home.ProjectCard
+# "ProjectCard" – własna karta projektu (zdefiniowana w screens/home.py).
+
 #:import SessionCard screens.home.SessionCard
+# "SessionCard" – własna karta ostatniej sesji (zdefiniowana w screens/home.py).
 # Powyższe linie importują funkcje pomocnicze oraz własne elementy wizualne z kodu Pythona.
 
 # ---------------------------------------------------------------------------
@@ -15,7 +22,10 @@
 # "AnchorLayout" – umieszcza element w konkretnym punkcie (np. środek, lewy górny róg).
 
 <ClickableBoxLayout@ButtonBehavior+BoxLayout>:
+# "<ClickableBoxLayout>" – klikalne pudełko (ButtonBehavior + BoxLayout).
+
 <ClickableAnchorLayout@ButtonBehavior+AnchorLayout>:
+# "<ClickableAnchorLayout>" – klikalny obszar z pozycjonowaniem (ButtonBehavior + AnchorLayout).
 
 # ---------------------------------------------------------------------------
 # PASEK POSTĘPU Z KROPEK
@@ -25,8 +35,11 @@
 # Używane np. w onboardingowych ekranach wprowadzających.
 
 <DotProgressBar>:
+    # "<DotProgressBar>" – pasek postępu z kropek.
     size_hint_y: None
+    # "size_hint_y: None" – stała wysokość.
     height: dp(20)
+    # "height: dp(20)" – wysokość 20 pikseli.
 
 # ---------------------------------------------------------------------------
 # KARTA PROJEKTU (widoczna na ekranie głównym)
@@ -52,75 +65,121 @@
 # "shorten_from: right" – skracaj od prawej strony.
 
 <ProjectCard>:
+    # "<ProjectCard>" – karta projektu na ekranie głównym.
+
     size_hint: 0.4, None
+    # "size_hint: 0.4, None" – szerokość 40% rodzica, wysokość stała (obliczana poniżej).
     height: self.width * self.height_multiplier
+    # "height" – wysokość zależna od szerokości (proporcje karty).
+    # "height_multiplier" to mnożnik (np. 1.4 = wysokość 140% szerokości).
     radius: [dp(24), ]
+    # "radius: [dp(24)]" – zaokrąglenie rogów: 24 piksele.
     md_bg_color: root.card_color
+    # "md_bg_color" – kolor tła karty (z kodu Python).
     elevation: 2
+    # "elevation: 2" – cień pod kartą (2 = delikatny cień).
     padding: dp(10)
+    # "padding: dp(10)" – odstęp wewnętrzny: 10 pikseli ze wszystkich stron.
 
     # Przygotowanie do obracania karty (animacja podczas przeciągania)
     canvas.before:
         PushMatrix
+        # "PushMatrix" – zapamiętaj bieżące ustawienia graficzne (żeby przywrócić po obrocie).
         Rotate:
             angle: self.angle
+            # "angle: self.angle" – kąt obrotu karty (zmieniany podczas przeciągania).
             origin: self.center
+            # "origin: self.center" – obracaj wokół środka karty.
     canvas.after:
         PopMatrix
+        # "PopMatrix" – przywróć zapamiętane ustawienia graficzne.
 
     MDRelativeLayout:
+        # "MDRelativeLayout" – układ, w którym elementy mogą zachodzić na siebie.
 
         # Obrazek w tle karty (dopasowuje się do rozmiaru karty)
         FitImage:
+            # "FitImage" – obrazek dopasowujący się do rozmiaru karty.
             source: root.image_source
+            # "source: root.image_source" – ścieżka do zdjęcia projektu.
             size_hint: 1, 1
+            # "size_hint: 1, 1" – wypełnij całą kartę.
             pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+            # "pos_hint" – wyśrodkuj obrazek.
             fit_mode: "contain"
+            # "fit_mode: contain" – obrazek mieści się w całości (nie jest przycięty).
             radius: [dp(16), ]
+            # "radius: [dp(16)]" – zaokrąglenie rogów obrazka: 16 pikseli.
 
         # Panel z tytułem na dole karty
         # "pos_hint: {'center_x': 0.5, 'y': 0}" – wyśrodkowany w poziomie, doklejony do samego dołu karty.
         MDBoxLayout:
+            # "MDBoxLayout" – panel z tytułem na dole karty.
             size_hint: 1, None
+            # "size_hint: 1, None" – szerokość 100%, wysokość stała.
             height: dp(38)
+            # "height: dp(38)" – wysokość panelu 38 pikseli.
             pos_hint: {'center_x': 0.5, 'y': 0}
+            # "pos_hint" – wyśrodkowany w poziomie, przyklejony do dołu karty.
             padding: dp(8), 0
+            # "padding: dp(8), 0" – odstęp: 8 pikseli z lewej/prawej, 0 z góry/dołu.
             canvas.before:
+                # Rysujemy tło panelu PRZED tekstem.
                 Color:
                     rgba: root.card_color
+                    # Kolor tła = kolor karty.
                 RoundedRectangle:
                     pos: self.pos
                     size: self.size
                     radius: [dp(16), dp(16), dp(16), dp(16)]
+                    # "radius" – zaokrąglenie wszystkich czterech rogów po 16 pikseli.
 
             MDLabel:
+                # "MDLabel" – tytuł projektu na karcie.
                 text: root.title
+                # "text: root.title" – nazwa projektu.
                 font_style: root.title_font_style
+                # "font_style" – styl czcionki (np. "H6" – nagłówek).
                 bold: True
+                # "bold: True" – pogrubienie.
                 halign: "center"
+                # "halign: center" – wyśrodkuj w poziomie.
                 valign: "middle"
+                # "valign: middle" – wyśrodkuj w pionie.
                 theme_text_color: "Custom"
                 text_color: root.title_text_color
+                # "text_color" – kolor tytułu (dobierany automatycznie: biały lub czarny).
                 shorten: True
+                # "shorten: True" – skróć tytuł jeśli za długi (dodaj "...").
                 shorten_from: "right"
+                # "shorten_from: right" – skracaj od prawej strony.
 
         # Odznaka z emoji w prawym górnym rogu (przekręcona o -30°)
         # "pos_hint: {'right': 1.05, 'top': 1.25}" – emoji wystaje poza kartę:
         # 5% jej szerokości w prawo i 25% nad górną krawędź.
         MDIcon:
+            # "MDIcon" – emoji projektu (w prawym górnym rogu karty).
             icon: root.emoji_source
+            # "icon: root.emoji_source" – emoji lub ikona projektu.
             size_hint: None, None
+            # "size_hint: None, None" – stały rozmiar.
             size: root.emoji_size * 1.6, root.emoji_size * 1.6
+            # "size" – rozmiar emoji (1.6 raza większy niż standardowy).
             font_size: root.emoji_size * 1.6
             icon_size: root.emoji_size * 1.6
             pos_hint: {'right': root.effective_emoji_right_hint, 'top': 1.25}
+            # "pos_hint" – pozycja: emoji wystaje poza kartę (prawo i góra).
             theme_text_color: "Custom"
             text_color: (1, 1, 1, 1) if root.emoji_source.endswith('.png') else (1, 0.8, 0, 1)
+            # "text_color" – biały dla obrazków PNG, żółty dla ikon tekstowych.
             canvas.before:
+                # Obrót emoji o -30 stopni (przekrzywienie).
                 PushMatrix
                 Rotate:
                     angle: -30
+                    # "angle: -30" – obrót o -30 stopni (w lewo).
                     origin: self.center
+                    # "origin: self.center" – obracaj wokół środka emoji.
             canvas.after:
                 PopMatrix
 
@@ -137,26 +196,41 @@
 # była "wpuszczona" od góry.
 
 <SessionCard>:
+    # "<SessionCard>" – karta ostatniej sesji (ostatnio zakończonego pomiaru czasu).
+
     size_hint: 0.9, None
+    # "size_hint: 0.9, None" – szerokość 90% rodzica, wysokość stała.
     height: dp(129)
+    # "height: dp(129)" – wysokość karty 129 pikseli.
     radius: [dp(22), dp(22), dp(22), dp(22)]
+    # "radius" – zaokrąglenie wszystkich rogów po 22 piksele.
     md_bg_color: utils.get_color_from_hex(app.theme_session_header)
+    # "md_bg_color" – kolor tła z motywu aplikacji (jasny, górna część karty).
     elevation: 4
+    # "elevation: 4" – wyraźny cień (karta unosi się nad tłem).
     padding: [0, dp(12), 0, 0]
+    # "padding" – tylko odstęp od góry (12 pikseli), żeby wewnętrzna karta była "wpuszczona".
     orientation: "vertical"
+    # "orientation: vertical" – układaj zawartość pionowo.
     spacing: dp(8)
+    # "spacing: dp(8)" – odstęp między górnym paskiem a wewnętrzną kartą.
 
     # Górny pasek (jasny) z etykietą "Ostatnia sesja" i datą
     # "Caption" – styl czcionki: mała, opisowa (podpis).
     # "theme_text_color: Custom" – używamy własnego koloru, nie domyślnego.
     MDBoxLayout:
+        # "MDBoxLayout" – górny pasek: etykieta "Ostatnia sesja" po lewej, data po prawej.
         orientation: "horizontal"
+        # "orientation: horizontal" – elementy obok siebie.
         size_hint_y: None
         height: dp(22)
+        # "height: dp(22)" – wysokość paska 22 piksele.
         padding: [dp(14), 0, dp(14), 0]
+        # "padding" – odstęp: 14 pikseli z lewej i prawej, 0 z góry i dołu.
         spacing: dp(8)
 
         MDLabel:
+            # "MDLabel" – etykieta "Ostatnia sesja".
             text: "Ostatnia sesja"
             bold: True
             font_style: "Caption"
@@ -165,15 +239,19 @@
             valign: "middle"
             theme_text_color: "Custom"
             text_color: utils.get_color_from_hex(app.theme_text_dark)
+            # "text_color" – kolor tekstu z motywu (ciemny).
             size_hint_x: 1
             text_size: self.width, None
 
         MDLabel:
+            # "MDLabel" – data ostatniej sesji (np. "2 godz. temu").
             text: root.when_label if root.has_session else "—"
+            # "text" – jeśli jest sesja, pokaż kiedy była. Jeśli nie, pokaż "—".
             bold: True
             font_style: "Caption"
             font_size: sp(13)
             halign: "right"
+            # "halign: right" – wyrównaj do prawej.
             valign: "middle"
             theme_text_color: "Custom"
             text_color: utils.get_color_from_hex(app.theme_text_dark)
@@ -183,29 +261,38 @@
     # "elevation: 0" – wewnętrzna karta nie ma cienia (nie unosi się).
     # "FloatLayout" – elementy mogą swobodnie nachodzić na siebie.
     MDCard:
+        # "MDCard" – wewnętrzna karta z ciemnym tłem.
         orientation: "vertical"
         size_hint_x: 1
         size_hint_y: 1
         radius: [dp(22), dp(22), dp(22), dp(22)]
         md_bg_color: utils.get_color_from_hex(app.theme_session_bg)
+        # "md_bg_color" – kolor tła z motywu (ciemny, kontrastowy).
         elevation: 0
+        # "elevation: 0" – brak cienia (wewnętrzna karta nie unosi się).
         padding: [dp(14), dp(9), dp(14), dp(14)]
         spacing: dp(10)
 
         # Wiersz z nazwą projektu i emoji
         # Specjalny układ, który pozwala dowolnie pozycjonować elementy – tutaj umieszcza emoji dokładnie obok tekstu.
         FloatLayout:
+            # "FloatLayout" – układ swobodny: nazwa projektu i emoji mogą na siebie nachodzić.
             size_hint_x: 1
             size_hint_y: None
             height: dp(38)
+            # "height: dp(38)" – wysokość wiersza 38 pikseli.
 
             MDLabel:
+                # "MDLabel" – nazwa projektu ostatniej sesji.
                 id: session_project_title
+                # "id" – unikalna nazwa dla Pythona.
                 text: root.project_name if root.has_session else "Brak ostatniej sesji"
+                # "text" – jeśli jest sesja, pokaż nazwę projektu. Jeśli nie, pokaż "Brak ostatniej sesji".
                 font_style: "H6"
                 bold: True
                 font_size: sp(22)
                 halign: "right"
+                # "halign: right" – wyrównaj do prawej (żeby emoji było obok).
                 valign: "middle"
                 theme_text_color: "Custom"
                 text_color: 1, 1, 1, 1
@@ -215,26 +302,33 @@
                 text_size: self.width, None
                 shorten: True
                 shorten_from: "right"
+                # Skracaj od prawej, żeby nie nachodziło na emoji.
 
             MDIcon:
+                # "MDIcon" – emoji projektu.
                 id: session_project_icon
                 icon: root.emoji_source
                 theme_text_color: "Custom"
                 text_color: (1, 1, 1, 1) if root.emoji_source.endswith('.png') else (1, 0.8, 0, 1)
+                # Kolor: biały dla PNG, żółty dla ikon tekstowych.
                 icon_size: dp(26)
                 size_hint: None, None
                 size: dp(28), dp(28)
                 opacity: 1 if root.has_session else 0.45
+                # "opacity" – w pełni widoczne gdy jest sesja, przyciemnione gdy nie ma.
 
         # Czas trwania ostatniej sesji
         MDLabel:
+            # "MDLabel" – czas trwania (np. "0:45:30").
             text: root.duration_text if root.has_session else "Uruchom timer w projekcie"
+            # "text" – jeśli jest sesja, pokaż czas. Jeśli nie, wyświetl zachętę.
             halign: "right"
             valign: "middle"
             font_style: "Caption"
             font_size: sp(14)
             theme_text_color: "Custom"
             text_color: 1, 1, 1, 0.95 if root.has_session else 0.65
+            # "text_color" – biały (prawie nieprzezroczysty) gdy są dane, przyciemniony gdy brak.
             size_hint_x: 1
             size_hint_y: None
             height: dp(20)
@@ -242,6 +336,7 @@
             text_size: self.width, None
             shorten: True
             shorten_from: "left"
+            # "shorten_from: left" – skracaj od lewej (początek czasu jest ważniejszy).
 
 # ---------------------------------------------------------------------------
 # GŁÓWNY EKRAN – PULPIT (Home Screen)
@@ -259,30 +354,45 @@
 #----------------------------------------------------------------------------
 
 <HomeScreen>:
+    # "<HomeScreen>" – główny ekran aplikacji (pulpit).
+
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
+    # "md_bg_color" – kolor tła ekranu (z motywu aplikacji).
 
     MDBoxLayout:
+        # "MDBoxLayout" – główne pudełko układające zawartość pionowo.
         orientation: 'vertical'
         spacing: dp(10)
         
         # Odstęp na pasek stanu telefonu (bateria, godzina, zasięg)
         Widget:
+            # "Widget" – pusty element robiący miejsce na pasek stanu.
             size_hint_y: None
             height: dp(35) 
+            # "height: dp(35)" – standardowa wysokość paska stanu.
             
         MDFloatLayout:
+            # "MDFloatLayout" – nagłówek z nazwą aplikacji i przyciskiem układu.
             size_hint_y: None
             height: dp(70)
+            # "height: dp(70)" – wysokość nagłówka 70 pikseli.
+            
             # Po narysowaniu wszystkiego – dodaj białą linię pod nagłówkiem
             canvas.after:
+                # "canvas.after" – rysuj PO zawartości (na wierzchu).
                 Color:
                     rgba: 1, 1, 1, 1
+                    # Kolor biały.
                 Line:
+                    # "Line" – rysuje białą linię pod nagłówkiem.
                     points: [self.x, self.y, self.right, self.y]
+                    # "points" – punkty linii: od lewej krawędzi do prawej, na dole nagłówka.
                     width: dp(1.5)
+                    # "width: dp(1.5)" – grubość linii: 1.5 piksela.
             
             # Nazwa aplikacji – wyśrodkowana
             MDLabel:
+                # "MDLabel" – tytuł aplikacji "JUST DO IT".
                 text: "JUST DO IT"
                 font_style: "H4"
                 bold: True
@@ -295,15 +405,21 @@
             # "MDIconButton" – okrągły przycisk z ikoną.
             # Kolor zmienia się na żółty gdy siatka jest włączona.
             MDIconButton:
+                # "MDIconButton" – przycisk przełączania układu (siatka/swobodny).
                 icon: "view-grid"
+                # "icon: view-grid" – ikona siatki.
                 pos_hint: {'right': 0.98, 'center_y': 0.5}
+                # "pos_hint" – pozycja: prawa strona (98%), wyśrodkowany w pionie.
                 theme_text_color: "Custom"
                 text_color: (1, 1, 0, 1) if app.grid_layout else (1, 1, 1, 1)
+                # "text_color" – żółty gdy siatka włączona, biały gdy wyłączona.
                 on_release: app.toggle_layout_menu()
+                # "on_release" – po kliknięciu przełącz układ (siatka/swobodny).
 
         # Karta ostatniej sesji (stała – nie przewija się)
         # "pos_hint: {'center_x': 0.5}" – wyśrodkowana w poziomie.
         SessionCard:
+            # "SessionCard" – karta ostatniej sesji.
             id: last_session_card
             pos_hint: {'center_x': 0.5}
 
@@ -311,13 +427,17 @@
         # "ScrollView" – kontener przewijany w pionie.
         # "MDFloatLayout" – wewnątrz, aby karty można było swobodnie pozycjonować.
         ScrollView:
+            # "ScrollView" – przewijana lista projektów.
             do_scroll_x: False
             bar_width: 0
 
             MDFloatLayout:
+                # "MDFloatLayout" – pojemnik na karty projektów.
                 id: projects_container
+                # "id: projects_container" – unikalna nazwa dla Pythona (dodaje karty tutaj).
                 size_hint_y: None
                 height: dp(1)
+                # "height: dp(1)" – tymczasowa wysokość (Python zmieni ją gdy doda karty).
                
     # -----------------------------------------------------------------------
     # DOLNY PASEK NAWIGACYJNY (z przyciskami)
@@ -329,24 +449,30 @@
     # "pos_hint: {'center_x': 0.5, 'y': 0}" – wyśrodkowany, przylegający do dołu.
     
     MDFloatLayout:
+        # "MDFloatLayout" – dolny pasek nawigacyjny.
         size_hint: 1, None
+        # "size_hint: 1, None" – szerokość 100%, wysokość stała.
         height: dp(60)
+        # "height: dp(60)" – wysokość paska 60 pikseli.
         pos_hint: {'center_x': 0.5, 'y': 0}
+        # "pos_hint" – wyśrodkowany w poziomie, przylegający do dołu.
         
         # Główny pasek – biały, z zaokrąglonymi górnymi rogami
         # "radius: [dp(25), dp(25), 0, 0]" – tylko górne rogi zaokrąglone.
         # Dzięki temu pasek wygląda jak "wyspa" przyklejona do dołu.
         MDCard:
+            # "MDCard" – biała karta paska nawigacyjnego.
             size_hint: 1, 1
             pos_hint: {'x': 0, 'y': 0}
             radius: [0, 0, 0, 0]
+            # "radius: [0, 0, 0, 0]" – brak zaokrąglenia (proste krawędzie).
             elevation: 4
             md_bg_color: 1, 1, 1, 1
             
             MDBoxLayout:
-                # Trzy kolumny: lewa (dom), środkowa (pusta), prawa (wykres)
-                # "AnchorLayout" – umieszcza ikonę na środku każdej kolumny.
+                # "MDBoxLayout" – trzy kolumny: dom, pusto, wykres.
                 AnchorLayout:
+                    # "AnchorLayout" – ikona domku na środku kolumny.
                     anchor_x: 'center'
                     anchor_y: 'center'
                     MDIconButton:
@@ -354,14 +480,17 @@
                         icon_size: dp(30)
 
                 Widget:
+                    # "Widget" – pusty odstępnik (miejsce pod przycisk "+").
 
                 AnchorLayout:
+                    # "AnchorLayout" – ikona statystyk na środku kolumny.
                     anchor_x: 'center'
                     anchor_y: 'center'
                     MDIconButton:
                         icon: "chart-arc"
                         icon_size: dp(30)
                         on_release: app.root.current = "statistics"
+                        # Po kliknięciu przełącz na ekran statystyk.
 
         # Unoszący się przycisk "+" (dodawanie projektu)
         # "size: dp(120), dp(56)" – szeroki, niski prostokąt.
@@ -369,11 +498,16 @@
         # 67% wysokości od dołu (unosi się nad paskiem).
         # Tło przycisku: fioletowy prostokąt z zaokrąglonymi rogami.
         ClickableAnchorLayout:
+            # "ClickableAnchorLayout" – przycisk "+" do dodawania projektu.
             size_hint: None, None
             size: dp(120), dp(56)
+            # "size: dp(120), dp(56)" – szeroki przycisk 120x56 pikseli.
             pos_hint: {'center_x': 0.5, 'center_y': 0.67}
+            # "pos_hint" – wyśrodkowany, 67% od dołu (unosi się nad paskiem).
             on_release: app.root.current = "add_project"
+            # Po kliknięciu przełącz na ekran dodawania projektu.
             canvas.before:
+                # Rysujemy fioletowe tło przycisku.
                 Color:
                     rgba: utils.get_color_from_hex(app.theme_card_bg)
                 RoundedRectangle:
@@ -382,6 +516,7 @@
                     radius: [dp(18)]
             
             Label:
+                # "Label" – znak "+".
                 text: "+"
                 bold: True
                 font_size: dp(48)

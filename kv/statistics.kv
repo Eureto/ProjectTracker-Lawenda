@@ -1,7 +1,14 @@
 #:import utils kivy.utils
+# "utils" – narzędzia Kivy, np. do zamiany kolorów z zapisu szesnastkowego na RGBA.
+
 #:import PieChart screens.statistics.PieChart
+# "PieChart" – własny element: wykres kołowy, zdefiniowany w pliku screens/statistics.py.
+
 #:import PeriodSegmentButton screens.statistics.PeriodSegmentButton
+# "PeriodSegmentButton" – własny przycisk wyboru okresu (miesiąc/tydzień/dzień).
+
 #:import StatisticsDetailRow screens.statistics.StatisticsDetailRow
+# "StatisticsDetailRow" – własny wiersz w tabeli statystyk (projekt + czas).
 
 # ---------------------------------------------------------------------------
 # WIERSZ SZCZEGÓŁOWY W STATYSTYKACH – jeden projekt w tabeli
@@ -14,48 +21,87 @@
 # "shorten: True, shorten_from: right" – skróć nazwę projektu jeśli za długa.
 
 <StatisticsDetailRow>:
+    # Definicja wiersza statystyk. Pokazuje: ikonę, nazwę projektu, kolorową kropkę i czas.
+
     MDBoxLayout:
+        # "MDBoxLayout" – pudełko układające elementy w poziomie.
         orientation: "horizontal"
+        # "orientation: horizontal" – układaj elementy obok siebie (w poziomie).
         spacing: dp(8)
+        # "spacing: dp(8)" – odstęp między elementami: 8 pikseli.
         size_hint_x: 1
+        # "size_hint_x: 1" – zajmij całą dostępną szerokość (100%).
         padding: [dp(10), 0, 0, 0]
+        # "padding" – odstęp wewnętrzny: 10 pikseli z lewej strony.
 
         # Ikona projektu (emoji lub standardowa ikona)
         MDIcon:
+            # "MDIcon" – ikona Material Design.
             icon: root.icon_name
+            # "icon: root.icon_name" – nazwa ikony pochodzi z kodu Python (właściwość "icon_name").
             theme_text_color: "Custom"
+            # "theme_text_color: Custom" – używamy własnego koloru.
             text_color: root.icon_rgba
+            # "text_color: root.icon_rgba" – kolor ikony pochodzi z Pythona (ustalany dynamicznie).
             size_hint: None, None
+            # "size_hint: None, None" – stały rozmiar.
             size: dp(28), dp(28)
+            # "size: dp(28), dp(28)" – rozmiar ikony: 28x28 pikseli.
             pos_hint: {"center_y": 0.5}
+            # "pos_hint" – pozycjonowanie: {"center_y": 0.5} – wyśrodkuj w pionie.
             padding: [0,0,10,0]
+            # "padding" – 10 pikseli odstępu z prawej strony ikony.
         # Nazwa projektu – zajmuje całą dostępną szerokość
         MDLabel:
+            # "MDLabel" – etykieta tekstowa z biblioteki Material Design.
             text: root.project_name
+            # "text: root.project_name" – wyświetl nazwę projektu (z kodu Python).
             theme_text_color: "Custom"
+            # "theme_text_color: Custom" – własny kolor.
             text_color: 1, 1, 1, 1
+            # "text_color: 1, 1, 1, 1" – biały kolor tekstu.
             valign: "middle"
+            # "valign: middle" – wyśrodkuj tekst w pionie.
             shorten: True
+            # "shorten: True" – jeśli tekst jest za długi, skróć go (dodaj "...").
             shorten_from: "right"
+            # "shorten_from: right" – skracaj od prawej strony (początek nazwy pozostaje widoczny).
             size_hint_x: 1
+            # "size_hint_x: 1" – zajmij całe dostępne miejsce w poziomie.
     # Kolorowa kropka – odpowiada segmentowi wykresu kołowego
     AnchorLayout:
+        # "AnchorLayout" – umieszcza kropkę na środku.
         size_hint_x: 1
+        # "size_hint_x: 1" – zajmij całą dostępną szerokość.
         anchor_x: "center"
+        # "anchor_x: center" – wyśrodkuj w poziomie.
         anchor_y: "center"
+        # "anchor_y: center" – wyśrodkuj w pionie.
         Widget:
+            # "Widget" – pusty element. Tutaj używamy go jako kolorowej kropki.
             id: segment_dot
+            # "id: segment_dot" – unikalna nazwa, żeby Python mógł zmienić kolor tej kropki.
             size_hint: None, None
+            # "size_hint: None, None" – stały rozmiar.
             size: dp(20), dp(20)
+            # "size: dp(20), dp(20)" – rozmiar kropki: 20x20 pikseli.
     # Czas spędzony na projekcie (np. "1:30:00")
     MDLabel:
+        # "MDLabel" – etykieta do wyświetlania czasu.
         text: root.time_text
+        # "text: root.time_text" – czas trwania (np. "2:15:30" = 2 godziny, 15 minut, 30 sekund).
         theme_text_color: "Custom"
+        # "theme_text_color: Custom" – własny kolor.
         text_color: 1, 1, 1, 1
+        # "text_color: 1, 1, 1, 1" – biały kolor.
         size_hint_x: None
+        # "size_hint_x: None" – stała szerokość (nie procentowa).
         width: dp(76)
+        # "width: dp(76)" – stała szerokość 76 pikseli (żeby wszystkie czasy były ładnie wyrównane).
         halign: "right"
+        # "halign: right" – wyrównaj tekst do prawej.
         valign: "middle"
+        # "valign: middle" – wyśrodkuj w pionie.
 
 # ---------------------------------------------------------------------------
 # EKRAN STATYSTYK
@@ -68,34 +114,54 @@
 # "padding: [dp(12), dp(2), dp(12), dp(12)]" – marginesy wokół zawartości.
 
 <StatisticsScreen>:
+    # Definicja ekranu statystyk.
+
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
+    # "md_bg_color" – kolor tła ekranu (Material Design). Pobierany z motywu aplikacji ("app.theme_bg").
 
     MDBoxLayout:
+        # "MDBoxLayout" – główne pudełko układające zawartość pionowo.
         orientation: 'vertical'
+        # "orientation: vertical" – układaj elementy jeden pod drugim.
         spacing: dp(10)
+        # "spacing: dp(10)" – odstęp między sekcjami: 10 pikseli.
 
         # Odstęp na pasek stanu telefonu (bateria, godzina, zasięg)
         Widget:
+            # "Widget" – pusty element, który robi miejsce na pasek stanu telefonu.
             size_hint_y: None
+            # "size_hint_y: None" – stała wysokość.
             height: dp(35)
+            # "height: dp(35)" – wysokość 35 pikseli (standardowa wysokość paska stanu).
 
         # "ScrollView" – przewijana zawartość (gdy jest więcej projektów).
         # "do_scroll_x: False" – tylko przewijanie w pionie.
         # "bar_width: 0" – ukryj pasek przewijania.
         ScrollView:
+            # "ScrollView" – kontener przewijany palcem (góra-dół).
             do_scroll_x: False
+            # "do_scroll_x: False" – tylko przewijanie w pionie.
             bar_width: 0
+            # "bar_width: 0" – ukryj pasek przewijania (czystszy wygląd).
             padding: 0, 0, 0, 0
+            # "padding: 0, 0, 0, 0" – brak odstępu wewnętrznego.
 
             # "GridLayout" – układa elementy w siatkę (tutaj 1 kolumna).
             # "height: self.minimum_height" – wysokość dopasowuje się do zawartości.
             GridLayout:
+                # "GridLayout" – siatka, tutaj z 1 kolumną (elementy układają się pionowo).
                 id: stats_scroll_content
+                # "id" – unikalna nazwa, żeby Python mógł dodawać/usować elementy z tej siatki.
                 cols: 1
+                # "cols: 1" – jedna kolumna (wszystkie elementy jeden pod drugim).
                 spacing: dp(16)
+                # "spacing: dp(16)" – odstęp między elementami siatki: 16 pikseli.
                 padding: [dp(12), dp(2), dp(12), dp(12)]
+                # "padding" – odstęp od krawędzi: [lewy 12, górny 2, prawy 12, dolny 12].
                 size_hint_y: None
+                # "size_hint_y: None" – wysokość dopasowuje się do zawartości.
                 height: self.minimum_height
+                # "height: self.minimum_height" – wysokość taka, jaka wynika z liczby elementów w środku.
 
                 # ── Wybór okresu: trzy przyciski (miesiąc / tydzień / dzień) ──
                 # Kliknięty przycisk staje się biały, pozostałe są przezroczyste.
@@ -104,29 +170,50 @@
                 # "elevation: 0" – brak cienia (karta nie unosi się).
                 # "padding: dp(4)" – odstęp wewnętrzny 4dp.
                 MDCard:
+                    # "MDCard" – karta z biblioteki Material Design (KivyMD).
                     size_hint_x: 1
+                    # "size_hint_x: 1" – zajmij całą dostępną szerokość.
                     size_hint_y: None
+                    # "size_hint_y: None" – stała wysokość.
                     height: dp(136)
+                    # "height: dp(136)" – wysokość karty: 136 pikseli (mieści 3 przyciski).
                     radius: [dp(25), ]
+                    # "radius: [dp(25)]" – zaokrąglenie rogów: 25 pikseli (wszystkie rogi jednakowo).
                     md_bg_color: 0.8, 0.8, 0.8, 0.5
+                    # "md_bg_color" – kolor tła: szary, półprzezroczysty (0.5 = 50% przezroczystości).
                     padding: dp(4)
+                    # "padding: dp(4)" – odstęp wewnętrzny: 4 piksele (mała ramka wokół przycisków).
                     elevation: 0
+                    # "elevation: 0" – brak cienia (karta nie unosi się nad tłem).
 
                     # "MDBoxLayout orientation: vertical" – trzy przyciski
                     # ułożone pionowo jeden pod drugim.
                     # "spacing: dp(4)" – małe odstępy między przyciskami.
                     MDBoxLayout:
+                        # "MDBoxLayout" – pudełko układające przyciski pionowo.
                         orientation: 'vertical'
+                        # "orientation: vertical" – układaj przyciski jeden pod drugim.
                         spacing: dp(4)
+                        # "spacing: dp(4)" – odstęp między przyciskami: 4 piksele.
                         size_hint_x: 1
+                        # "size_hint_x: 1" – zajmij całą szerokość karty.
 
                         PeriodSegmentButton:
+                            # "PeriodSegmentButton" – własny przycisk wyboru okresu.
                             text: "Miesiąc"
+                            # "text: Miesiąc" – etykieta przycisku (wyświetlany tekst).
                             selected: root.selected_period == "Miesiąc"
+                            # "selected" – czy ten przycisk jest wybrany? Sprawdza, czy w Pythonie
+                            # "root.selected_period" to "Miesiąc". Jeśli tak, przycisk jest podświetlony.
                             on_release: root.set_period("Miesiąc")
+                            # "on_release" – po kliknięciu wywołaj "set_period('Miesiąc')" w Pythonie.
                             halign: "center"
+                            # "halign: center" – wyśrodkuj tekst w poziomie.
                             valign: "middle"
+                            # "valign: middle" – wyśrodkuj tekst w pionie.
                             font_size: dp(15)
+                            # "font_size: dp(15)" – rozmiar czcionki 15 pikseli.
+
                         PeriodSegmentButton:
                             text: "Tydzień"
                             selected: root.selected_period == "Tydzień"
@@ -134,6 +221,7 @@
                             halign: "center"
                             valign: "middle"
                             font_size: dp(15)
+
                         PeriodSegmentButton:
                             text: "Dzień"
                             selected: root.selected_period == "Dzień"
@@ -145,181 +233,301 @@
                 # Łączny czas wszystkich projektów w wybranym okresie
                 # "halign: right" – wyrównany do prawej strony.
                 MDLabel:
+                    # "MDLabel" – etykieta wyświetlająca sumaryczny czas.
                     text: root.total_time_text
+                    # "text: root.total_time_text" – łączny czas (z kodu Python, np. "3:45:00").
                     halign: "right"
+                    # "halign: right" – wyrównaj tekst do prawej strony.
                     theme_text_color: "Custom"
+                    # "theme_text_color: Custom" – własny kolor.
                     text_color: 1, 1, 1, 1
+                    # "text_color: 1, 1, 1, 1" – biały kolor.
                     size_hint_y: None
+                    # "size_hint_y: None" – stała wysokość.
                     height: dp(22)
+                    # "height: dp(22)" – wysokość 22 piksele.
 
                 # ── Wykres kołowy z podpisem ──
                 # "AnchorLayout" – wyśrodkowuje całą sekcję.
                 # "height policzona jako: 220 (wykres) + 12 (spacing) + 52 (podpis)".
                 AnchorLayout:
+                    # "AnchorLayout" – umieszcza wykres i podpis na środku.
                     size_hint_y: None
+                    # "size_hint_y: None" – stała wysokość.
                     height: dp(220) + dp(12) + dp(52)
+                    # "height" – wysokość całej sekcji: 220 (wykres) + 12 (odstęp) + 52 (podpis) = 284 piksele.
 
                     # "MDBoxLayout" – wykres nad podpisem.
                     # "size_hint: None, None" – stały rozmiar.
                     MDBoxLayout:
+                        # "MDBoxLayout" – pudełko układające wykres i podpis pionowo.
                         orientation: 'vertical'
+                        # "orientation: vertical" – wykres nad podpisem.
                         spacing: dp(12)
+                        # "spacing: dp(12)" – odstęp między wykresem a podpisem: 12 pikseli.
                         size_hint: None, None
+                        # "size_hint: None, None" – stały rozmiar (nie procentowy).
                         width: dp(260)
+                        # "width: dp(260)" – szerokość 260 pikseli.
                         height: dp(220) + dp(12) + dp(52)
+                        # "height" – taka sama jak rodzic: 284 piksele.
 
                         # "PieChart" – własny wykres kołowy stworzony specjalnie dla tej aplikacji.
                         # "opacity: 1 if root.has_data else 0.25" – przyciemniony
                         # gdy brak danych.
                         PieChart:
+                            # "PieChart" – własny wykres kołowy (zdefiniowany w statistics.py).
                             id: pie_chart
+                            # "id: pie_chart" – unikalna nazwa, żeby Python mógł aktualizować dane wykresu.
                             size_hint: None, None
+                            # "size_hint: None, None" – stały rozmiar.
                             size: dp(220), dp(220)
+                            # "size: dp(220), dp(220)" – kwadratowy wykres 220x220 pikseli.
                             pos_hint: {"center_x": .5}
+                            # "pos_hint" – wyśrodkuj wykres w poziomie.
                             opacity: 1 if root.has_data else 0.25
+                            # "opacity" – przezroczystość: 1 = w pełni widoczny (są dane),
+                            # 0.25 = przyciemniony (brak danych, ale widać zarys).
 
                         # Podpis pod wykresem – zmienia się gdy brak danych
                         # "text_size: dp(250), None" – ogranicza szerokość tekstu.
                         # "shorten: True, shorten_from: right" – skraca jeśli za długi.
                         MDLabel:
+                            # "MDLabel" – etykieta z podpisem pod wykresem.
                             text: root.empty_hint_text if not root.has_data else "Łączny czas spędzony na projektach"
+                            # "text" – jeśli brak danych, pokaż tekst zachęty (z Pythona).
+                            # Jeśli są dane, pokaż "Łączny czas spędzony na projektach".
                             halign: "center"
+                            # "halign: center" – wyśrodkuj tekst w poziomie.
                             valign: "middle"
+                            # "valign: middle" – wyśrodkuj tekst w pionie.
                             theme_text_color: "Custom"
+                            # "theme_text_color: Custom" – własny kolor.
                             text_color: 1, 1, 1, 0.95
+                            # "text_color: 1, 1, 1, 0.95" – biały, prawie nieprzezroczysty.
                             size_hint_y: None
+                            # "size_hint_y: None" – stała wysokość.
                             height: dp(48)
+                            # "height: dp(48)" – wysokość 48 pikseli.
                             text_size: dp(250), None
+                            # "text_size: dp(250), None" – ogranicz szerokość tekstu do 250 pikseli.
                             shorten: True
+                            # "shorten: True" – skróć tekst jeśli za długi (dodaj "...").
                             shorten_from: "right"
+                            # "shorten_from: right" – skracaj od prawej strony.
 
                 # ── Szczegółowa tabela projektów ──
                 # "MDCard" z "md_bg_color: 0.65, 0.45, 0.9, 1" – fioletowe tło.
                 # "elevation: 0" – brak cienia.
                 # "spacing: dp(10)" – odstępy między wierszami.
                 MDCard:
+                    # "MDCard" – karta z fioletowym tłem, zawierająca tabelę projektów.
                     id: stats_card
+                    # "id: stats_card" – unikalna nazwa, żeby Python mógł zmieniać wysokość karty.
                     size_hint_y: None
+                    # "size_hint_y: None" – stała wysokość.
                     height: root.stats_card_height
+                    # "height: root.stats_card_height" – wysokość zależna od liczby projektów (ustalana w Pythonie).
                     radius: [dp(20)]
+                    # "radius: [dp(20)]" – zaokrąglenie rogów: 20 pikseli.
                     md_bg_color: 0.65, 0.45, 0.9, 1
+                    # "md_bg_color" – kolor tła: fioletowy (0.65 czerwony, 0.45 zielony, 0.9 niebieski).
                     padding: dp(20), dp(24), dp(20), dp(14)
+                    # "padding" – odstęp wewnętrzny: [lewy 20, górny 24, prawy 20, dolny 14].
                     spacing: dp(10)
+                    # "spacing: dp(10)" – odstęp między sekcjami wewnątrz karty.
                     orientation: 'vertical'
+                    # "orientation: vertical" – układaj zawartość pionowo.
                     elevation: 0
+                    # "elevation: 0" – brak cienia (karta nie unosi się).
 
                     # Nagłówek tabeli: "Projekt" i "Czas"
                     # "MDBoxLayout orientation: horizontal" – nagłówek w poziomie.
                     # Trzy kolumny: lewa (Projekt), środkowa (pusta), prawa (Czas).
                     MDBoxLayout:
+                        # "MDBoxLayout" – wiersz nagłówka tabeli (poziomy).
                         orientation: 'horizontal'
+                        # "orientation: horizontal" – elementy obok siebie.
                         size_hint_y: None
+                        # "size_hint_y: None" – stała wysokość.
                         height: dp(42)
+                        # "height: dp(42)" – wysokość nagłówka 42 piksele.
                         spacing: dp(6)
+                        # "spacing: dp(6)" – odstęp między kolumnami: 6 pikseli.
 
                         MDLabel:
+                            # "MDLabel" – nagłówek kolumny "Projekt".
                             text: "Projekt"
+                            # "text: Projekt" – etykieta nagłówka.
                             font_size: sp(24)
+                            # "font_size: sp(24)" – duża czcionka 24 piksele skalowalne.
                             bold: True
+                            # "bold: True" – pogrubienie.
                             theme_text_color: "Custom"
+                            # "theme_text_color: Custom" – własny kolor.
                             text_color: 1, 1, 1, 0.85
+                            # "text_color: 1, 1, 1, 0.85" – biały, lekko przezroczysty.
                             size_hint_x: 1
+                            # "size_hint_x: 1" – zajmij 1 część dostępnej szerokości.
                             halign: "left"
+                            # "halign: left" – wyrównaj do lewej.
                             valign: "middle"
+                            # "valign: middle" – wyśrodkuj w pionie.
                         # Pusta kolumna – dla zachowania proporcji
                         MDLabel:
+                            # "MDLabel" – pusta kolumna (wypełniacz między "Projekt" a "Czas").
                             text: ""
+                            # "text: '''" – pusty tekst (niewidoczny, tylko zajmuje miejsce).
                             size_hint_x: 1
+                            # "size_hint_x: 1" – zajmij 1 część szerokości (taka sama jak "Projekt" i "Czas").
                         MDLabel:
+                            # "MDLabel" – nagłówek kolumny "Czas".
                             text: "Czas"
+                            # "text: Czas" – etykieta nagłówka.
                             font_size: sp(24)
                             bold: True
                             theme_text_color: "Custom"
                             text_color: 1, 1, 1, 0.85
                             size_hint_x: 1
                             halign: "right"
+                            # "halign: right" – wyrównaj do prawej.
                             valign: "middle"
 
                     # Miejsce na wiersze z projektami (wypełniane z kodu Python)
                     # "height: self.minimum_height" – wysokość dopasowuje się
                     # do liczby wierszy.
                     MDBoxLayout:
+                        # "MDBoxLayout" – pojemnik na wiersze projektów (wypełniany przez Python).
                         id: stats_rows_container
+                        # "id" – unikalna nazwa, żeby Python mógł dodawać/usować wiersze.
                         orientation: "vertical"
+                        # "orientation: vertical" – wiersze jeden pod drugim.
                         spacing: dp(10)
+                        # "spacing: dp(10)" – odstęp między wierszami.
                         size_hint_y: None
+                        # "size_hint_y: None" – wysokość dopasowuje się do liczby wierszy.
                         height: self.minimum_height
+                        # "height: self.minimum_height" – wysokość = suma wysokości wszystkich wierszy.
 
                     # Komunikat gdy brak danych – widoczny tylko gdy nie ma danych
                     # "opacity: 0 if root.has_data else 1" – znika gdy są dane.
                     MDLabel:
+                        # "MDLabel" – komunikat wyświetlany gdy brak danych.
                         text: "Brak danych — zatrzymaj timer w projekcie, aby dodać czas."
+                        # "text" – tekst zachęty do dodania danych.
                         opacity: 0 if root.has_data else 1
+                        # "opacity" – przezroczystość: 0 = niewidoczny (są dane), 1 = widoczny (brak danych).
                         halign: "center"
+                        # "halign: center" – wyśrodkuj tekst.
                         theme_text_color: "Custom"
                         text_color: 1, 1, 1, 0.75
+                        # "text_color: 1, 1, 1, 0.75" – biały, lekko przezroczysty.
                         font_size: sp(13)
+                        # "font_size: sp(13)" – mała czcionka.
                         size_hint_y: None
                         height: dp(48) if not root.has_data else 0
+                        # "height" – 48 pikseli gdy brak danych, 0 gdy są (niewidoczny).
                         text_size: self.width, None
+                        # "text_size" – ogranicz szerokość tekstu do szerokości etykiety.
 
         # ── Dolny pasek nawigacyjny (taki sam jak na ekranie głównym) ──
         # "MDFloatLayout" umieszczony na dole.
         # "height: dp(60)" – stała wysokość.
         MDFloatLayout:
+            # "MDFloatLayout" – układ swobodny, umieszcza pasek na dole ekranu.
             size_hint: 1, None
+            # "size_hint: 1, None" – szerokość 100%, wysokość stała.
             height: dp(60)
+            # "height: dp(60)" – wysokość paska 60 pikseli.
 
             # Główna karta paska – biała, zaokrąglona tylko u góry
             MDCard:
+                # "MDCard" – biała karta paska nawigacyjnego.
                 size_hint: 1, 1
+                # "size_hint: 1, 1" – wypełnij cały MDFloatLayout.
                 pos_hint: {'x': 0, 'y': 0}
+                # "pos_hint" – pozycja: lewy-dolny róg (x=0, y=0).
                 radius: [0, 0, 0, 0]
+                # "radius: [0, 0, 0, 0]" – brak zaokrąglenia rogów (proste krawędzie).
                 elevation: 4
+                # "elevation: 4" – wysoki cień (karta unosi się nad tłem).
                 md_bg_color: 1, 1, 1, 1
+                # "md_bg_color: 1, 1, 1, 1" – biały kolor tła.
 
                 # Trzy kolumny: dom, pusto, statystyki (aktywna)
                 MDBoxLayout:
+                    # "MDBoxLayout" – układ poziomy z trzema sekcjami.
                     AnchorLayout:
+                        # "AnchorLayout" – umieszcza ikonę domu na środku kolumny.
                         anchor_x: 'center'
+                        # "anchor_x: center" – wyśrodkuj w poziomie.
                         anchor_y: 'center'
+                        # "anchor_y: center" – wyśrodkuj w pionie.
                         MDIconButton:
+                            # "MDIconButton" – okrągły przycisk z ikoną domku.
                             icon: "home-outline"
+                            # "icon: home-outline" – ikona domu (przejście do ekranu głównego).
                             icon_size: dp(30)
+                            # "icon_size: dp(30)" – rozmiar ikony 30 pikseli.
                             on_release: app.root.current = "home"
+                            # "on_release" – po kliknięciu przełącz na ekran główny.
 
                     Widget:
+                        # "Widget" – pusty odstępnik między ikonami.
 
                     AnchorLayout:
+                        # "AnchorLayout" – umieszcza ikonę statystyk na środku kolumny.
                         anchor_x: 'center'
                         anchor_y: 'center'
                         MDIconButton:
                             icon: "chart-arc"
+                            # "icon: chart-arc" – ikona wykresu kołowego (statystyki).
                             icon_size: dp(30)
                             on_release: app.root.current = "statistics"
+                            # Po kliknięciu przełącz na ekran statystyk.
 
             # Unoszący się przycisk "+" do dodawania projektu
             # "size: dp(120), dp(56)" – szeroki przycisk.
             # "pos_hint: {'center_x': 0.5, 'center_y': 0.67}" – 67% od dołu.
             ClickableAnchorLayout:
+                # "ClickableAnchorLayout" – klikalny przycisk "+" unoszący się nad paskiem.
                 size_hint: None, None
+                # "size_hint: None, None" – stały rozmiar.
                 size: dp(120), dp(56)
+                # "size: dp(120), dp(56)" – szeroki przycisk (120x56 pikseli).
                 pos_hint: {'center_x': 0.5, 'center_y': 0.67}
+                # "pos_hint" – pozycja: wyśrodkowany w poziomie, 67% od dołu (unosi się nad paskiem).
                 on_release: app.root.current = "add_project"
+                # "on_release" – po kliknięciu przełącz na ekran dodawania projektu.
                 canvas.before:
+                    # Rysujemy fioletowe tło przycisku PRZED tekstem.
                     Color:
                         rgba: utils.get_color_from_hex(app.theme_card_bg)
+                        # Kolor tła z motywu aplikacji (fioletowy).
                     RoundedRectangle:
+                        # "RoundedRectangle" – zaokrąglony prostokąt.
                         pos: self.pos
+                        # "pos: self.pos" – pozycja = pozycja przycisku.
                         size: self.size
+                        # "size: self.size" – rozmiar = rozmiar przycisku.
                         radius: [dp(18)]
+                        # "radius: [dp(18)]" – zaokrąglenie rogów: 18 pikseli.
 
                 Label:
+                    # "Label" – znak "+" na przycisku.
                     text: "+"
+                    # "text: +" – symbol dodawania.
                     bold: True
+                    # "bold: True" – pogrubienie.
                     font_size: dp(48)
+                    # "font_size: dp(48)" – duża czcionka.
                     color: 1, 1, 1, 1
+                    # "color: 1, 1, 1, 1" – biały kolor.
                     halign: "center"
+                    # "halign: center" – wyśrodkuj w poziomie.
                     valign: "middle"
+                    # "valign: middle" – wyśrodkuj w pionie.
                     size_hint: None, None
+                    # "size_hint: None, None" – stały rozmiar.
                     pos_hint: {"center_x": 0.5, "center_y": 0.5}
+                    # "pos_hint" – wyśrodkuj wewnątrz przycisku.
