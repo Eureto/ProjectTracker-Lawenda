@@ -2168,7 +2168,7 @@ class ProjectInfoScreen(MDScreen):
         s = self._timer_elapsed_seconds
         h, r = divmod(s, 3600)
         m, sec = divmod(r, 60)
-        self.timer_display = f"{h:02d}:{m:02d}:{sec:02d}"
+        self.timer_display = f"{int(h):02d}:{int(m):02d}:{int(sec):02d}"
 
     # Zapisuje zakonczona sesje czasowa i zeruje dane biezacego pomiaru.
     def _finish_timer_run(self):
