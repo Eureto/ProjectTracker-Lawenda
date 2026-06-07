@@ -8,38 +8,70 @@
 # ---------------------------------------------------------------------------
 
 import os
+# Operacje na plikach i ścieżkach (np. łączenie ścieżek, sprawdzanie czy plik istnieje)
 import json
+# Odczyt i zapis danych w formacie JSON (do przechowywania projektów)
 import unicodedata
+# Nazwy znaków Unicode – potrzebne do kategoryzacji emoji
 import uuid
+# Generowanie unikalnego identyfikatora (UID) dla każdego nowego projektu
 from kivy.properties import StringProperty, ColorProperty, NumericProperty, ObjectProperty, ListProperty
+# Właściwości Kivy – automatycznie odświeżają interfejs gdy zmieni się wartość
 from kivy.uix.screenmanager import Screen
+# Klasa bazowa dla ekranów aplikacji (np. ekran dodawania projektu)
 from kivymd.uix.dialog import MDDialog
+# Okno dialogowe z materiałowym wyglądem (używane np. do wyboru emoji)
 from screens.color_palette import open_palette_picker
+# Funkcja otwierająca paletę kolorów do wyboru tła projektu
 from kivymd.uix.gridlayout import MDGridLayout
+# Siatka z materiałowym stylem – układa elementy w kolumnach i rzędach
 from kivymd.uix.boxlayout import MDBoxLayout
+# Pionowy lub poziomy układ liniowy (jak pudełko z elementami jeden za drugim)
 from kivymd.uix.textfield import MDTextField
+# Pole tekstowe z materiałowym wyglądem (np. do wpisania nazwy projektu)
 from kivymd.uix.button import MDRaisedButton
+# Przycisk z materiałowym wyglądem
 from kivy.uix.anchorlayout import AnchorLayout
+# Układ który trzyma element w konkretnym miejscu (np. środek, lewy górny róg)
 from kivy.uix.recycleview import RecycleView
+# Lista która "recykluje" elementy – oszczędza pamięć przy długich listach
 from kivy.uix.recyclegridlayout import RecycleGridLayout
+# Siatka wewnątrz RecycleView – układa elementy w kolumnach
 from kivymd.uix.label import MDIcon
+# Ikona z materiałowego zestawu (np. strzałka, gwiazdka)
 from kivymd.uix.fitimage import FitImage
+# Obrazek który dopasowuje się do ramki bez zniekształceń
 from kivy.metrics import dp
+# Przelicznik pikseli na punkty niezależne od gęstości ekranu
 from kivy.core.window import Window
+# Główne okno aplikacji – potrzebne do pobrania rozmiaru ekranu
 from kivy.utils import platform
+# Mówi czy działamy na Androidzie, iOS czy komputerze
 from kivy.clock import Clock
+# Planowanie zadań na później (np. opóźnione filtrowanie, focus na polu)
 from plyer import filechooser
+# Systemowe okno wyboru plików (do wybierania zdjęć z galerii)
 
 from screens.image_utils import prepare_project_image
+# Funkcja która zmniejsza/przygotowuje zdjęcie do rozmiaru karty projektu
 from screens.emoji_assets import ensure_emoji_assets, resolve_emoji_source
+# ensure_emoji_assets – pobiera/rozpakowuje pliki z emoji; resolve_emoji_source – zamienia nazwę emoji na ścieżkę
 from kivymd.app import MDApp
+# Główna klasa aplikacji KivyMD – daje dostęp do ustawień i ekranów
 from kivymd.uix.behaviors import RectangularRippleBehavior
+# Efekt kliknięcia (rozchodząca się fala) dla prostokątnych elementów
 from kivy.uix.behaviors import ButtonBehavior
+# Dodaje zachowanie przycisku do dowolnego widgetu (np. Image)
 from kivy.uix.image import AsyncImage, Image
+# AsyncImage – obrazek ładowany z internetu w tle; Image – zwykły obrazek z pliku
 from kivy.cache import Cache
+# Pamięć podręczna obrazków – czyścimy ją żeby zwolnić RAM
 from kivy.factory import Factory
+# Rejestruje własne klasy Kivy, żeby można je było używać w plikach .kv
 from kivy.uix.scrollview import ScrollView
+# Widok z przewijaniem (scroll) – dla długich list i siatek
 from kivy.uix.widget import Widget
+# Podstawowy pusty widget – używany jako odstęp/wypełniacz
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +334,7 @@ class AddProjectScreen(Screen):
         # Kategoria domyślnie wybrana – pierwsza z listy ("People & body")
         self._current_active_category = EmojiMetadata.CATEGORY_ORDER[0] if EmojiMetadata.CATEGORY_ORDER else "Symbols"
 
-        # Create main container
+        # Główny kontener okna emoji (pionowy układ – pasek wyszukiwania, kategorie, siatka)
         container = MDBoxLayout(
             orientation="vertical", 
             spacing=dp(5), 
@@ -311,9 +343,9 @@ class AddProjectScreen(Screen):
             height=dp(650)
         )
         
-        # Search box
+        # Pole wyszukiwania emoji – wpisany tekst filtruje emoji po nazwie lub kodzie
         self._search_input = MDTextField(
-            hint_text="Search emoji (hex or name)...",
+            hint_text="Szukaj emoji (hex lub nazwa)...",
             mode="rectangle",
             size_hint_y=None,
             height=dp(50)
@@ -321,7 +353,7 @@ class AddProjectScreen(Screen):
         self._search_input.bind(text=self._on_search_text)
         container.add_widget(self._search_input)
         
-        # Category tabs container (horizontal scrolling button row)
+        # Pasek kategorii – przyciski przewijane poziomo (Ludzie, Zwierzęta, itd.)
         categories_container = MDBoxLayout(
             orientation="horizontal",
             size_hint_y=None,
@@ -330,7 +362,7 @@ class AddProjectScreen(Screen):
             padding=dp(5)
         )
         
-        # Create category tab buttons
+        # Tworzy przycisk dla każdej kategorii emoji (People, Animals, itd.)
         for category in EmojiMetadata.CATEGORY_ORDER:
             btn = MDRaisedButton(
                 text=category,
@@ -348,7 +380,7 @@ class AddProjectScreen(Screen):
         cat_scroll.add_widget(categories_container)
         container.add_widget(cat_scroll)
         
-        # Main emoji scroll view
+        # Główny widok z przewijaniem – siatka emoji (przewijana w pionie)
         scroll = ScrollView(size_hint_y=1, do_scroll_x=False)
         scroll.bind(scroll_y=self._on_emoji_scroll)
         self._emoji_scroll = scroll
@@ -472,7 +504,7 @@ class AddProjectScreen(Screen):
         
         # Scroll do tej pozycji
         if self._emoji_scroll:
-            # Normalize scroll_y: 1.0 = top, 0.0 = bottom
+            # scroll_y: 1.0 = góra, 0.0 = dół (przeliczamy pozycję na wartość scrolla)
             total_height = self._emoji_grid.height
             view_height = self._emoji_scroll.height
             # Scroll'ujemy tylko jeśli siatka jest wyższa niż widok
@@ -484,7 +516,7 @@ class AddProjectScreen(Screen):
                 self._emoji_scroll.scroll_y = scroll_y
     
     def _on_emoji_scroll(self, instance, value):
-        # Gdy użytkownik scroll'uje emoji - update active category tab
+        # Gdy użytkownik scrolluje emoji – aktualizuj aktywną kategorię na pasku
         # Aby znaleźć którą kategorię pokazujemy, wyznaczamy które emoji są widoczne
         if not self._filtered_emojis or not self._emoji_grid or not self._emoji_scroll:
             return
@@ -514,7 +546,7 @@ class AddProjectScreen(Screen):
                 self._update_category_button_styles()
     
     def _update_category_button_styles(self):
-        # Update kolory przycisków kategorii: aktywna = fiolet, reszta = szary
+        # Aktualizuj kolory przycisków kategorii: aktywna = fiolet, reszta = szary
         if not hasattr(self, '_category_tabs'):
             return
         
@@ -542,7 +574,7 @@ class AddProjectScreen(Screen):
         # wybrać zdjęcie z telefonu. Pokazuje tylko obrazy (png, jpg, jpeg).
         # Po wybraniu zdjęcia wywołuje _on_image_selected.
         filechooser.open_file(
-            title="Select Project Image",
+            title="Wybierz zdjęcie projektu",
             filters=[("Images", "*.png", "*.jpg", "*.jpeg")],
             on_selection=self._on_image_selected
         )
