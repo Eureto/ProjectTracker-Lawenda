@@ -78,21 +78,31 @@ def _emoji_asset_path(filename):
     return emoji_path(filename)
 
 
+# Nigdy nie zeruj licznika celu (zawsze licz dalej)
 RESET_NEVER = "never"
+# Zeruj licznik celu każdego dnia o północy
 RESET_DAILY = "daily"
+# Zeruj licznik celu co tydzień (w poniedziałek)
 RESET_WEEKLY = "weekly"
 
 # Wyrównanie do szerokości MDIconButton, żeby ikony +, strzałka "Zrobione" i kółka statusu były w jednej linii.
 _RIGHT_ACTION_WIDTH = dp(48)
 
+# Zaokrąglenie rogów pól tekstowych w okienkach (12 pikseli)
 _SHEET_FIELD_RADIUS = dp(12)
+# Zaokrąglenie rogów przycisków w okienkach (12 pikseli)
 _SHEET_BTN_RADIUS = dp(12)
 
+# Fioletowy kolor – główny kolor aplikacji
 _PURPLE = get_color_from_hex("#7e57c2")
+# Szary kolor – używany do linii i kropek na osi czasu
 _GREY_NODE = get_color_from_hex("#9e9e9e")
+# Ciemny fiolet – kolor przycisku grupy, który NIE jest teraz wybrany
 _CHIP_INACTIVE = get_color_from_hex("#5e35b1")
+# Jasny fiolet – kolor przycisku grupy, który JEST teraz wybrany
 _CHIP_ACTIVE = get_color_from_hex("#b388ff")
 # Złoty kolor korony – pojawia się gdy cel został osiągnięty
+# Złoty kolor – kolor korony, która pojawia się po zdobyciu celu
 _CROWN_GOLD = get_color_from_hex("#ffc107")
 # Fioletowe tło karty celu (domyślne)
 _GOAL_CARD_PURPLE = list(get_color_from_hex("#7e57c2"))
@@ -105,24 +115,30 @@ _ANDROID_PACKAGE = "org.stokrotka.stokrotka"
 # Pełna nazwa klasy serwisu Androida
 _ANDROID_SERVICE_CLASS = f"{_ANDROID_PACKAGE}.ServiceTimerservice"
 
+# Nazwa domyślnej grupy etapów (używana gdy użytkownik nie poda nazwy)
 ETAPY_ADD_GROUP = "Grupa etapów"
 
 
 # Zapisuje wiadomość w logach Kivy oraz w logcat Androida (tag: ProjectTrackerSvc).
+# Logi to taki pamiętnik programu – zapisuje co się dzieje, żeby programista mógł potem sprawdzić, czy wszystko działa.
 def _android_log(message):
     try:
         from kivy.logger import Logger
 
         Logger.info("ProjectTrackerSvc: %s", message)
     except Exception:
+        # Jeśli coś poszło nie tak (np. nie ma jeszcze Loggera), nic nie robimy
         pass
     if platform != "android":
+        # Jeśli to nie jest telefon z Androidem, nie wysyłamy logów do Androida
         return
     try:
         from jnius import autoclass
 
+        # Wysyła wiadomość do dziennika systemowego Androida (logcat)
         autoclass("android.util.Log").i("ProjectTrackerSvc", str(message))
     except Exception:
+        # Jeśli coś poszło nie tak (np. brak uprawnień), pomijamy błąd
         pass
 
 
@@ -132,18 +148,27 @@ def _manifest_service_class_names(activity):
         from jnius import autoclass
 
         PackageManager = autoclass("android.content.pm.PackageManager")
+        # Pobiera nazwę naszej aplikacji (np. "org.stokrotka.stokrotka")
         package_name = activity.getPackageName()
+        # Pyta Androida: "jakie usługi są zapisane w pliku AndroidManifest.xml?"
         info = activity.getPackageManager().getPackageInfo(
             package_name, PackageManager.GET_SERVICES
         )
+        # Wyciąga listę usług z odpowiedzi Androida
         services = info.services
+        # Jeśli Android nie znalazł żadnych usług, zwraca pustą listę
         if services is None:
             return []
+        # Tworzy pustą listę na nazwy usług
         out = []
+        # Przechodzi przez każdą usługę po kolei
         for i in range(len(services)):
+            # Pobiera nazwę tej usługi
             name = services[i].name
+            # Jeśli nazwa nie jest pusta, dodaje ją do listy
             if name:
                 out.append(name)
+        # Zwraca listę znalezionych usług
         return out
     except Exception as exc:
         _android_log(f"manifest service enumeration failed: {exc!r}")
@@ -151,51 +176,59 @@ def _manifest_service_class_names(activity):
 
 
 # Uruchamia usluge w tle na Androidzie, ktora moze dzialac nawet gdy aplikacja jest zamknieta.
+# Uruchamia usługę w tle na Androidzie – potrzebne, żeby stoper działał nawet gdy zamkniesz aplikację.
 def _start_service_via_intent(autoclass, activity, class_name):
+    # Pobiera narzędzie do tworzenia "intencji" (to taka wiadomość dla Androida: "zrób to")
     Intent = autoclass("android.content.Intent")
+    # Sprawdza, którą wersję Androida ma telefon
     VERSION = autoclass("android.os.Build$VERSION")
+    # Pobiera "kontekst" aplikacji – to takie połączenie z systemem
     context = activity.getApplicationContext()
+    # Tworzy nową wiadomość (intencję) dla Androida
     intent = Intent()
+    # Mówi Androidowi, którą usługę chcemy uruchomić
     intent.setClassName(context.getPackageName(), class_name)
+    # Jeśli Android ma wersję 26 lub nowszą, uruchamia usługę na pierwszym planie (z powiadomieniem)
     if VERSION.SDK_INT >= 26:
         context.startForegroundService(intent)
     else:
+        # Na starszych Androidach uruchamia zwykłą usługę w tle
         context.startService(intent)
 
 
 # Uruchamia usługę na pierwszym planie, która wyświetla powiadomienia o aktywnym stoperze.
 def ensure_android_timer_service():
-    # Jeśli nie jesteśmy na Androidzie, nic nie robimy
+    # Jeśli nie jesteśmy na telefonie z Androidem, nic nie robimy
     if platform != "android":
         return
-    # Spróbuj zaimportować pyjnius – most Pythona z Javą na Androidzie
+    # Próbujemy zaimportować most do Javy (pyjnius) – to pozwala Pythonowi rozmawiać z Androidem
     try:
         from jnius import autoclass
     except Exception as exc:
         _android_log(f"pyjnius unavailable: {exc!r}")
         return
 
-    # Pobierz referencję do głównej aktywności Androida (PythonActivity)
+    # Pobieramy główne okno aplikacji (PythonActivity) – to punkt startowy dla Androida
     try:
         activity = autoclass("org.kivy.android.PythonActivity").mActivity
     except Exception as exc:
         _android_log(f"PythonActivity lookup failed: {exc!r}")
         return
 
-    # Zbierz wszystkie serwisy zadeklarowane w AndroidManifest.xml
+    # Szukamy wszystkich usług zadeklarowanych w AndroidManifest.xml
     candidates = []
     for name in _manifest_service_class_names(activity):
         _android_log(f"manifest service available: {name}")
         if name not in candidates:
             candidates.append(name)
-    # Dodaj domyślną klasę serwisu timera, jeśli jeszcze nie ma jej na liście
+    # Dodajemy naszą własną usługę timera, jeśli jeszcze nie ma jej na liście
     if _ANDROID_SERVICE_CLASS not in candidates:
         candidates.append(_ANDROID_SERVICE_CLASS)
 
-    # Próbuj uruchomić każdy serwis po kolei – najpierw przez .start(), potem przez Intent
+    # Próbujemy uruchomić każdą usługę po kolei
     last_error = None
     for class_name in candidates:
-        # Metoda 1: wywołaj statyczną metodę .start() na klasie serwisu
+        # Sposób 1: wywołujemy metodę .start() bezpośrednio na klasie usługi
         try:
             service_cls = autoclass(class_name)
             service_cls.start(activity, "")
@@ -204,7 +237,7 @@ def ensure_android_timer_service():
         except Exception as exc:
             last_error = (class_name, exc)
 
-        # Metoda 2: uruchom serwis przez Intent (standardowe API Androida)
+        # Sposób 2: uruchamiamy usługę przez Intent (standardowy sposób w Androidzie)
         try:
             _start_service_via_intent(autoclass, activity, class_name)
             _android_log(f"started service via Intent to {class_name}")
@@ -212,7 +245,7 @@ def ensure_android_timer_service():
         except Exception as exc:
             last_error = (class_name, exc)
 
-    # Żaden serwis nie wystartował – zaloguj błąd
+    # Jeśli żadna usługa nie wystartowała, zapisujemy błąd w logu
     if last_error:
         _android_log(
             f"failed to start any service. Tried {candidates}. "
@@ -236,12 +269,15 @@ class _RoundedSheetBackground:
         Clock.schedule_once(lambda _dt: self._redraw_rounded_bg(), 0)
 
     def _redraw_rounded_bg(self, *_args):
-        # Usuwamy tylko naszą własną grupę tła — czyszczenie całego canvas.before
-        # usunęłoby regułę koloru Kivy i tekst stałby się biały.
+        # Usuwamy stare tło (grupę o nazwie "sheet_field_bg"), żeby narysować nowe
         self.canvas.before.remove_group("sheet_field_bg")
+        # Pobiera promień zaokrąglenia rogów
         r = float(self.corner_radius)
+        # Rysuje nowe zaokrąglone tło na obszarze rysowania (canvas)
         with self.canvas.before:
+            # Ustawia kolor wypełnienia
             Color(*self.fill_color, group="sheet_field_bg")
+            # Rysuje prostokąt z zaokrąglonymi rogami o wielkości i pozycji tego pola
             RoundedRectangle(
                 pos=self.pos,
                 size=self.size,
@@ -276,14 +312,17 @@ class RoundedSheetTextInput(_RoundedSheetBackground, TextInput):
 
     # Zwraca kolor linii tekstu: podpowiedzi, nieaktywny lub normalny.
     def _line_color(self, hint=False):
+        # Jeśli tekst jest podpowiedzią (hint), zwraca kolor podpowiedzi
         if hint:
             return list(self.hint_text_color)
+        # Jeśli pole jest wyłączone, zwraca kolor dla wyłączonego tekstu
         if self.disabled:
             return list(self.disabled_foreground_color)
+        # W przeciwnym razie zwraca normalny kolor tekstu
         return list(self.foreground_color)
 
-    # Przygotowuje ustawienia dla etykiety linii tekstu, dodajac odpowiedni kolor.
     def _kwargs_for_line_label(self, base_opts, hint=False):
+        # Lista ustawień, które chcemy skopiować z oryginalnych opcji
         keys = (
             "font_size",
             "font_name",
@@ -295,39 +334,49 @@ class RoundedSheetTextInput(_RoundedSheetBackground, TextInput):
             "padding_y",
             "padding",
         )
+        # Kopiuje tylko te ustawienia, które istnieją
         kw = {k: base_opts[k] for k in keys if k in base_opts}
+        # Dodaje odpowiedni kolor (dla podpowiedzi lub zwykłego tekstu)
         kw["color"] = self._line_color(hint=hint)
         return kw
 
-    # Pobiera ustawienia linii tekstu i upewnia sie, ze kolor jest aktualny.
     def _get_line_options(self):
+        # Pobiera domyślne ustawienia linii tekstu z klasy rodzica
         opts = super()._get_line_options()
+        # Sprawdza, jaki kolor powinien być teraz
         color = self._line_color(hint=False)
+        # Jeśli kolor w ustawieniach jest inny niż powinien, aktualizuje go
         if opts.get("color") != color:
             opts = dict(opts)
             opts["color"] = color
             self._line_options = opts
         return self._line_options
 
-    # Tworzy etykiete dla pojedynczej linii tekstu z uwzglednieniem koloru dla podpowiedzi lub zwyklego tekstu.
     def _create_line_label(self, text, hint=False):
+        # Zapisuje obecne ustawienia, żeby potem przywrócić
         saved = self._line_options
+        # Pobiera bazowe ustawienia z klasy rodzica
         base = dict(super()._get_line_options())
+        # Łączy bazowe ustawienia z naszymi (z odpowiednim kolorem)
         merged = dict(base)
         merged.update(self._kwargs_for_line_label(base, hint=hint))
         self._line_options = merged
         try:
+            # Tworzy etykietę linii tekstu z nowymi ustawieniami
             return super()._create_line_label(text, hint=hint)
         finally:
+            # Przywraca stare ustawienia (żeby nie popsuć następnych linii)
             self._line_options = saved
 
 
+# Lista rozwijana (rozwijane menu) z zaokrąglonym tłem – do wybierania opcji w okienkach.
 class RoundedSheetSpinner(_RoundedSheetBackground, Spinner):
-    # Przygotowuje liste wyboru z zaokraglonym tlem i przezroczystym standardowym tlem.
     def __init__(self, **kwargs):
+        # Usuwa domyślne tło Kivy – rysujemy własne zaokrąglone tło
         kwargs.setdefault("background_normal", "")
         kwargs.setdefault("background_color", (0, 0, 0, 0))
         super().__init__(**kwargs)
+        # Włącza rysowanie zaokrąglonego tła
         self._init_rounded_bg()
 
 
@@ -413,105 +462,156 @@ class RoundedSheetButton(Button):
         Clock.schedule_once(lambda _dt: self._redraw(), 0)
 
     def _redraw(self, *_args):
-        # Rysuje zaokrąglone tło przycisku z odpowiednim kolorem i przyciemnieniem po naciśnięciu.
+        # Pobiera kolor tła przycisku
         bg = list(self.bg_color)
+        # Jeśli przycisk jest wciśnięty, przyciemnia kolor (mnoży przez 0.9)
         if self.state == "down":
-            # Przyciemnienie tła o 10% podczas przytrzymania – efekt dotykowego feedbacku.
             bg = [c * 0.9 for c in bg[:3]] + [bg[3]]
+        # Pobiera promień zaokrąglenia rogów
         r = float(self.corner_radius)
+        # Ustawia kolor tekstu na przycisku
         self.color = self.text_rgb
+        # Czyści starą grafikę przycisku
         self.canvas.before.clear()
+        # Rysuje nowe zaokrąglone tło
         with self.canvas.before:
             Color(*bg)
             RoundedRectangle(pos=self.pos, size=self.size, radius=[r, r, r, r])
 
 
 # Klucz (dzień kalendarzowy / tydzień ISO) używany do resetowania postępów po zakończeniu okresu.
+# Zwraca "klucz" okresu – coś w rodzaju identyfikatora dla bieżącego dnia lub tygodnia.
+# To pozwala sprawdzić, czy zaczął się nowy okres i trzeba wyzerować licznik celu.
 def current_period_key(reset_mode):
+    # Jeśli cel NIGDY się nie resetuje, zwraca zawsze to samo: "all"
     if reset_mode == RESET_NEVER:
         return "all"
+    # Jeśli cel resetuje się CODZIENNIE, zwraca dzisiejszą datę (np. "2026-06-07")
     if reset_mode == RESET_DAILY:
         return datetime.date.today().isoformat()
+    # Jeśli cel resetuje się CO TYDZIEŃ, zwraca numer tygodnia (np. "2026-W23")
     if reset_mode == RESET_WEEKLY:
         d = datetime.date.today()
         iso = d.isocalendar()
         return f"{iso.year}-W{iso.week:02d}"
+    # Domyślnie (gdyby ktoś podał coś innego) zwraca "all"
     return "all"
 
 
 # Zamienia liczbe sekund na krotki tekst, np. "2h" dla 7200 sekund, "30min" dla 1800 sekund.
+# Zamienia liczbę sekund na krótki napis, np. "2h" (2 godziny), "30min" (30 minut) albo "45s" (45 sekund).
 def format_quota_short(seconds):
+    # Zaokrągla sekundy do najbliższej pełnej liczby, ale nie mniej niż 1
     s = int(max(1, round(float(seconds))))
+    # Jeśli to pełne godziny (np. 3600 sekund = 1h), pokazuje "Xh"
     if s >= 3600 and s % 3600 == 0:
         return f"{s // 3600}h"
+    # Jeśli to pełne minuty (np. 600 sekund = 10min), pokazuje "Xmin"
     if s >= 60 and s % 60 == 0:
         return f"{s // 60}min"
+    # W przeciwnym razie pokazuje sekundy (np. "45s")
     return f"{s}s"
 
 
 # Tworzy podsumowanie celu czasowego, np. "2h / dzien" lub "30min / tydzien".
+# Tworzy podsumowanie celu czasowego, np. "2h / dzień" albo "30min / tydzień".
 def format_goal_summary(quota_seconds, reset_mode):
+    # Najpierw zamienia sekundy na krótki napis (np. "2h")
     amt = format_quota_short(quota_seconds)
+    # Jeśli cel resetuje się codziennie, dodaje " / dzień"
     if reset_mode == RESET_DAILY:
         return f"{amt} / dzień"
+    # Jeśli cel resetuje się co tydzień, dodaje " / tydzień"
     if reset_mode == RESET_WEEKLY:
         return f"{amt} / tydzień"
+    # Bez resetu – tylko sama wartość
     return amt
 
 
 # Odczytuje okres resetowania z tekstu i zwraca odpowiadajaca mu stala (never, daily lub weekly).
+# Odczytuje z tekstu, jak często resetować cel – "daily" = codziennie, "weekly" = co tydzień, "never" = nigdy.
+# Jeśli nie rozpozna tekstu, domyślnie ustawia co tydzień.
 def parse_reset_mode(value):
+    # Jeśli nic nie podano, zwraca tryb "co tydzień"
     if not value:
         return RESET_WEEKLY
+    # Zamienia wszystko na małe litery, żeby nie miało znaczenia czy ktoś napisał "Daily", "DAILY" itp.
     v = str(value).lower()
+    # Sprawdza, czy tekst mówi o braku resetu
     if v in (RESET_NEVER, "none"):
         return RESET_NEVER
+    # Sprawdza, czy tekst mówi o resetowaniu codziennym
     if v in (RESET_DAILY, "daily", "day", "dzien", "dziennie"):
         return RESET_DAILY
+    # Sprawdza, czy tekst mówi o resetowaniu tygodniowym
     if v in (RESET_WEEKLY, "weekly", "week", "tydzien", "tygodniowo"):
         return RESET_WEEKLY
+    # Domyślnie zwraca tryb "co tydzień"
     return RESET_WEEKLY
 
 
 # Próbuje odczytać czas z tekstu wpisanego przez użytkownika, np. '1h' = 1 godzina, '30min' = 30 minut, '2h/1d' = 2 godziny dziennie. Domyślnie 1 godzina.
+# Próbuje odczytać czas z tekstu wpisanego przez użytkownika.
+# Np. "1h" = 1 godzina, "30min" = 30 minut, "45s" = 45 sekund.
+# Jeśli nie rozpozna tekstu, zwraca 1 godzinę (3600 sekund).
 def parse_goal_target_seconds(goal_str):
+    # Zamienia tekst na małe litery i zamienia przecinek na kropkę (np. "1,5h" → "1.5h")
     s = (goal_str or "").lower().replace(",", ".")
+    # Szuka liczby z literą "h" (godziny)
     m = re.search(r"(\d+(?:\.\d+)?)\s*h", s)
     if m:
+        # Zamienia godziny na sekundy (1h = 3600s), ale nie mniej niż 60 sekund
         return max(60.0, float(m.group(1)) * 3600.0)
+    # Szuka liczby z "min" (minuty)
     m = re.search(r"(\d+(?:\.\d+)?)\s*min", s)
     if m:
+        # Zamienia minuty na sekundy, ale nie mniej niż 60 sekund
         return max(60.0, float(m.group(1)) * 60.0)
+    # Szuka liczby z "s" lub "sec" (sekundy)
     m = re.search(r"(\d+)\s*s(?:ec)?", s)
     if m:
+        # Zwraca sekundy, ale nie mniej niż 10
         return max(10.0, float(m.group(1)))
+    # Domyślnie 1 godzina
     return 3600.0
 
 
 # Tworzy docelowy czas z osobnych pól godzin i minut.
+# Tworzy docelowy czas z osobnych pól "godziny" i "minuty". Wynik zwraca w sekundach.
 def parse_goal_hours_minutes(hours_text, minutes_text):
+    # Próbuje odczytać godziny z tekstu (np. "2" → 2 godziny)
     try:
         hours = max(0, int((hours_text or "0").strip()))
     except ValueError:
+        # Jeśli ktoś wpisał coś, co nie jest liczbą, ustawia 0
         hours = 0
+    # Próbuje odczytać minuty z tekstu
     try:
         minutes = max(0, int((minutes_text or "0").strip()))
     except ValueError:
         minutes = 0
+    # Zamienia godziny i minuty na sekundy (1h = 3600s, 1min = 60s)
     total = hours * 3600 + minutes * 60
+    # Nie pozwala zejść poniżej 60 sekund (minimum 1 minuta)
     return float(max(60, total))
 
 
 # Zamienia liczbe sekund na zwiezly tekst do wyswietlenia, np. "45s", "30m", "2h" lub "2h30m".
+# Zamienia liczbę sekund na krótki napis do wyświetlenia.
+# Np. "45s" (sekund), "30m" (minut), "2h" (godzin) albo "2h30m" (2 godziny i 30 minut).
 def format_goal_elapsed(seconds):
+    # Zaokrągla sekundy do najbliższej liczby, ale nie mniej niż 0
     s = int(max(0, round(float(seconds))))
+    # Jeśli mniej niż 60 sekund, pokazuje sekundy ("45s")
     if s < 60:
         return f"{s}s"
+    # Jeśli mniej niż 3600 sekund (1h), pokazuje minuty ("30m")
     if s < 3600:
         return f"{s // 60}m"
+    # Dzieli na godziny i resztę
     h, r = divmod(s, 3600)
     m = r // 60
-    # Pokazuje czas w zwartej formie, np. "2h30m" zamiast "2 godziny 30 minut".
+    # Jeśli są minuty, pokazuje "2h30m", jeśli nie, samo "2h"
     return f"{h}h{m}m" if m else f"{h}h"
 
 
@@ -527,11 +627,15 @@ class UnderlineTextBlock(BoxLayout):
 
     # Przygotowuje blok tekstu: dodaje etykiete, pozioma linie pod spodem i odstep.
     def __init__(self, **kwargs):
+        # Ustaw domyślne wartości dla układu: elementy jeden nad drugim, brak automatycznej wysokości, brak odstępu
         kwargs.setdefault("orientation", "vertical")
         kwargs.setdefault("size_hint_y", None)
         kwargs.setdefault("spacing", 0)
+        # Wywołaj konstruktor rodzica (BoxLayout) z naszymi ustawieniami
         super().__init__(**kwargs)
+        # Stwórz niewidoczny element na górze – będzie służył jako odstęp
         self._top_pad = Widget(size_hint_y=None, height=0)
+        # Stwórz etykietę (tekst) wyświetlającą treść – kolor, rozmiar, wyrównanie do lewej i do dołu
         self._lbl = Label(
             color=self.text_color,
             font_size=self.font_size,
@@ -539,11 +643,15 @@ class UnderlineTextBlock(BoxLayout):
             valign="bottom",
             size_hint_y=None,
         )
+        # Stwórz podkładkę pod linię – będzie rysowana pod tekstem
         self._rule = Widget(size_hint_x=1, size_hint_y=None, height=dp(4))
+        # Dodaj wszystkie trzy elementy do układu: górny odstęp, tekst i podkładkę pod linię
         self.add_widget(self._top_pad)
         self.add_widget(self._lbl)
         self.add_widget(self._rule)
+        # Gdy podkładka zmieni pozycję lub rozmiar – przerysuj linię pod tekstem
         self._rule.bind(pos=self._draw_rule, size=self._draw_rule)
+        # Podłącz funkcje, które wywołają się automatycznie gdy zmieni się: tekst, szerokość, rozmiar, kolor, tryb zwartej linii, wysokość linii, albo widoczność linii
         self.bind(
             text=self._relayout,
             width=self._relayout,
@@ -553,6 +661,7 @@ class UnderlineTextBlock(BoxLayout):
             line_box_height=self._relayout,
             show_rule=self._draw_rule,
         )
+        # Przy następnej klatce animacji (po 0 sekundach) przelicz cały układ – to zapewnia poprawne ustawienie na starcie
         Clock.schedule_once(lambda _dt: self._relayout(), 0)
 
     # Rysuje pozioma biala linie pod tekstem, jesli opcja show_rule jest wlaczona.
@@ -575,25 +684,43 @@ class UnderlineTextBlock(BoxLayout):
 
     # Przelicza i ustawia rozmiar etykiety, odstepy i wysokosc calego bloku. Odswieza tez rysowanie linii.
     def _relayout(self, *_args):
+        # Ustawia tekst etykiety (jesli pusty, wstawia pusty napis).
         self._lbl.text = self.text or ""
+        # Nadaje etykiecie wybrany kolor.
         self._lbl.color = tuple(self.text_color)
+        # Ustawia wielkosc czcionki.
         self._lbl.font_size = float(self.font_size)
+        # Jesli blok jest za waski (szerokosc mniejsza niz 1), konczy dzialanie.
         if self.width < 1:
             return
+        # Mowi etykiecie, zeby zawijala tekst do dostepnej szerokosci.
         self._lbl.text_size = (self.width, None)
+        # Przelicza, jak duzo miejsca zajmie tekst na ekranie.
         self._lbl.texture_update()
+        # Ustala minimalna wysokosc tekstu (nie mniejsza niz 16 pikseli).
         th = max(sp(16), self._lbl.texture_size[1])
+        # Ustawia wysokosc etykiety na wyliczona wartosc.
         self._lbl.height = th
+        # Wybiera odstep miedzy tekstem a linia (mniejszy dla "compact").
         gap = dp(3) if self.compact_rule else dp(4)
+        # Zapisuje ten odstep.
         self.spacing = gap
+        # Pokazuje linie pod tekstem.
         self._rule.opacity = 1
+        # Ustawia wysokosc tej linii.
         self._rule.height = dp(4)
+        # Oblicza naturalna wysokosc: tekst + odstep + linia.
         natural_h = th + gap + self._rule.height
+        # Domyslnie nie ma dodatkowej przestrzeni na gorze.
         extra_top = 0
+        # Jesli wymuszona wysokosc jest wieksza niz naturalna, dodaje roznice.
         if self.line_box_height > natural_h:
             extra_top = self.line_box_height - natural_h
+        # Ustawia puste miejsce na gorze, zeby wyrownac wysokosc.
         self._top_pad.height = extra_top
+        # Ustawia ostateczna wysokosc calego bloku.
         self.height = natural_h + extra_top
+        # Planuje rysowanie linii na ekranie przy najblizszej okazji.
         Clock.schedule_once(lambda _dt: self._draw_rule(), 0)
 
 
@@ -623,34 +750,48 @@ class StatusCircleButton(Button):
 
     # Rysuje kolko (wypelnione lub pusty pierscien) w zaleznosci od stanu "done". Gdy zrobione i pokaz koronke, wyswietla symbol korony.
     def _redraw(self, *_args):
+        # Wyczyść wszystko co było narysowane wcześniej na obszarze rysowania (canvas)
         self.canvas.before.clear()
+        # Jeśli przycisk jest za mały (szerokość lub wysokość poniżej 1), nie rysuj nic
         if self.width < 1 or self.height < 1:
             return
+        # Oblicz środek przycisku w poziomie i pionie
         cx = self.center_x
         cy = self.center_y
+        # Promień kółka = 36% krótszego boku przycisku
         r = min(self.width, self.height) * 0.36
+        # Grubość obramowania (pierścienia) w pikselach
         ring_w = dp(2.5)
+        # Otwórz obszar do rysowania (canvas) – wszystko wyżej będzie nad zwykłą zawartością przycisku
         with self.canvas.before:
+            # Tryb białego stylu (np. na ciemnym tle)
             if self.white_style:
+                # Jeśli cel jest zrobiony – narysuj białe wypełnione koło
                 if self.done:
                     Color(1, 1, 1, 1)
                     Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+                # Jeśli cel NIE jest zrobiony – narysuj biały pusty pierścień
                 else:
                     Color(1, 1, 1, 1)
                     Line(circle=(cx, cy, r), width=ring_w)
+            # Jeśli cel zrobiony i ma pokazywać koronę – fioletowe wypełnione koło
             elif self.done and self.show_crown:
                 Color(*_PURPLE)
                 Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+            # Jeśli cel zrobiony (bez korony) – też fioletowe wypełnione koło
             elif self.done:
                 Color(*_PURPLE)
                 Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
+            # Jeśli cel NIE zrobiony – fioletowy pusty pierścień
             else:
                 Color(*_PURPLE)
                 Line(circle=(cx, cy, r), width=dp(2))
+        # Jeśli cel zrobiony i ma koronę – pokaż symbol korony (♕) na przycisku
         if self.done and self.show_crown:
             self.text = "\u2655"
             self.font_size = sp(12)
             self.color = _CROWN_GOLD
+        # W przeciwnym razie nie pokazuj żadnego tekstu na przycisku
         else:
             self.text = ""
 
@@ -709,41 +850,61 @@ class ChecklistGoalRow(MDBoxLayout):
 
     # Przelacza stan "zrobione" celu z listy.
     def _toggle_done(self, *_args):
+        # Odwraca stan "zrobione" – jeśli było zrobione, robi niezrobione i odwrotnie
         self.done = not self.done
+        # Aktualizuje wygląd (kółko, przekreślenie tekstu)
         self._apply_done_to_ui()
+        # Mówi ekranowi projektu, żeby przeniósł cel między listą aktywną a "Zrobione"
         if self.parent_screen:
             self.parent_screen.relocate_checklist_goal(self)
 
     # Dopasowuje wysokosc wiersza do dlugosci tekstu.
     def _sync_height(self, *_args):
+        # Pobierz blok podkreślenia (wyświetla tekst celu) – najpierw z zapisanej referencji, potem po nazwie z układu
         underline = self._underline or self.ids.get("underline_block")
+        # Pobierz przycisk statusu (kółko zrobione/niezrobione) – tak samo najpierw z zapisanej referencji
         btn = self._status_btn or self.ids.get("status_btn")
+        # Jeśli bloku podkreślenia nie ma – przerwij działanie (nie da się przeliczyć wysokości)
         if underline is None:
             return
+        # Zapisz referencje do bloku i przycisku żeby następnym razem nie szukać po nazwie
         self._underline = underline
         self._status_btn = btn
+        # Szerokość zajmowana przez numer celu (np. "1.") – 22 piksele, albo 0 jeśli numer nie jest pokazywany
         idx_w = dp(22) if self.index_label else 0
+        # Szerokość zajmowana przez przycisk statusu po prawej stronie
         btn_w = _RIGHT_ACTION_WIDTH
+        # Wysokość przycisków (celowo kwadratowych)
         btn_h = dp(26)
 
+        # Wstaw aktualny tekst do bloku podkreślenia
         underline.text = self.display_text
+        # Jeśli wiersz ma jakąś szerokość – oblicz ile miejsca zostało dla tekstu (od całej szerokości odejmij numer i przycisk)
         if self.width > 1:
             underline.width = max(sp(40), self.width - idx_w - btn_w - self.spacing)
+        # Tymczasowo wyzeruj wysokość ramki i każ blokowi przeliczyć układ
         underline.line_box_height = 0
         underline._relayout()
+        # Pobierz wysokość tekstu (minimalnie 16 pikseli)
         text_h = max(sp(16), underline._lbl.texture_size[1])
+        # Oblicz wysokość całego bloku (z odstępami i linią)
         content_h = underline._compact_content_height(text_h)
+        # Użyj największej z wysokości: treść, przycisk, minimalna wysokość 32 piksele
         line_h = max(content_h, btn_h, dp(32))
+        # Ustaw ostateczną wysokość ramki i każ blokowi przeliczyć układ ponownie
         underline.line_box_height = line_h
         underline._relayout()
 
+        # Ustaw wysokość całego wiersza celu i bloku podkreślenia na wyliczoną wartość
         self.height = line_h
         underline.height = line_h
 
+        # Jeśli wiersz ma znacznik indeksu (numer po lewej) – ustaw jego wysokość
         if "index_anchor" in self.ids:
             anchor = self.ids.index_anchor
             anchor.size_hint_y = None
             anchor.height = line_h
+            # Jeśli w znaczniku jest etykieta z numerem – wpisz numer celu i dopasuj rozmiar etykiety do tekstu
             if "index_lbl" in self.ids:
                 idx = self.ids.index_lbl
                 idx.text = self.index_label
@@ -751,16 +912,22 @@ class ChecklistGoalRow(MDBoxLayout):
                 idx.texture_update()
                 idx.size = idx.texture_size
 
+        # Pobierz element który trzyma przycisk statusu (anchor)
         status_anchor = btn.parent if btn is not None else self.ids.get("status_anchor")
+        # Jeśli taki element istnieje – ustaw jego wysokość i szerokość
         if status_anchor is not None:
             status_anchor.size_hint_y = None
             status_anchor.height = line_h
             status_anchor.width = btn_w
+        # Jeśli przycisk istnieje – ustaw go na kwadrat o boku btn_h
         if btn is not None:
             btn.size = (btn_h, btn_h)
 
+        # Zaktualizuj wygląd przycisku statusu (kółko – zrobione/niezrobione)
         self._apply_done_to_ui()
+        # Pobierz rodzica (listę zawierającą ten wiersz)
         parent = self.parent
+        # Jeśli rodzic istnieje i ma właściwość minimum_height – ustaw jego wysokość na minimalną (dopasuj do zawartości)
         if parent is not None and hasattr(parent, "minimum_height"):
             parent.height = parent.minimum_height
 
@@ -857,44 +1024,58 @@ class ZrobioneSection(MDBoxLayout):
 
     # Odswieza tekst naglowka z liczba zrobionych celow.
     def _refresh_header(self, *_args):
+        # Sprawdza, czy nagłówek istnieje na ekranie
         if "zrobione_header" not in self.ids:
             return
         header = self.ids.zrobione_header
+        # Pobiera liczbę zrobionych celów
         n = int(self.done_count)
+        # Przygotowuje napis: "Zrobione (3)" albo samo "Zrobione" gdy 0
         title = f"Zrobione ({n})" if n else "Zrobione"
+        # Ustawia tytuł w nagłówku
         if "zrobione_title" in header.ids:
             header.ids.zrobione_title.text = title
+        # Zmienia ikonę strzałki – w dół gdy rozwinięte, w prawo gdy zwinięte
         if "zrobione_chevron" in header.ids:
             header.ids.zrobione_chevron.icon = (
                 "chevron-down" if self.expanded else "chevron-right"
             )
 
-    # Pokazuje lub ukrywa cala sekcje w zaleznosci od tego, czy sa jakies zrobione cele.
     def _apply_visibility(self, *_args):
+        # Sekcja jest widoczna tylko jeśli są jakieś zrobione cele
         visible = self.done_count > 0
+        # Ustawia przezroczystość: 1 = widoczne, 0 = niewidoczne
         self.opacity = 1 if visible else 0
         self.disabled = False
         self.size_hint_y = None
+        # Jeśli nie ma zrobionych celów – chowa sekcję
         if not visible:
             self.height = 0
             self.collide_disabled = True
             self._detached_done_rows = []
         else:
+            # Jeśli są zrobione cele – pokazuje sekcję
             self.collide_disabled = False
             Clock.schedule_once(self._apply_expanded, 0)
             Clock.schedule_once(self._sync_section_height, 0)
 
     # Rozwija lub zwija sekcje z animacja.
     def _apply_expanded(self, *_args):
+        # Jesli nie ma zadnych zrobionych celow albo brakuje listy, nic nie rob.
         if self.done_count <= 0 or "checklist_done_list" not in self.ids:
             return
+        # Pobiera liste wyswietlajaca zrobione cele.
         lst = self.ids.checklist_done_list
+        # Odswieza naglowek sekcji.
         self._refresh_header()
+        # Jesli sekcja ma byc rozwinieta...
         if self.expanded:
+            # Jesli jakies wiersze byly wczesniej odlaczone, dolacz je z powrotem.
             if self._detached_done_rows:
                 for row in reversed(self._detached_done_rows):
                     lst.add_widget(row)
                 self._detached_done_rows = []
+            # Przelacza kazdy wiersz na widoczny i klikalny.
             for child in list(lst.children):
                 if not isinstance(child, ChecklistGoalRow):
                     continue
@@ -902,19 +1083,24 @@ class ZrobioneSection(MDBoxLayout):
                 child.disabled = False
                 child.opacity = getattr(child, "_zrobione_saved_opacity", 0.72)
                 child._sync_height()
+            # Wlaca liste i ustawia jej wysokosc na automatyczna.
             lst.collide_disabled = False
             lst.disabled = False
             lst.height = lst.minimum_height
+        # Jesli sekcja ma byc zwinieta...
         else:
             self._detached_done_rows = []
+            # Odlacza wszystkie wiersze zrobionych celow i chowa je.
             for child in list(lst.children):
                 if not isinstance(child, ChecklistGoalRow):
                     continue
                 child._zrobione_saved_opacity = child.opacity
                 self._detached_done_rows.append(child)
                 lst.remove_widget(child)
+            # Wylacza liste i ustawia jej wysokosc na zero (niewidoczna).
             lst.collide_disabled = True
             lst.height = 0
+        # Po wszystkim przelicza wysokosc calej sekcji.
         Clock.schedule_once(self._sync_section_height, 0)
 
     # Dopasowuje wysokosc sekcji do zawartosci.
@@ -997,8 +1183,11 @@ class StageItemRow(MDBoxLayout):
 
     # Przelacza stan "zrobione" kroku.
     def _toggle_done(self, *_args):
+        # Odwraca stan "zrobione" – jeśli było zrobione, robi niezrobione i odwrotnie
         self.done = not self.done
+        # Aktualizuje wygląd wiersza (kółko, kolor)
         self._apply_done_to_ui()
+        # Mówi ekranowi projektu, żeby zapisał zmianę w danych
         if self.parent_screen:
             self.parent_screen._set_etapy_item_done(
                 self.group_index, self.item_index, self.child_index, self.done
@@ -1132,18 +1321,25 @@ class EtapyPlusSpine(Widget):
 
     # Rysuje wezel na osi czasu: fioletowe kolko z bialym krzyzykiem i opcjonalnie pionowa linia do dolu.
     def _redraw(self, *_args):
+        # Czyści wszystko co było wcześniej narysowane
         self.canvas.clear()
+        # Jeśli element jest za mały, nie rysuje nic
         if self.height < 1 or self.width < 1:
             return
+        # Środek w poziomie i pionie
         cx = self.center_x
         cy = self.center_y
+        # Promień fioletowego kółka
         node_r = dp(10)
         with self.canvas:
+            # Jeśli trzeba, rysuje szarą pionową linię od góry do środka
             if self.connect_top:
                 Color(*_GREY_NODE)
                 Line(points=[cx, self.top, cx, cy], width=dp(1.5))
+            # Rysuje fioletowe wypełnione kółko
             Color(*_PURPLE)
             Ellipse(pos=(cx - node_r, cy - node_r), size=(2 * node_r, 2 * node_r))
+            # Rysuje biały krzyżyk (plus) wewnątrz kółka
             Color(1, 1, 1, 1)
             arm = node_r * 0.55
             Line(points=[cx - arm, cy, cx + arm, cy], width=dp(2.2))
@@ -1176,6 +1372,7 @@ class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
 
     # Otwiera edytor nowego kroku po kliknieciu przycisku "+".
     def _on_release(self, *_args):
+        # Pobiera ekran projektu i otwiera okno do dodawania nowego kroku
         screen = self.parent_screen
         if screen is not None:
             screen.open_new_etapy_krok_sheet()
@@ -1289,8 +1486,11 @@ class ProjectInfoScreen(MDScreen):
 
     # Zatrzymuje pomiar czasu dla wszystkich aktywnych celow.
     def _stop_all_goal_trackers(self, update_active=True):
+        # Przechodzimy przez wszystkie widoczne wiersze na liscie celow.
         for row in list(self.ids.goals_list.children):
+            # Sprawdzamy, czy to w ogole jest cel czasowy.
             if isinstance(row, TimeGoalTrackRow):
+                # Zatrzymujemy odmierzanie czasu dla tego celu.
                 row.stop_tracking(update_active=update_active)
 
     # Obsluguje nacisniecie klawisza - klawisz ESC zamyka arkusz.
@@ -1303,10 +1503,11 @@ class ProjectInfoScreen(MDScreen):
     # --- Storage ---
 
     def _state_path(self):
+        # Zwraca ścieżkę do pliku, w którym przechowujemy dane projektu (notatki, cele itp.)
         return os.path.join(MDApp.get_running_app().user_data_dir, "project_details.json")
 
-    # Odczytuje zapisany stan stopera i celow z plikow.
     def _read_all_states(self):
+        # Otwiera plik z danymi i odczytuje go. Jeśli plik nie istnieje albo jest uszkodzony, zwraca pusty słownik.
         path = self._state_path()
         if not os.path.exists(path):
             return {}
@@ -1316,8 +1517,8 @@ class ProjectInfoScreen(MDScreen):
         except (OSError, json.JSONDecodeError):
             return {}
 
-    # Zapisuje biezacy stan stopera i celow do plikow.
     def _write_all_states(self, data):
+        # Zapisuje wszystkie dane projektu do pliku (nadpisuje stary plik nowymi danymi)
         path = self._state_path()
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
@@ -1422,21 +1623,27 @@ class ProjectInfoScreen(MDScreen):
 
     # Usuwa wszystkie dynamicznie dodane elementy z ekranu: notatki, cele, liste zadan i sekcje "Zrobione".
     def _clear_dynamic_widgets(self):
+        # Usuwamy wszystkie notatki z listy notatek.
         for c in list(self.ids.notes_list.children):
             self.ids.notes_list.remove_widget(c)
+        # Usuwamy wszystkie cele czasowe z listy celów.
         for c in list(self.ids.goals_list.children):
             self.ids.goals_list.remove_widget(c)
+        # Usuwamy wszystkie cele typu "lista zadań" (checklista).
         cl = self.ids.get("checklist_goals_list")
         if cl is not None:
             for c in list(cl.children):
                 cl.remove_widget(c)
+        # Usuwamy wszystkie zrobione cele z sekcji "Zrobione".
         dl = self._checklist_done_list()
         if dl is not None:
             for c in list(dl.children):
                 dl.remove_widget(c)
+        # Resetujemy licznik przy sekcji "Zrobione" z powrotem do zera.
         zr = self.ids.get("zrobione_section")
         if zr is not None:
             zr.done_count = 0
+        # Czyścimy listę grup etapów i wybieramy pierwszą grupę.
         self._etapy_groups = []
         self._etapy_selected_index = 0
 
@@ -1455,9 +1662,13 @@ class ProjectInfoScreen(MDScreen):
 
     # Przygotowuje liste celow czasowych do zapisania.
     def _serialize_goals(self):
+        # Tworzy listę wszystkich celów czasowych gotową do zapisania w pliku
         out = []
+        # Przechodzi przez każdy wiersz na liście celów
         for row in self.ids.goals_list.children:
+            # Sprawdza, czy to na pewno wiersz z celem czasowym
             if isinstance(row, TimeGoalTrackRow):
+                # Zbiera wszystkie ważne informacje o tym celu
                 entry = {
                     "title": row.title_text,
                     "goal": row.goal_text,
@@ -1467,10 +1678,13 @@ class ProjectInfoScreen(MDScreen):
                     "period_key": row.period_key,
                     "uid": row.active_uid,
                 }
+                # Jeśli cel ma ustawioną lokalizację (geofence), dodaje ją też do danych
                 geofence = dict(row.geofence or {})
                 if geofence:
                     entry["geofence"] = geofence
+                # Dodaje gotowy cel do listy
                 out.append(entry)
+        # Zwraca listę celów do zapisania
         return out
 
     # Zwraca wszystkie wiersze celow oznaczone jako zrobione.
@@ -1601,24 +1815,35 @@ class ProjectInfoScreen(MDScreen):
 
     # Przenosi cel miedzy sekcja aktywna a zrobiona, w zaleznosci od jego stanu.
     def relocate_checklist_goal(self, row):
+        # Bierzemy listę aktywnych celów (te, które jeszcze nie są zrobione).
         active = self.ids.checklist_goals_list
+        # Bierzemy listę celów zrobionych.
         done_box = self._checklist_done_list()
+        # Jeśli lista zrobionych nie istnieje, kończymy działanie.
         if done_box is None:
             return
+        # Jeśli cel jest już na którejś liście, usuwamy go z niej.
         if row.parent is not None:
             row.parent.remove_widget(row)
+        # Sprawdzamy, czy cel jest oznaczony jako zrobiony.
         if row.done:
+            # Wrzucamy cel na listę zrobionych, usuwamy jego numer i przyciemniamy go.
             done_box.add_widget(row)
             row.index_label = ""
             row.opacity = 0.72
         else:
+            # Wrzucamy cel z powrotem na listę aktywnych i przywracamy mu pełną widoczność.
             active.add_widget(row)
             row.opacity = 1.0
+        # Przenumerowujemy wszystkie cele na liście aktywnej, żeby numery były po kolei.
         self._renumber_checklist_goals()
+        # Odświeżamy sekcję "Zrobione", żeby pokazywała poprawną liczbę wykonanych celów.
         self._refresh_zrobione_section()
+        # Jeśli cel został zrobiony, rozwijamy sekcję "Zrobione", żeby był widoczny.
         zr = self.ids.get("zrobione_section")
         if zr is not None and row.done:
             zr.expanded = True
+        # Zapisujemy wszystkie zmiany do pliku projektu.
         self.save_project_content()
 
     # Odswieza sekcje "zrobione" - pokazuje, ile celow jest oznaczonych jako wykonane.
@@ -1732,7 +1957,7 @@ class ProjectInfoScreen(MDScreen):
             n = len(box.children)
             for i, child in enumerate(box.children):
                 if hasattr(child, '_chip_active'):
-                    # Reversed index: child at box.children[0] is the last chip visually
+                    # Odwrócony indeks: dziecko w box.children[0] to ostatni chip wizualnie
                     child._chip_active = (n - 1 - i == self._etapy_selected_index)
                     if hasattr(child, '_refresh_chip'):
                         child._refresh_chip(child)
@@ -1784,22 +2009,30 @@ class ProjectInfoScreen(MDScreen):
         self.save_project_content()
     # Dodaje nowy Krok z jego Podkrokami (wywoływane przez edytor kroku).
     def create_etapy_step(self, group_index, text, children=None):
+        # Usuwamy zbędne spacje z początku i końca nazwy kroku.
         text = (text or "").strip()
+        # Jeśli po usunięciu spacji nazwa jest pusta, nie dodajemy niczego.
         if not text:
             return
+        # Próbujemy znaleźć grupę (np. "Planowane", "W trakcie") o podanym numerze.
         try:
             group = self._etapy_groups[int(group_index)]
+        # Jeśli nie ma takiej grupy, przerywamy działanie.
         except (IndexError, TypeError):
             return
+        # Przygotowujemy listę podkroków – usuwamy puste wpisy i porządkujemy ich dane.
         normalized_children = [
             {"text": (c.get("text") or "").strip(), "done": bool(c.get("done", False))}
             for c in (children or [])
             if (c.get("text") or "").strip()
         ]
+        # Dodajemy nowy krok (wraz z podkrokami) do listy kroków w tej grupie.
         group.setdefault("items", []).append(
             {"text": text, "done": False, "children": normalized_children}
         )
+        # Przerysowujemy oś czasu, żeby nowy krok był widoczny.
         self._rebuild_etapy_timeline()
+        # Zapisujemy zmiany do pliku projektu.
         self.save_project_content()
 
     # Zastępuje nazwę Kroku i listę jego Podkroków w jednym zapisie (edytor kroku).
@@ -1875,7 +2108,6 @@ class ProjectInfoScreen(MDScreen):
             # Przerysuj tło gdy przycisk zmieni pozycję/rozmiar
             chip.bind(pos=_paint_chip, size=_paint_chip)
             gi = idx
-            # Single click: select group. Double-click: open edit/delete sheet.
             chip._last_click_time = 0
             # Kliknięcie: pojedyńcze = wybierz grupę, podwójne = edytuj
             def _on_chip_release(*_a, i=gi, c=chip):
@@ -2023,30 +2255,42 @@ class ProjectInfoScreen(MDScreen):
     # funkcja uzupełnia w nim pole ``geofence`` i po powrocie otwiera
     # ponownie arkusz celu.
     def open_geofence_picker_for_goal_draft(self, draft):
+        # Jesli draft nie jest slownikiem, zamien go na pusty slownik.
         if not isinstance(draft, dict):
             draft = {}
+        # Wyciaga istniejace ustawienia ogrodzenia geograficznego (jesli sa).
         existing = draft.get("geofence") or {}
 
+        # Funkcja wywolywana po zakonczeniu wybierania ogrodzenia.
         def _on_done(result):
+            # Sprawdza, jaka akcje wybral uzytkownik.
             action = (result or {}).get("action", "cancel")
+            # Jesli kliknal "zapisz", zapisuje nowe ogrodzenie w szkicu.
             if action == "save":
                 draft["geofence"] = result.get("geofence") or {}
+            # Jesli kliknal "wyczysc", usuwa ogrodzenie ze szkicu.
             elif action == "clear":
                 draft["geofence"] = {}
+            # Po zamknieciu wybieracza wraca do ekranu dodawania celu.
             Clock.schedule_once(
                 lambda _dt: self.open_add_goal_sheet(draft=draft), 0
             )
 
+        # Pobiera uruchomiona aplikacje.
         app = MDApp.get_running_app()
+        # Jesli aplikacja nie istnieje, przerywa.
         if app is None or app.root is None:
             return
+        # Probuje pobrac ekran wybierania ogrodzenia geograficznego.
         try:
             picker = app.root.get_screen("geofence_picker")
         except Exception:
             picker = None
+        # Jesli ekran nie istnieje, wraca do dodawania celu bez ogrodzenia.
         if picker is None:
             self.open_add_goal_sheet(draft=draft)
             return
+        # Ustawia wybieracz z istniejacymi wartosciami (szerokosc, dlugosc, promien, zoom).
         picker.configure(
             initial_lat=existing.get("lat"),
             initial_lon=existing.get("lon"),
@@ -2055,6 +2299,7 @@ class ProjectInfoScreen(MDScreen):
             return_screen="project_info",
             on_done=_on_done,
         )
+        # Przelacza ekran na wybieracz ogrodzenia geograficznego.
         app.root.current = "geofence_picker"
 
     # Tworzy nowy cel czasowy z podanymi ustawieniami i dodaje go do listy celow.
@@ -2090,17 +2335,26 @@ class ProjectInfoScreen(MDScreen):
 
     # Usuwa wybrany cel czasowy z listy, zatrzymujac jego sledzenie.
     def remove_time_goal_row(self, row):
+        # Jesli to jest cel czasowy, najpierw zatrzymujemy odliczanie.
         if isinstance(row, TimeGoalTrackRow):
+            # Zatrzymuje stoper dla tego celu.
             row.stop_tracking()
+            # Jesli cel mial swoj unikalny numer, usuwamy go z aktywnego timera.
             if row.active_uid:
                 active_timer.remove_goal(row.active_uid)
+        # Szukamy listy celow na ekranie.
         goals = self.ids.get("goals_list")
+        # Jesli listy nie ma, konczymy dzialanie.
         if goals is None:
             return
+        # Sprawdzamy, czy wiersz nalezy do tej listy.
         if row.parent is goals:
+            # Usuwamy wiersz z listy celow.
             goals.remove_widget(row)
+        # Jesli wiersz ma innego rodzica, usuwamy go z tamtego miejsca.
         elif row.parent is not None:
             row.parent.remove_widget(row)
+        # Zapisujemy zmiany w projekcie do pliku.
         self.save_project_content()
 
     # Tworzy slownik wszystkich aktywnych celow, gdzie kluczem jest ich unikalny identyfikator.
@@ -2132,39 +2386,58 @@ class ProjectInfoScreen(MDScreen):
 
     # Przywraca stan timera i sledzonych celow po wejsciu na ekran projektu.
     def _restore_active_runtime(self):
+        # Pobiera zapisany stan timera z pliku (np. gdy aplikacja byla w tle).
         timer_state = active_timer.read_project_timer()
+        # Sprawdza, czy timer nalezy do tego projektu.
         if self._state_matches_project(timer_state):
+            # Odczytuje godzine, o ktorej timer zostal uruchomiony.
             started = timer_state.get("started_at")
             try:
+                # Zamienia tekst na date i godzine.
                 self._run_started_at = datetime.datetime.fromisoformat(started)
             except (TypeError, ValueError):
+                # Jesli cos poszlo nie tak, ustawia aktualna godzine.
                 self._run_started_at = datetime.datetime.now()
+            # Przywraca liczbe sekund, ktore juz uplynely przed pauza.
             self._run_base_elapsed = int(timer_state.get("base_elapsed_seconds", 0) or 0)
+            # Oblicza laczny czas, ktory juz minial.
             self._timer_elapsed_seconds = active_timer.elapsed_from_state(timer_state)
+            # Pokazuje obliczony czas na ekranie.
             self._refresh_timer_label()
+            # Zatrzymuje stary licznik (jesli istnial).
             self._stop_timer_event()
+            # Uruchamia nowy licznik, ktory odswieza czas co 1 sekunde.
             self._timer_ev = Clock.schedule_interval(self._on_timer_tick, 1.0)
+            # Mowi programowi, ze timer wlasnie dziala.
             self.timer_running = True
+            # Zmienia napis na przycisku na "stop".
             self.timer_button_caption = "stop"
 
+        # Tworzy spis wszystkich celow czasowych na tej stronie.
         rows_by_uid = self._active_goal_rows_by_uid()
+        # Przechodzi przez wszystkie zapisane cele i przywraca ich dzialanie.
         for goal_state in active_timer.read_goals():
+            # Pomija cele, ktore nie naleza do tego projektu.
             if not self._state_matches_project(goal_state):
                 continue
+            # Szuka wiersza tego celu na liscie.
             row = rows_by_uid.get(goal_state.get("uid"))
+            # Jesli znalazl taki wiersz, przywraca mu zapisany stan.
             if row is not None:
                 row.restore_tracking_from_state(goal_state)
 
     # --- Timer ---
 
     def _sync_active_timer_elapsed(self):
+        # Odczytuje aktualny stan timera z pliku
         state = active_timer.read_project_timer()
+        # Jeśli timer należy do tego projektu, aktualizuje wyświetlany czas
         if self._state_matches_project(state):
             self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
             self._refresh_timer_label()
 
-    # Odswieza wyswietlany napis timera w formacie gg:mm:ss.
     def _refresh_timer_label(self):
+        # Zamienia liczbę sekund na format gg:mm:ss (np. "01:23:45")
         s = self._timer_elapsed_seconds
         h, r = divmod(s, 3600)
         m, sec = divmod(r, 60)
@@ -2172,57 +2445,83 @@ class ProjectInfoScreen(MDScreen):
 
     # Zapisuje zakonczona sesje czasowa i zeruje dane biezacego pomiaru.
     def _finish_timer_run(self):
+        # Jesli stoper nie zostal uruchomiony, nic nie robimy.
         if self._run_started_at is None:
             return
+        # Obliczamy, ile sekund trwala ta sesja.
         duration = self._timer_elapsed_seconds - int(self._run_base_elapsed)
+        # Jesli sesja trwala co najmniej 1 sekunde, zapisujemy ja.
         if duration >= 1:
+            # Zapisujemy sesje: tytul projektu, czas trwania, moment startu i unikalne ID.
             record_session(
                 self.project_title,
                 duration,
                 started_at=self._run_started_at,
                 project_uid=self.project_uid,
             )
+        # Zerujemy date startu – nastepny pomiar zacznie sie od nowa.
         self._run_started_at = None
+        # Ustawiamy podstawe na aktualny czas, zeby nastepny pomiar liczyl sie od zera.
         self._run_base_elapsed = self._timer_elapsed_seconds
 
     # Wlacza lub wylacza stoper projektu - zapisuje lub konczy biezacy pomiar czasu.
     def toggle_timer(self):
+        # Jeśli stoper już odmierza czas – zatrzymujemy go
         if self.timer_running:
+            # Zatrzymuje odliczanie i zapisuje wynik
             self._stop_timer_event()
             self._finish_timer_run()
+            # Ustawia flagę, że stoper nie działa
             self.timer_running = False
+            # Zmienia napis na przycisku na "start"
             self.timer_button_caption = "start"
+            # Usuwa informację o aktywnym stoperze
             active_timer.clear_project_timer()
+            # Zapisuje projekt do pamięci
             self.save_project_content()
+            # Odświeża ekran główny żeby pokazać ostatni czas
             schedule_home_last_session_refresh()
+        # Jeśli stoper jest wyłączony – uruchamiamy go
         else:
+            # Na wszelki wypadek zatrzymuje ewentualny stary licznik
             self._stop_timer_event()
+            # Zapisuje ile sekund już minęło (żeby doliczyć od początku)
             self._run_base_elapsed = self._timer_elapsed_seconds
+            # Zapisuje aktualną godzinę jako moment startu
             self._run_started_at = datetime.datetime.now()
+            # Informuje "aktywny stoper", że ten projekt właśnie wystartował
             active_timer.start_project_timer(
                 self.project_title,
                 base_elapsed_seconds=self._run_base_elapsed,
                 started_at=self._run_started_at,
                 project_uid=self.project_uid,
             )
+            # Zapisuje projekt do pamięci
             self.save_project_content()
+            # Włącza usługę w tle (żeby stoper działał nawet po zminimalizowaniu)
             ensure_android_timer_service()
+            # Uruchamia licznik odświeżający wyświetlacz co 1 sekundę
             self._timer_ev = Clock.schedule_interval(self._on_timer_tick, 1.0)
+            # Ustawia flagę, że stoper działa
             self.timer_running = True
+            # Zmienia napis na przycisku na "stop"
             self.timer_button_caption = "stop"
 
     # Zatrzymuje cykliczne odswiezanie timera (konczy tykanie co sekunde).
     def _stop_timer_event(self):
+        # Zatrzymuje cykliczne odświeżanie timera (przestaje tykać co sekundę)
         if self._timer_ev is not None:
             self._timer_ev.cancel()
             self._timer_ev = None
 
-    # Wywolywane co sekunde - aktualizuje wyswietlany czas timera.
     def _on_timer_tick(self, _dt):
+        # Wywoływane co 1 sekundę – aktualizuje wyświetlany czas
         state = active_timer.read_project_timer()
+        # Jeśli timer należy do tego projektu, odczytuje czas z pliku
         if self._state_matches_project(state):
             self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
         elif self.timer_running:
+            # Jeśli timer jest uruchomiony ale nie należy do tego projektu – zatrzymuje go
             self._stop_timer_event()
             self.timer_running = False
             self.timer_button_caption = "start"
@@ -2230,35 +2529,38 @@ class ProjectInfoScreen(MDScreen):
             self._restore_active_runtime()
             return
         else:
+            # Jeśli timer nie jest nigdzie zapisany, po prostu dolicza 1 sekundę
             self._timer_elapsed_seconds += 1
         self._refresh_timer_label()
 
     # --- Bottom bar / settings ---
 
     def _finalize_and_go_home(self):
+        # Zatrzymuje stoper i wszystkie liczniki celów, zapisuje projekt i przechodzi na ekran główny
         self._stop_timer_event()
         self._stop_all_goal_trackers(update_active=False)
         self.save_project_content()
         MDApp.get_running_app().root.current = "home"
         schedule_home_last_session_refresh()
 
-    # Przechodzi do ekranu glownego, zapisujac stan projektu.
     def go_home(self):
         self._finalize_and_go_home()
 
-    # Przechodzi do ekranu statystyk.
     def go_statistics(self):
+        # Przechodzi do ekranu statystyk
         MDApp.get_running_app().root.current = "statistics"
 
-    # Zapisuje bieżący stan, a potem przechodzi do ekranu ustawień projektu.
     def open_project_settings(self):
+        # Otwiera ekran ustawień tego projektu
         if not (self.project_uid or self.project_title):
             return
+        # Zatrzymuje liczniki celów i zapisuje stan
         self._stop_all_goal_trackers(update_active=False)
         self.save_project_content()
         app = MDApp.get_running_app()
         if not app or not getattr(app, "root", None):
             return
+        # Przechodzi do ekranu ustawień, przekazując mu nazwę i ID projektu
         settings = app.root.get_screen("project_settings")
         settings.project_uid = self.project_uid
         settings.project_title = self.project_title
@@ -2382,6 +2684,7 @@ class _BottomSheetKeyboardMixin:
 
     # Wlacza tryb, w ktorym okno zmniejsza sie, by zrobic miejsce dla klawiatury.
     def _enable_resize_softinput(self):
+        # Włącza tryb, w którym okno aplikacji zmniejsza się, żeby zrobić miejsce dla klawiatury
         try:
             Window.softinput_mode = "resize"
         except Exception:
@@ -2542,6 +2845,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     # Oblicza wysokosc pola tekstowego notatki na podstawie liczby wierszy.
     def _note_field_height(self):
+        # Oblicza wysokość pola tekstowego notatki: im więcej wierszy, tym wyższe pole
         line_h = sp(16) * 1.35
         return dp(24) + line_h * self._NOTE_FIELD_LINES
 
@@ -2713,20 +3017,32 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     # Zapisuje nowa lub zmodyfikowana notatke i zamyka arkusz.
     def _commit_and_close(self):
+        # Pobieramy surowy tekst z pola edycyjnego.
         raw = self.field.text or ""
+        # Usuwamy spacje z poczatku i konca.
         text = raw.strip()
+        # Jesli tekst jest dlugi lub ma wiele linii, oznaczamy jako "wysoka" notatke.
         tall = bool(text) and (("\n" in raw) or len(text) > 100)
+        # Jesli edytujemy istniejaca notatke, aktualizujemy jej tekst.
         if self.note_row is not None:
+            # Ustawiamy nowy tekst w notatce.
             self.note_row.display_text = text
+            # Ustawiamy czy notatka ma byc wysoka.
             self.note_row.tall = tall
+            # Zapisujemy zmiany w projekcie.
             self.project_screen.save_project_content()
+            # Zamykamy arkusz edycji.
             self.dismiss()
             return
+        # Jesli tekst jest pusty, zamykamy arkusz bez dodawania notatki.
         if not text:
             self.dismiss()
             return
+        # Tworzymy nowa notatke z wpisanym tekstem.
         self.project_screen.add_note(text=text, tall=tall)
+        # Czyscimy pole tekstowe.
         self.field.text = ""
+        # Zamykamy arkusz.
         self.dismiss()
 
     # Zamyka arkusz z animacja zsuwania panelu w dol.
@@ -3119,27 +3435,40 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     # Ustawia pozycje i rozmiar panelu arkusza na ekranie, uwzgledniajac wysokosc zawartosci.
     def _apply_goal_layout(self, animate=False):
+        # Ustawia wysokość modala na podstawie jego zawartości
         self._sync_modal_height()
+        # Oblicza wysokość ramki z celem
         self._sync_goal_body_height()
+        # Pobiera wysokość treści celu
         body_h = float(self._body.height)
+        # Ustawia przewijaną listę na wysokość treści
         self._body_scroll.height = body_h
+        # Dopasowuje wysokość panelu do treści
         self.panel.height = self._panel_height_for_content(
             self.panel, body_h, body_scroll=self._body_scroll
         )
+        # Rozciąga panel na całą szerokość ekranu od lewej krawędzi
         self.panel.width = self.width or Window.width
         self.panel.x = 0
         self.panel.pos_hint = {}
+        # Odczytuje wysokość okna
         win_h = float(self.height or Window.height or 640)
+        # Oblicza gdzie ma być dolna krawędź panelu i ile miejsca jest nad nią
         target_y = self._sheet_bottom_y(win_h)
         max_h = win_h - target_y
+        # Jeśli panel jest za wysoki – zmniejsza przewijaną listę żeby wszystko zmieściło się na ekranie
         if self.panel.height > max_h:
+            # Mierzy wysokość ramek, tytułów i przycisków (bez listy treści)
             chrome = self._measure_panel_chrome(
                 self.panel, exclude=(self._body_scroll,)
             )
+            # Ustawia listę na tyle wysoka, ile zostało wolnego miejsca
             self._body_scroll.height = max(dp(80), max_h - chrome)
+            # Ponownie dopasowuje panel do nowej wysokości listy
             self.panel.height = self._panel_height_for_content(
                 self.panel, self._body_scroll.height, body_scroll=self._body_scroll
             )
+        # Przesuwa panel na właściwe miejsce (płynnie lub od razu)
         if animate:
             Animation(y=target_y, d=0.12, t="out_cubic").start(self.panel)
         else:
@@ -3179,16 +3508,22 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     # Zapisuje nowy cel czasowy do projektu i zamyka arkusz.
     def _commit(self):
+        # Pobiera tytul celu z pola tekstowego i usuwa spacje z poczatku i konca.
         title = (self.title_field.text or "").strip()
+        # Jesli tytul jest pusty, zamyka arkusz i konczy dzialanie.
         if not title:
             self.dismiss()
             return
+        # Odczytuje liczbe godzin i minut z pol i zamienia na same sekundy.
         quota = parse_goal_hours_minutes(
             self.hours_field.text,
             self.minutes_field.text,
         )
+        # Pobiera tryb resetowania celu (np. co tydzien, nigdy).
         mode = self._selected_reset_mode
+        # Tworzy krotki opis celu na podstawie sekund i trybu.
         summary = format_goal_summary(quota, mode)
+        # Dodaje nowy cel czasowy do listy na stronie projektu.
         self.project_screen.add_time_goal(
             title=title,
             goal=summary,
@@ -3197,7 +3532,9 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             reset_mode=mode,
             geofence=dict(self._geofence) if self._geofence else None,
         )
+        # Zapisuje caly projekt (wraz z nowym celem) do pliku.
         self.project_screen.save_project_content()
+        # Zamyka arkusz dodawania celu.
         self.dismiss()
 
     # Zamyka arkusz z animacja zsuwania w dol. Wylacza klawiature i czysci focus z pol.
@@ -3217,13 +3554,16 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
 # Dodaje lub edytuje prosty cel z listy (Lista celów).
 class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
+    # Okno do dodawania lub edycji prostego celu z listy (lista zadań do odhaczenia).
 
-    # Przygotowuje okno do dodania lub edycji prostego celu z listy.
     def __init__(self, project_screen, goal_row=None, **kwargs):
         super().__init__(**kwargs)
+        # Zapamiętuje ekran projektu – potrzebny do zapisu po dodaniu celu
         self.project_screen = project_screen
+        # Jeśli edytujemy istniejący cel, zapamiętuje jego wiersz; jeśli dodajemy nowy, będzie None
         self.goal_row = goal_row
         self._closing = False
+        # Okno na cały ekran, nie zamyka się po kliknięciu w tło
         self.size_hint = (1, 1)
         self.auto_dismiss = False
         self.background_color = (0, 0, 0, 0)
@@ -3754,14 +4094,20 @@ class _PodkrokEditorRow(MDBoxLayout):
 
     # Tworzy pojedynczy wiersz edytora podkroku z punktorem, polem tekstowym i przyciskiem usuwania.
     def __init__(self, sheet, text="", done=False, **kwargs):
+        # Ustaw domyślne wartości układu: elementy obok siebie w poziomie, odstęp 6 pikseli
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("spacing", dp(6))
+        # Wyłącz automatyczne dopasowanie wysokości i ustaw stałą wysokość wiersza na 44 piksele
         kwargs.setdefault("size_hint_y", None)
         kwargs.setdefault("height", dp(44))
+        # Wywołaj konstruktor rodzica (MDBoxLayout) z naszymi ustawieniami
         super().__init__(**kwargs)
+        # Zapisz referencję do arkusza (okna edycji) – będzie potrzebna do usuwania tego wiersza
         self.sheet = sheet
+        # Zapisz czy podkrok jest oznaczony jako zrobiony (done)
         self.done_state = bool(done)
 
+        # Dodaj punktor "•" na początku wiersza – fioletowa kropka wyrównana do środka
         self.add_widget(
             MDLabel(
                 text="•",
@@ -3776,6 +4122,7 @@ class _PodkrokEditorRow(MDBoxLayout):
             )
         )
 
+        # Stwórz pole tekstowe do wpisywania nazwy podkroku
         self.field = RoundedSheetTextInput(
             hint_text="Nazwa podkroku…",
             text=text or "",
@@ -3787,8 +4134,10 @@ class _PodkrokEditorRow(MDBoxLayout):
             foreground_color=get_color_from_hex("#222222"),
             cursor_color=get_color_from_hex("#7e57c2"),
         )
+        # Dodaj pole tekstowe do wiersza
         self.add_widget(self.field)
 
+        # Stwórz czerwony przycisk "×" do usuwania tego wiersza podkroku
         del_btn = Button(
             text="×",
             size_hint=(None, None),
@@ -3800,7 +4149,9 @@ class _PodkrokEditorRow(MDBoxLayout):
             font_size=sp(22),
             bold=True,
         )
+        # Podłącz funkcję która wywoła się gdy użytkownik kliknie przycisk – usunie ten wiersz z listy
         del_btn.bind(on_release=lambda *_: self.sheet._remove_podkrok_row(self))
+        # Dodaj przycisk usuwania do wiersza
         self.add_widget(del_btn)
 
 
@@ -3989,9 +4340,13 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
 
     # --- Podkrok list management ---
 
+    # Dodaje nowy wiersz podkroku do listy w edytorze.
     def _add_podkrok_row(self, text="", done=False):
+        # Tworzy nowy wiersz edytora z podanym tekstem i stanem wykonania
         row = _PodkrokEditorRow(self, text=text, done=done)
+        # Dodaje wiersz do listy podkrokow w edytorze
         self._podkrok_box.add_widget(row)
+        # Planuje przeliczenie ukladu arkusza, zeby zmiescil wszystkie wiersze
         Clock.schedule_once(lambda _dt: self._apply_sheet_layout(True), 0)
 
     # Usuwa wybrany wiersz podkroku z listy i przelicza uklad arkusza.
@@ -4008,28 +4363,40 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
     # --- Layout (mirrors AddTimeGoalBottomSheet pattern) ---
 
     def _apply_sheet_layout(self, animate=False):
+        # Ustawia wysokość modala na podstawie jego zawartości
         self._sync_modal_height()
+        # Pobiera wysokość ramki z krokami
         body_h = float(self._podkrok_box.minimum_height)
+        # Ustawia wysokość listy kroków (nie mniej niż 60, nie więcej niż 220 pikseli)
         self._podkrok_scroll.height = max(dp(60), min(body_h, dp(220)))
+        # Dopasowuje wysokość panelu do listy kroków
         self.panel.height = self._panel_height_for_content(
             self.panel, self._podkrok_scroll.height, body_scroll=self._podkrok_scroll
         )
+        # Rozciąga panel na całą szerokość ekranu od lewej krawędzi
         self.panel.width = self.width or Window.width
         self.panel.x = 0
         self.panel.pos_hint = {}
+        # Odczytuje wysokość okna
         win_h = float(self.height or Window.height or 640)
+        # Oblicza gdzie ma być dolna krawędź panelu i ile miejsca jest nad nią
         target_y = self._sheet_bottom_y(win_h)
         max_h = win_h - target_y
+        # Jeśli panel jest za wysoki – zmniejsza listę kroków żeby wszystko zmieściło się na ekranie
         if self.panel.height > max_h:
+            # Mierzy wysokość ramek, tytułów i przycisków (bez listy kroków)
             chrome = self._measure_panel_chrome(
                 self.panel, exclude=(self._podkrok_scroll,)
             )
+            # Ustawia listę kroków na tyle wysoka, ile zostało wolnego miejsca
             self._podkrok_scroll.height = max(dp(60), max_h - chrome)
+            # Ponownie dopasowuje panel do nowej wysokości listy
             self.panel.height = self._panel_height_for_content(
                 self.panel,
                 self._podkrok_scroll.height,
                 body_scroll=self._podkrok_scroll,
             )
+        # Przesuwa panel na właściwe miejsce (płynnie lub od razu)
         if animate:
             Animation(y=target_y, d=0.12, t="out_cubic").start(self.panel)
         else:
@@ -4085,19 +4452,26 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
                     return True
         return False
 
-    # --- Commit / delete ---
+    # --- Zatwierdzanie / usuwanie ---
 
+    # Zbiera teksty wszystkich podkrokow z listy edytora do zapisu.
     def _collect_children(self):
+        # Tworzy pusta liste na wyniki
         out = []
+        # Przechodzi przez wszystkie wiersze w odwrotnej kolejnosci (od pierwszego do ostatniego)
         rows = [
             w for w in reversed(self._podkrok_box.children)
             if isinstance(w, _PodkrokEditorRow)
         ]
+        # Dla kazdego wiersza odczytuje tekst i stan wykonania
         for row in rows:
             text = (row.field.text or "").strip()
+            # Pomija puste wiersze (bez tekstu)
             if not text:
                 continue
+            # Dodaje podkrok do listy wynikowej
             out.append({"text": text, "done": bool(row.done_state)})
+        # Zwraca liste podkrokow gotowa do zapisu
         return out
 
     # Zapisuje krok (z nazwa i lista podkrokow) do projektu i zamyka arkusz.
@@ -4285,15 +4659,22 @@ class TimeGoalTrackRow(MDBoxLayout):
 
     # Zatrzymuje pomiar czasu i usuwa ten cel czasowy z projektu.
     def request_delete(self, *_args):
+        # Zatrzymujemy odliczanie czasu dla tego celu.
         self.stop_tracking()
+        # Szukamy glownego ekranu projektu, do ktorego nalezy ten cel.
         scr = self.parent_screen
+        # Jesli nie mamy bezposredniego wskazania, szukamy w gore w hierarchii widzetow.
         if scr is None:
+            # Przechodzimy przez rodzicow, az znajdziemy ekran projektu.
             w = self.parent
             while w is not None:
+                # Sprawdzamy, czy to jest ekran projektu.
                 if isinstance(w, ProjectInfoScreen):
                     scr = w
                     break
+                # Przechodzimy do wyzszego rodzica.
                 w = w.parent
+        # Jesli znalezlismy ekran projektu, usuwamy ten cel z listy.
         if scr is not None:
             scr.remove_time_goal_row(self)
 
@@ -4332,20 +4713,30 @@ class TimeGoalTrackRow(MDBoxLayout):
 
     # Sprawdza, czy okres (tydzien/miesiac) sie zmienil - jesli tak, zeruje licznik i zaczyna od nowa.
     def _ensure_period(self):
+        # Jesli cel NIGDY sie nie resetuje...
         if self.reset_mode == RESET_NEVER:
+            # Jesli nie ma klucza okresu, ustaw go na "all" (zawsze ten sam).
             if not self.period_key:
                 self.period_key = "all"
+            # Nic wiecej nie robi - okres sie nie zmienia.
             return
+        # Pobiera aktualny klucz okresu (np. numer tygodnia).
         cur = current_period_key(self.reset_mode)
+        # Jesli cel nie ma jeszcze zadnego okresu, ustawia go na obecny.
         if not self.period_key:
             self.period_key = cur
             return
+        # Jesli okres sie zmienil (np. nadszedl nowy tydzien)...
         if self.period_key != cur:
+            # Zeruje liczbe zapisanych sekund - zaczyna od nowa.
             self.logged_seconds = 0.0
+            # Ustawia nowy klucz okresu.
             self.period_key = cur
+            # Resetuje flage "osiagnieto cel" i szczegoly wykresu.
             self._has_reached_goal = False
             self._overflow_cx = None
             self._overflow_dir = -1
+            # Jesli licznik czasu jest aktualnie wlaczony, uruchamia go od nowa.
             if self.tracking_active and self.active_uid:
                 project_title = self.parent_screen.project_title if self.parent_screen else ""
                 project_uid = self.parent_screen.project_uid if self.parent_screen else ""
@@ -4370,41 +4761,50 @@ class TimeGoalTrackRow(MDBoxLayout):
 
     # Zwraca szerokosc paska postepu w pikselach.
     def _track_width(self):
+        # Pobiera szerokość paska postępu (w pikselach) – po nim jeździ samochodzik
         track = self.ids.get("goal_track")
         if track is not None and track.width > 1:
             return float(track.width)
+        # Jeśli pasek nie jest jeszcze gotowy, zwraca domyślną szerokość
         return max(dp(160), float(self.width or 300) - dp(58))
 
-    # Oblicza granice "drogi" dla samochodzika - gdzie moze sie przesuwac w lewo i prawo.
     def _road_bounds(self):
+        # Oblicza granice "drogi" dla samochodzika – gdzie może jechać (lewo, prawo)
         tw = self._track_width()
-        road_start = float(dp(8))
-        road_end = max(road_start + dp(96), tw - float(dp(8)))
-        car_w = float(dp(96))
+        road_start = float(dp(8))  # Początek drogi (od lewej)
+        road_end = max(road_start + dp(96), tw - float(dp(8)))  # Koniec drogi (od prawej)
+        car_w = float(dp(96))  # Szerokość samochodzika w pikselach
         half = car_w * 0.5
+        # Minimalna i maksymalna pozycja środka samochodzika (żeby nie wyjechał poza pasek)
         min_cx = road_start + half
         max_cx = max(min_cx, road_end - half)
         return tw, min_cx, max_cx
 
-    # Taka sama liczba px/s jak przy postępie 0→100%: pełna długość paska na docelowy czas.
     def _car_travel_speed(self, min_cx, max_cx):
+        # Oblicza, jak szybko samochodzik jedzie (pikseli na sekundę)
+        # Żeby przejechał całą drogę w czasie równym docelowemu czasowi celu
         span = max(1.0, max_cx - min_cx)
         duration = max(10.0, float(self.goal_target_seconds))
         return span / duration
 
     # Po osiągnięciu 100%: samochodzik jeździ w lewo i prawo; odwraca się na każdym końcu.
     def _advance_overflow_car(self, min_cx, max_cx, dt):
+        # Jeśli samochodzik jeszcze nie zaczął jeździć po mecie, ustaw go na końcu
         if self._overflow_cx is None:
             self._overflow_cx = max_cx
-            self._overflow_dir = -1
+            self._overflow_dir = -1  # Zaczyna jechać w lewo
+        # Oblicza prędkość i przesuwa samochodzik
         speed = self._car_travel_speed(min_cx, max_cx)
         self._overflow_cx += self._overflow_dir * speed * max(float(dt), 0.0)
+        # Jeśli dojechał do końca w prawo – zawraca w lewo
         if self._overflow_cx >= max_cx:
             self._overflow_cx = max_cx
             self._overflow_dir = -1
+        # Jeśli dojechał do końca w lewo – zawraca w prawo
         elif self._overflow_cx <= min_cx:
             self._overflow_cx = min_cx
             self._overflow_dir = 1
+        # Odwraca obrazek samochodzika (patrzy w stronę jazdy)
         self.car_scale_x = -1.0 if self._overflow_dir < 0 else 1.0
         return self._overflow_cx
 
@@ -4449,6 +4849,7 @@ class TimeGoalTrackRow(MDBoxLayout):
 
     # Wywolywane po kliknieciu samochodzika - przelacza miedzy startem a zatrzymaniem pomiaru czasu.
     def on_car_button_release(self, *args):
+        # Gdy użytkownik kliknie samochodzik – jeśli czas jest mierzony, zatrzymuje; jeśli nie, uruchamia
         if self.tracking_active:
             self.stop_tracking()
         else:
@@ -4456,13 +4857,18 @@ class TimeGoalTrackRow(MDBoxLayout):
 
     # Rozpoczyna pomiar czasu dla tego celu. Uruchamia licznik w tle.
     def start_tracking(self):
+        # Jeśli licznik już tyka – nie rób nic (żeby nie uruchomić drugiego)
         if self._tick_ev is not None:
             return
+        # Jeśli cel nie ma jeszcze swojego unikalnego numeru – nadaje mu go
         if not self.active_uid:
             self.active_uid = f"goal-{uuid.uuid4().hex}"
+        # Upewnia się, że cel ma ustawiony poprawny okres (dzień/tydzień)
         self._ensure_period()
+        # Pobiera nazwę i ID projektu z ekranu nadrzędnego
         project_title = self.parent_screen.project_title if self.parent_screen else ""
         project_uid = self.parent_screen.project_uid if self.parent_screen else ""
+        # Mówi "aktywnemu stoperowi", żeby zaczął liczyć czas dla tego celu
         active_timer.start_goal(
             self.active_uid,
             project_title,
@@ -4474,24 +4880,34 @@ class TimeGoalTrackRow(MDBoxLayout):
             period_key=self.period_key,
             project_uid=project_uid,
         )
+        # Zapisuje projekt do pamięci (żeby nie zgubić danych)
         if self.parent_screen:
             self.parent_screen.save_project_content()
+        # Włącza usługę w tle (na Androidzie)
         ensure_android_timer_service()
+        # Oznacza, że cel jest teraz mierzony
         self.tracking_active = True
+        # Uruchamia licznik odświeżający się 20 razy na sekundę
         self._tick_ev = Clock.schedule_interval(self._on_track_tick, 0.05)
 
     # Zatrzymuje pomiar czasu dla tego celu. Odczytuje koncowy wynik z licznika.
     def stop_tracking(self, update_active=True):
+        # Odczytuje aktualny stan licznika z pliku
         state = active_timer.read_goal(self.active_uid) if self.active_uid else {}
         if state:
+            # Dodaje czas, który upłynął od ostatniego odświeżenia, do zapisanego czasu
             self.logged_seconds = float(state.get("base_logged_seconds", 0.0)) + float(
                 active_timer.running_seconds(state)
             )
+        # Zatrzymuje cykliczne odświeżanie
         if self._tick_ev is not None:
             self._tick_ev.cancel()
             self._tick_ev = None
+        # Oznacza, że cel nie jest już mierzony
         self.tracking_active = False
+        # Aktualizuje wygląd paska postępu
         self._update_progress_from_time(0)
+        # Jeśli trzeba, usuwa cel z listy aktywnych liczników
         if update_active and self.active_uid:
             active_timer.remove_goal(self.active_uid)
             if self.parent_screen:
@@ -4499,42 +4915,56 @@ class TimeGoalTrackRow(MDBoxLayout):
 
     # Przywraca pomiar czasu po ponownym uruchomieniu aplikacji.
     def restore_tracking_from_state(self, goal_state):
+        # Przywraca pomiar czasu, gdy użytkownik wróci do aplikacji (np. po zamknięciu i otwarciu)
         if not goal_state:
             return
+        # Przywraca unikalny numer celu
         self.active_uid = goal_state.get("uid", self.active_uid)
+        # Odczytuje zapisane sekundy i dolicza czas, który upłynął od ostatniego zapisu
         self.logged_seconds = float(goal_state.get("base_logged_seconds", 0.0)) + float(
             active_timer.running_seconds(goal_state)
         )
+        # Sprawdza, czy nie minął okres resetu (nowy dzień/tydzień)
         self._ensure_period()
+        # Oznacza cel jako aktywny (mierzymy czas)
         self.tracking_active = True
+        # Zatrzymuje ewentualny stary licznik
         if self._tick_ev is not None:
             self._tick_ev.cancel()
+        # Uruchamia nowy licznik odświeżający co 0.05 sekundy
         self._tick_ev = Clock.schedule_interval(self._on_track_tick, 0.05)
+        # Aktualizuje wygląd paska postępu
         self._update_progress_from_time(0)
 
-    # Wywolywane co 0.05 sekundy podczas pomiaru - odczytuje aktualny czas z licznika.
     def _on_track_tick(self, dt):
+        # Wywoływane co 0.05 sekundy podczas pomiaru – odświeża czas i wygląd
         state = active_timer.read_goal(self.active_uid) if self.active_uid else {}
         if state:
+            # Odczytuje zapisane sekundy i dolicza bieżący czas
             self.logged_seconds = float(state.get("base_logged_seconds", 0.0)) + float(
                 active_timer.running_seconds(state)
             )
         elif self.tracking_active:
+            # Jeśli licznika nie ma, ale myślimy że mierzymy – znaczy że został zatrzymany gdzie indziej
             self.tracking_active = False
             if self._tick_ev is not None:
                 self._tick_ev.cancel()
                 self._tick_ev = None
+            # Odświeża cały ekran i przywraca stan pozostałych liczników
             if self.parent_screen:
                 self.parent_screen.load_project_content()
                 self.parent_screen._restore_active_runtime()
             return
         else:
+            # Jeśli nie ma licznika i nic nie mierzymy, dolicza czas który upłynął
             self.logged_seconds += float(dt)
+        # Sprawdza, czy nie minął okres resetu (nowy dzień/tydzień)
         self._ensure_period()
+        # Aktualizuje graficzny pasek postępu i pozycję samochodzika
         self._update_progress_from_time(dt)
 
-    # Gdy wiersz celu zostaje usuniety z ekranu (parent = None), zatrzymuje pomiar czasu.
     def on_parent(self, *_args):
+        # Gdy wiersz celu zostaje usunięty z ekranu (parent = None), zatrzymuje pomiar czasu
         if self.parent is None:
             loading = bool(self.parent_screen and getattr(self.parent_screen, "_loading_project_content", False))
             self.stop_tracking(update_active=not loading)
