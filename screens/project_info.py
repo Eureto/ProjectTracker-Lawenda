@@ -27,7 +27,7 @@ from kivymd.uix.card import MDCard
 from kivymd.uix.label import MDLabel
 from kivymd.uix.screen import MDScreen
 
-from screens.keyboard_inset import keyboard_inset
+from screens.keyboard_inset import keyboard_inset, safe_keyboard_height
 from screens import active_timer
 from screens.emoji_assets import emoji_path
 from screens.session_store import record_session, schedule_home_last_session_refresh
@@ -1023,6 +1023,12 @@ class StageTextTap(ButtonBehavior, BoxLayout):
     pass
 
 
+# Otoczka wokół tekstu notatki, która reaguje na kliknięcie: dotknięcie = edycja notatki.
+class NoteTextTap(ButtonBehavior, MDBoxLayout):
+
+    pass
+
+
 # Kolumna osi dla wiersza EtapyPlusRow: linia od góry do środka,
 # a potem wypełnione fioletowe kółko z białym plusem pośrodku.
 #
@@ -1560,6 +1566,18 @@ class ProjectInfoScreen(MDScreen):
         self._etapy_sheet = sheet
         sheet.open()
 
+    # Otwiera arkusz do edycji/deletu istniejącej grupy etapów (wywoływane po dwukliku na chip).
+    def open_edit_etapy_group_sheet(self, group_index):
+        if self._etapy_sheet is not None:
+            return
+        sheet = EditEtapyGroupBottomSheet(self, int(group_index))
+
+        def _cleared(*_a):
+            self._etapy_sheet = None
+
+        sheet.bind(on_dismiss=_cleared)
+        self._etapy_sheet = sheet
+        sheet.open()
     # Wewnętrzne: otwiera pełny edytor Kroku (nowy lub edycja).
     def _open_etapy_krok_sheet(self, group_index, item_index):
         if self._etapy_krok_sheet is not None:
@@ -1606,9 +1624,21 @@ class ProjectInfoScreen(MDScreen):
 
     # Wyswietla wybrana grupe etapow i odswieza os czasu.
     def select_etapy_group(self, index):
+        old_index = self._etapy_selected_index
         self._etapy_selected_index = int(index)
         self._clamp_etapy_selection()
-        self._rebuild_etapy_chips()
+        # Update existing chips in-place instead of rebuilding, so that
+        # double-click timing (_last_click_time) is preserved.
+        # Note: Kivy children are in reverse visual order (last added = first).
+        box = self.ids.get("etapy_chips_box")
+        if box is not None:
+            n = len(box.children)
+            for i, child in enumerate(box.children):
+                if hasattr(child, '_chip_active'):
+                    # Reversed index: child at box.children[0] is the last chip visually
+                    child._chip_active = (n - 1 - i == self._etapy_selected_index)
+                    if hasattr(child, '_refresh_chip'):
+                        child._refresh_chip(child)
         self._rebuild_etapy_timeline()
         self.save_project_content()
 
@@ -1633,6 +1663,28 @@ class ProjectInfoScreen(MDScreen):
         self._rebuild_etapy_timeline()
         self.save_project_content()
 
+    # Zastępuje nazwę istniejącej grupy etapów.
+    def update_etapy_group_name(self, group_index, name):
+        name = (name or "").strip()
+        if not name:
+            return
+        try:
+            self._etapy_groups[int(group_index)]["name"] = name
+        except (IndexError, KeyError, TypeError):
+            return
+        self._rebuild_etapy_chips()
+        self.save_project_content()
+
+    # Usuwa grupę etapów (wraz ze wszystkimi jej krokami).
+    def delete_etapy_group(self, group_index):
+        try:
+            del self._etapy_groups[int(group_index)]
+        except (IndexError, TypeError):
+            return
+        self._clamp_etapy_selection()
+        self._rebuild_etapy_chips()
+        self._rebuild_etapy_timeline()
+        self.save_project_content()
     # Dodaje nowy Krok z jego Podkrokami (wywoływane przez edytor kroku).
     def create_etapy_step(self, group_index, text, children=None):
         text = (text or "").strip()
@@ -1702,9 +1754,13 @@ class ProjectInfoScreen(MDScreen):
             chip.texture_update()
             chip.width = chip.texture_size[0] + dp(28)
 
-            def _paint_chip(btn, is_active, *_a):
+            chip._chip_active = bool(active)
+
+            def _paint_chip(btn, *_a):
+                is_active = getattr(btn, '_chip_active', False)
                 btn.canvas.before.clear()
                 bg = _CHIP_ACTIVE if is_active else _CHIP_INACTIVE
+                btn.color = (0.12, 0.12, 0.12, 1) if is_active else (1, 1, 1, 1)
                 with btn.canvas.before:
                     Color(*bg)
                     RoundedRectangle(
@@ -1713,13 +1769,23 @@ class ProjectInfoScreen(MDScreen):
                         radius=[dp(16), dp(16), dp(16), dp(16)],
                     )
 
-            _paint_chip(chip, active)
-            chip.bind(pos=lambda b, *a, ia=active: _paint_chip(b, ia))
-            chip.bind(size=lambda b, *a, ia=active: _paint_chip(b, ia))
+            chip._refresh_chip = _paint_chip
+            _paint_chip(chip)
+            chip.bind(pos=_paint_chip, size=_paint_chip)
             gi = idx
-            chip.bind(on_release=lambda *a, i=gi: self.select_etapy_group(i))
+            # Single click: select group. Double-click: open edit/delete sheet.
+            chip._last_click_time = 0
+            def _on_chip_release(*_a, i=gi, c=chip):
+                now = Clock.get_time()
+                if now - c._last_click_time < 0.4:
+                    # Double-click detected
+                    self.open_edit_etapy_group_sheet(i)
+                    c._last_click_time = 0
+                else:
+                    c._last_click_time = now
+                    self.select_etapy_group(i)
+            chip.bind(on_release=_on_chip_release)
             box.add_widget(chip)
-
     # Odtwarza pelna os czasu dla wybranej grupy etapow.
     def _rebuild_etapy_timeline(self):
         timeline = self.ids.get("etapy_timeline_list")
@@ -2138,7 +2204,7 @@ class _BottomSheetKeyboardMixin:
         win_h = float(Window.height or 0)
         shrink = max(0.0, baseline - win_h) if baseline > win_h + dp(8) else 0.0
         inset = keyboard_inset(baseline) if baseline > 0 else 0.0
-        kh = float(Window.keyboard_height or 0)
+        kh = safe_keyboard_height(baseline)
 
         gap = max(0.0, inset - shrink)
         if kh > shrink + dp(4):
@@ -2155,10 +2221,11 @@ class _BottomSheetKeyboardMixin:
         if h <= 0:
             return
         gap = 0.0
+        baseline = float(getattr(self, "_win_h_baseline", 0) or 0)
         if (
             self._sheet_input_focused()
             or self._window_shrunk_for_keyboard()
-            or float(Window.keyboard_height or 0) > dp(48)
+            or safe_keyboard_height(baseline) > dp(48)
         ):
             gap = self._keyboard_unreserved_gap()
 
@@ -2236,7 +2303,7 @@ class _BottomSheetKeyboardMixin:
             self._kb_lift_peak = kh
         lift = max(kh, peak)
 
-        if self._sheet_input_focused() and lift < dp(200):
+        if self._sheet_input_focused() and lift < dp(200) and platform not in ("win", "linux", "macosx"):
             win_h = float(Window.height or 640)
             lift = max(lift, win_h * 0.36)
         return lift
@@ -2258,7 +2325,7 @@ class _BottomSheetKeyboardMixin:
     def _sheet_bottom_y(self, win_h):
         baseline = float(getattr(self, "_win_h_baseline", 0) or 0)
         shrink = max(0.0, baseline - win_h) if baseline > 0 else 0.0
-        inset = keyboard_inset(baseline) if baseline > 0 else float(Window.keyboard_height or 0)
+        inset = keyboard_inset(baseline) if baseline > 0 else safe_keyboard_height(baseline)
 
         if not (
             self._sheet_input_focused()
@@ -2270,7 +2337,7 @@ class _BottomSheetKeyboardMixin:
         if shrink > dp(40):
             return 0.0
 
-        lift = max(inset, float(Window.keyboard_height or 0), self._keyboard_lift())
+        lift = max(inset, safe_keyboard_height(baseline), self._keyboard_lift())
         gap = self._keyboard_unreserved_gap()
         return max(0.0, lift - gap)
 
@@ -3296,6 +3363,182 @@ class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
         anim.start(self.panel)
 
 
+# Arkusz do edycji/deletu istniejącej grupy etapów — wywoływany po dwukliku na chipie.
+class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
+
+    # Przygotowuje okno do edycji nazwy grupy etapów z przyciskiem usuwania.
+    def __init__(self, project_screen, group_index, **kwargs):
+        super().__init__(**kwargs)
+        self.project_screen = project_screen
+        self.group_index = int(group_index)
+        self._closing = False
+        self.size_hint = (1, 1)
+        self.auto_dismiss = False
+        self.background_color = (0, 0, 0, 0)
+        self.background = ""
+
+        # Odczytuje aktualną nazwę grupy.
+        try:
+            group = project_screen._etapy_groups[self.group_index]
+            self._initial_name = group.get("name", "")
+        except (IndexError, KeyError, TypeError):
+            self._initial_name = ""
+
+        root = FloatLayout()
+        dim = Button(
+            size_hint=(1, 1),
+            background_normal="",
+            background_color=(0, 0, 0, 0.45),
+            on_release=lambda *a: self.dismiss(),
+        )
+        root.add_widget(dim)
+
+        self.panel = MDCard(
+            orientation="vertical",
+            padding=[dp(14), dp(10), dp(14), 0],
+            spacing=dp(8),
+            size_hint=(1, None),
+            height=dp(300),
+            radius=[dp(22), dp(22), 0, 0],
+            md_bg_color=(1, 1, 1, 1),
+            elevation=16,
+        )
+        root.add_widget(self.panel)
+
+        self.panel.add_widget(
+            MDLabel(
+                text="Edytuj grupę etapów",
+                font_style="Subtitle1",
+                bold=True,
+                theme_text_color="Custom",
+                text_color=get_color_from_hex("#222222"),
+                size_hint_y=None,
+                height=dp(24),
+            )
+        )
+
+        self.field = RoundedSheetTextInput(
+            hint_text="Nazwa grupy (np. Salto)…",
+            text=self._initial_name,
+            multiline=False,
+            size_hint_y=None,
+            height=dp(48),
+            font_size=sp(16),
+            padding=[dp(12), dp(12), dp(12), dp(12)],
+            foreground_color=get_color_from_hex("#222222"),
+            cursor_color=get_color_from_hex("#7e57c2"),
+        )
+        self.panel.add_widget(self.field)
+
+        bar = MDBoxLayout(orientation="horizontal", size_hint_y=None, height=dp(48), spacing=dp(12))
+        btn_delete = RoundedSheetButton(
+            text="Usuń",
+            size_hint_x=None,
+            width=dp(88),
+            bg_color=list(get_color_from_hex("#e53935")),
+        )
+        btn_delete.bind(on_release=lambda *a: self._delete_and_close())
+        bar.add_widget(btn_delete)
+        bar.add_widget(Widget(size_hint_x=1))
+        btn_cancel = RoundedSheetButton(
+            text="Anuluj",
+            size_hint_x=None,
+            width=dp(96),
+            bg_color=[0.94, 0.94, 0.96, 1],
+            text_rgb=list(get_color_from_hex("#444444")),
+        )
+        btn_cancel.bind(on_release=lambda *a: self.dismiss())
+        app = MDApp.get_running_app()
+        btn_save = RoundedSheetButton(
+            text="Zapisz",
+            size_hint_x=None,
+            width=dp(104),
+            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+        )
+        btn_save.bind(on_release=lambda *a: self._commit_and_close())
+        bar.add_widget(btn_cancel)
+        bar.add_widget(btn_save)
+        self.panel.add_widget(bar)
+        self.add_widget(root)
+
+    # Ustawia pozycje i rozmiar panelu, uwzgledniajac wysokosc ekranu i klawiature.
+    def _apply_sheet_layout(self, animate=False):
+        self._sync_modal_height()
+        self.panel.width = self.width or Window.width
+        self.panel.x = 0
+        self.panel.pos_hint = {}
+        self.panel.height = self._panel_height_for_content(self.panel, 0)
+        win_h = float(self.height or Window.height or 640)
+        target_y = self._sheet_bottom_y(win_h)
+        max_h = win_h - target_y
+        if self.panel.height > max_h:
+            self.panel.height = max(dp(180), max_h)
+        if animate:
+            Animation(y=target_y, d=0.12, t="out_cubic").start(self.panel)
+        else:
+            self.panel.y = target_y
+
+    # Przelicza uklad przy pojawieniu sie klawiatury.
+    def _relayout_for_keyboard(self, animate=False):
+        self._apply_sheet_layout(animate)
+
+    # Podlacza obsluge klawiatury i rozpoczyna animacje otwarcia.
+    def on_open(self):
+        self._sheet_kb_bound = False
+        self._sheet_bind_keyboard()
+        self._enable_resize_softinput()
+        self.panel.y = -dp(400)
+        Clock.schedule_once(self._open_anim, 0)
+
+    # Wysuwa panel z dolu i po chwili ustawia focus na polu tekstowym.
+    def _open_anim(self, _dt):
+        self._apply_sheet_layout(False)
+        target_y = self.panel.y
+        self.panel.y = -self.panel.height
+        Animation(y=target_y, d=0.28, t="out_cubic").start(self.panel)
+        Clock.schedule_once(self._request_focus, 0.3)
+
+    # Ustawia kursor w polu tekstowym, zeby uzytkownik mogl od razu edytowac nazwe.
+    def _request_focus(self, _dt):
+        self.field.focus = True
+        self._schedule_keyboard_relayout(True)
+        if self.field.text:
+            self.field.cursor = (len(self.field.text), 0)
+
+    # Dopasowuje szerokosc panelu po zmianie rozmiaru ekranu.
+    def on_size(self, *_):
+        if self.panel is not None and self.parent is not None:
+            self.panel.width = self.width
+            self._sync_modal_height()
+            self._schedule_keyboard_relayout(False)
+
+    # Usuwa grupe etapow i zamyka arkusz.
+    def _delete_and_close(self):
+        self.project_screen.delete_etapy_group(self.group_index)
+        self.dismiss()
+
+    # Zapisuje zmieniona nazwe grupy i zamyka arkusz.
+    def _commit_and_close(self):
+        text = (self.field.text or "").strip()
+        if not text:
+            self.dismiss()
+            return
+        self.project_screen.update_etapy_group_name(self.group_index, text)
+        self.dismiss()
+
+    # Zamyka arkusz z animacja - zsuwa panel w dol i wylacza klawiature.
+    def dismiss(self, *largs):
+        if self._closing:
+            return
+        self._closing = True
+        self._sheet_unbind_keyboard()
+        self.field.focus = False
+        h = max(self.panel.height, dp(1))
+        anim = Animation(y=-h, d=0.22, t="in_cubic")
+        anim.bind(on_complete=lambda *a: super(EditEtapyGroupBottomSheet, self).dismiss())
+        anim.start(self.panel)
+
+
 # Pojedynczy wiersz edytora wewnątrz listy Podkroków w EditEtapyKrokBottomSheet.
 #
 # Zawiera punktor, pole tekstowe do edycji i czerwony przycisk × do usuwania.
@@ -3696,38 +3939,6 @@ class ProjectNoteRow(MDBoxLayout):
         self.bind(tall=self._schedule_layout)
         self.bind(width=self._schedule_layout)
 
-    # Zwraca unikalny klucz do rozpoznawania dotkniec na tym wierszu.
-    def _touch_key(self):
-        return "_pnr_%d" % id(self)
-
-    # Sprawdza, czy uzytkownik dotknal tego wiersza - zapamietuje miejsce dotkniecia.
-    def on_touch_down(self, touch):
-        if not self.collide_point(*touch.pos):
-            return super().on_touch_down(touch)
-        if "delete_btn" in self.ids and self.ids.delete_btn.collide_point(*touch.pos):
-            return super().on_touch_down(touch)
-        if super().on_touch_down(touch):
-            return True
-        if "note_scroll" in self.ids and self.ids.note_scroll.collide_point(*touch.pos):
-            touch.ud[self._touch_key()] = touch.pos
-        return False
-
-    # Sprawdza, czy uzytkownik puscil dotkniecie w tym samym miejscu (krotkie klikniecie). Jesli tak, otwiera edytor notatki.
-    def on_touch_up(self, touch):
-        if super().on_touch_up(touch):
-            return True
-        key = self._touch_key()
-        start = touch.ud.pop(key, None)
-        if start and self.collide_point(*touch.pos):
-            if "delete_btn" in self.ids and self.ids.delete_btn.collide_point(*touch.pos):
-                return False
-            dx = touch.pos[0] - start[0]
-            dy = touch.pos[1] - start[1]
-            if dx * dx + dy * dy < dp(14) ** 2:
-                self.open_edit_from_row()
-                return True
-        return False
-
     # Usuwa te notatke z projektu.
     def request_delete(self, *_args):
         scr = self.parent_screen
@@ -3743,7 +3954,6 @@ class ProjectNoteRow(MDBoxLayout):
 
     # Wywolywane po utworzeniu widoku - podlacza przeliczanie ukladu i obsluge przycisku usuwania.
     def on_kv_post(self, base_widget):
-        self.ids.note_scroll.bind(width=self._schedule_layout)
         self.ids.note_label.bind(texture_size=self._schedule_layout)
         self.ids.delete_btn.bind(on_press=lambda *_a: self.request_delete())
         Clock.schedule_once(self._sync_note_layout, 0)
@@ -3754,9 +3964,8 @@ class ProjectNoteRow(MDBoxLayout):
 
     # Przelicza wysokosc wiersza notatki na podstawie dlugosci tekstu i szerokosci ekranu.
     def _sync_note_layout(self, *args):
-        sc = self.ids.note_scroll
         lbl = self.ids.note_label
-        aw = max(self.width - dp(74), sc.width - dp(16), sp(20))
+        aw = max(self.width - dp(74), sp(20))
         if aw <= sp(20) or self.width <= 1:
             Clock.schedule_once(self._sync_note_layout, 0.05)
             return

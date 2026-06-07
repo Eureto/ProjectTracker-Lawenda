@@ -144,19 +144,19 @@ def elapsed_from_state(state, now=None):
     # Sumuje czas z poprzednich uruchomień (base_elapsed_seconds) z czasem bieżącego uruchomienia.
     started = _to_datetime((state or {}).get("started_at"))
     if started is None:
-        return int(float((state or {}).get("base_elapsed_seconds", 0)))
+        return float((state or {}).get("base_elapsed_seconds", 0))
     now = now or _now()
-    base = int(float((state or {}).get("base_elapsed_seconds", 0)))
-    return max(0, base + int((now - started).total_seconds()))
+    base = float((state or {}).get("base_elapsed_seconds", 0))
+    return max(0.0, base + (now - started).total_seconds())
 
 
 def running_seconds(state, now=None):
     # Oblicza liczbę sekund, które upłynęły od ostatniego uruchomienia stopera.
     started = _to_datetime((state or {}).get("started_at"))
     if started is None:
-        return 0
+        return 0.0
     now = now or _now()
-    return max(0, int((now - started).total_seconds()))
+    return max(0.0, (now - started).total_seconds())
 
 
 # ---------------------------------------------------------------------------

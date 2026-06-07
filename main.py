@@ -72,10 +72,10 @@ if platform in ('win', 'linux', 'macosx'):
 # Kolejność ma znaczenie – pliki .kv muszą być ładowane w odpowiedniej
 # kolejności, aby elementy zdefiniowane w jednym były dostępne w drugim.
 _LAZY_SCREENS = [
-    ("add_project",      "kv/addProject.kv",      "screens.add_project",      "AddProjectScreen"),
-    ("statistics",       "kv/statistics.kv",      "screens.statistics",       "StatisticsScreen"),
-    ("project_info",     "kv/project_info.kv",    "screens.project_info",     "ProjectInfoScreen"),
-    ("project_settings", "kv/projectSettings.kv", "screens.project_settings", "ProjectSettingsScreen"),
+    ("add_project",      os.path.join("kv", "addProject.kv"),      "screens.add_project",      "AddProjectScreen"),
+    ("statistics",       os.path.join("kv", "statistics.kv"),      "screens.statistics",       "StatisticsScreen"),
+    ("project_info",     os.path.join("kv", "project_info.kv"),    "screens.project_info",     "ProjectInfoScreen"),
+    ("project_settings", os.path.join("kv", "projectSettings.kv"), "screens.project_settings", "ProjectSettingsScreen"),
     ("geofence_picker",  None,                    "screens.geofence_picker",  "GeofencePickerScreen"),
 ]
 
@@ -101,7 +101,7 @@ class TimeTrackerApp(MDApp):
     def build(self):
         # Na starcie ładujemy tylko plik wyglądu ekranu głównego (home.kv).
         # Reszta zostanie załadowana później (patrz _finalize_startup).
-        Builder.load_file("kv/home.kv")
+        Builder.load_file(os.path.join("kv", "home.kv"))
 
         # Tworzymy menedżer ekranów z płynnym przejściem (NoTransition =
         # brak animacji, ekran zmienia się natychmiast).

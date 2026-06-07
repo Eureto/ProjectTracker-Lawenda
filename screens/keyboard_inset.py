@@ -136,3 +136,14 @@ def _android_keyboard_inset():
     except Exception:
         # Jeśli coś poszło nie tak (np. brak uprawnień) – zwróć 0
         return 0.0
+
+
+def safe_keyboard_height(baseline_window_height=0):
+    """
+    Platform-aware keyboard height function.
+    Returns 0 on desktop (Windows, Linux, macOS) since there's no virtual keyboard.
+    Returns actual keyboard height on mobile platforms.
+    """
+    if platform in ("win", "linux", "macosx"):
+        return 0.0
+    return keyboard_inset(baseline_window_height)

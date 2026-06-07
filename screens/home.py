@@ -308,7 +308,7 @@ class ProjectCard(MDCard):
             data = {}
             if os.path.exists(storage_path):
                 try:
-                    with open(storage_path, 'r') as f:
+                    with open(storage_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
                 except (IOError, json.JSONDecodeError):
                     pass
@@ -320,7 +320,7 @@ class ProjectCard(MDCard):
             key = self.uid or self.title
             data[key] = {'x': rel_x, 'top': rel_y}
 
-            with open(storage_path, 'w') as f:
+            with open(storage_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f)
 
             print(f"Position saved for {self.title} ({key}): x={rel_x:.2f}, top={rel_y:.2f}")
@@ -562,7 +562,7 @@ class HomeScreen(MDScreen):
         storage_path = os.path.join(app.user_data_dir, 'projects.json')
         if os.path.exists(storage_path):
             try:
-                with open(storage_path, 'r') as f:
+                with open(storage_path, 'r', encoding='utf-8') as f:
                     projects = json.load(f)
                 for p in projects:
                     self.add_project_card(
