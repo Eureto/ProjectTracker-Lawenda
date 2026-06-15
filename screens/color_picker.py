@@ -270,6 +270,8 @@ class ColorPickerPopup(Popup):
         )
         cancel_btn = MDFlatButton(
             text="ANULUJ",
+            theme_text_color="Custom",
+            text_color=(1, 1, 1, 0.8),
             on_release=lambda x: self.dismiss(),
         )
         ok_btn = MDRaisedButton(
