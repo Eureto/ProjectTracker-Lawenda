@@ -2,15 +2,19 @@ from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.properties import StringProperty
 from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.anchorlayout import AnchorLayout
+from kivy.uix.label import Label
 from kivy.graphics import Color, RoundedRectangle
 from kivymd.uix.screen import MDScreen
-from kivymd.uix.boxlayout import MDBoxLayout
-from kivymd.uix.label import MDLabel
 from kivymd.uix.button import MDRaisedButton
 from kivymd.app import MDApp
 
 from screens.color_picker import ColorPickerPopup, hex_to_rgba
+
+
+def _contrast_text_color(bg_hex):
+    r, g, b, _ = hex_to_rgba(bg_hex)
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return (0.1, 0.1, 0.1, 1) if lum > 0.5 else (1, 1, 1, 1)
 
 
 _THEME_LABELS = {
@@ -30,19 +34,24 @@ class ThemeColorRow(BoxLayout):
     def __init__(self, theme_key, hex_color, **kwargs):
         self.theme_key = theme_key
         self.display_label = _THEME_LABELS.get(theme_key, theme_key)
-        self.hex_color = hex_color
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint_y", None)
         kwargs.setdefault("height", dp(52))
         kwargs.setdefault("spacing", dp(12))
         super().__init__(**kwargs)
+        self.hex_color = hex_color
+        self.bind(pos=self._redraw_swatch, size=self._redraw_swatch)
+        Clock.schedule_once(lambda _dt: self._redraw_swatch(), 0)
 
     def on_hex_color(self, *args):
-        self.canvas.clear()
-        with self.canvas:
+        self._redraw_swatch()
+
+    def _redraw_swatch(self, *args):
+        self.canvas.before.clear()
+        with self.canvas.before:
             Color(*hex_to_rgba(self.hex_color))
             RoundedRectangle(
-                pos=(self.width - dp(44), self.y + dp(6)),
+                pos=(self.x + self.width - dp(44), self.y + dp(6)),
                 size=(dp(36), dp(36)),
                 radius=[dp(8)],
             )
@@ -72,16 +81,14 @@ class SettingsScreen(MDScreen):
             return
         container.clear_widgets()
         app = MDApp.get_running_app()
+        txt_color = _contrast_text_color(app.theme_bg)
         for key in _THEME_LABELS:
             hex_val = getattr(app, key, "#000000")
             row = ThemeColorRow(theme_key=key, hex_color=hex_val)
-            label = MDLabel(
-                text=row.display_label,
+            label = Label(
+                text=_THEME_LABELS[key],
                 font_size=dp(15),
-                halign="left",
-                valign="middle",
-                theme_text_color="Custom",
-                text_color=(1, 1, 1, 0.9),
+                color=txt_color,
                 size_hint_x=1,
             )
             row.add_widget(label)
