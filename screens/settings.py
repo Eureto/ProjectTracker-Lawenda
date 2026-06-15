@@ -3,7 +3,7 @@ from kivy.metrics import dp
 from kivy.properties import StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
-from kivy.graphics import Color, RoundedRectangle
+from kivy.graphics import Color, RoundedRectangle, Line
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.button import MDRaisedButton
 from kivymd.app import MDApp
@@ -54,6 +54,15 @@ class ThemeColorRow(BoxLayout):
                 pos=(self.x + self.width - dp(44), self.y + dp(6)),
                 size=(dp(36), dp(36)),
                 radius=[dp(8)],
+            )
+            Color(1, 1, 1, 0.3)
+            Line(
+                rounded_rectangle=(
+                    self.x + self.width - dp(44),
+                    self.y + dp(6),
+                    dp(36), dp(36), dp(8),
+                ),
+                width=dp(1.5),
             )
 
     def on_touch_down(self, touch):
