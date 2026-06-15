@@ -3,7 +3,8 @@ from kivy.metrics import dp
 from kivy.properties import StringProperty
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.label import Label
-from kivy.graphics import Color, RoundedRectangle, Line
+from kivy.uix.widget import Widget
+from kivy.graphics import Color, Rectangle, RoundedRectangle, Line
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.button import MDRaisedButton
 from kivymd.app import MDApp
@@ -14,10 +15,6 @@ from screens.color_picker import ColorPickerPopup, hex_to_rgba, contrast_text_co
 _THEME_SECTIONS = [
     ("Ogólne", [
         ("theme_bg", "Tło aplikacji"),
-    ]),
-    ("Karty", [
-        ("theme_card_bg", "Tło kart"),
-        ("theme_text_dark", "Ciemny tekst"),
     ]),
     ("Navigation Bar", [
         ("nav_bg", "Tło"),
@@ -96,7 +93,7 @@ class SettingsScreen(MDScreen):
         container.clear_widgets()
         app = MDApp.get_running_app()
         txt_color = contrast_text_color(app.theme_bg)
-        for section_name, items in _THEME_SECTIONS:
+        for idx, (section_name, items) in enumerate(_THEME_SECTIONS):
             header = Label(
                 text=section_name,
                 font_size=dp(16),
@@ -122,6 +119,17 @@ class SettingsScreen(MDScreen):
                 )
                 row.add_widget(label)
                 container.add_widget(row)
+            if idx < len(_THEME_SECTIONS) - 1:
+                sep = Widget(size_hint_y=None, height=dp(1))
+                with sep.canvas:
+                    Color(*hex_to_rgba(app.theme_bg, 0.4))
+                    rect = Rectangle(pos=sep.pos, size=sep.size)
+                def update_sep(w, _, r=rect):
+                    r.pos = (w.x + dp(12), w.y)
+                    r.size = (w.width - dp(24), w.height)
+                sep.bind(pos=update_sep, size=update_sep)
+                Clock.schedule_once(lambda dt: update_sep(sep, None), 0)
+                container.add_widget(sep)
 
     def reset_theme(self):
         app = MDApp.get_running_app()

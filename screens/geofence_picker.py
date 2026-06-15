@@ -725,7 +725,7 @@ class GeofencePickerScreen(MDScreen):
         app = MDApp.get_running_app()
         primary_bg = list(
             get_color_from_hex(
-                getattr(app, "theme_card_bg", "#B388FF") if app else "#B388FF"
+                getattr(app, "theme_bg", "#B388FF") if app else "#B388FF"
             )
         )
 
@@ -763,7 +763,7 @@ class GeofencePickerScreen(MDScreen):
         app = MDApp.get_running_app()
         bg = list(
             get_color_from_hex(
-                getattr(app, "theme_card_bg", "#B388FF") if app else "#B388FF"
+                getattr(app, "theme_bg", "#B388FF") if app else "#B388FF"
             )
         )
         btn = RoundedSheetButton(

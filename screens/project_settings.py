@@ -11,7 +11,7 @@ import os
 
 from kivy.clock import Clock
 from kivy.properties import ColorProperty, StringProperty
-from kivy.uix.screenmanager import Screen
+from kivymd.uix.screen import MDScreen
 from kivy.utils import platform
 from kivymd.app import MDApp
 from kivymd.uix.button import MDFlatButton
@@ -52,7 +52,7 @@ def _save_json(path, data):
 
 # Ekran do edycji/usuwania projektu. project_uid to unikalny numer identyfikacyjny (UID),
 # który odróżnia ten projekt od innych – nawet jeśli mają taką samą nazwę.
-class ProjectSettingsScreen(Screen):
+class ProjectSettingsScreen(MDScreen):
 
     project_uid = StringProperty("")
     project_title = StringProperty("")

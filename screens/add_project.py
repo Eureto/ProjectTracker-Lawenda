@@ -12,7 +12,7 @@ import json
 import unicodedata
 import uuid
 from kivy.properties import StringProperty, ColorProperty, NumericProperty, ObjectProperty, ListProperty
-from kivy.uix.screenmanager import Screen
+from kivymd.uix.screen import MDScreen
 from kivymd.uix.dialog import MDDialog
 from screens.color_palette import open_palette_picker
 from kivymd.uix.gridlayout import MDGridLayout
@@ -236,7 +236,7 @@ class EmojiMetadata:
 # ---------------------------------------------------------------------------
 # GŁÓWNY EKRAN DODAWANIA PROJEKTU
 # ---------------------------------------------------------------------------
-class AddProjectScreen(Screen):
+class AddProjectScreen(MDScreen):
     selected_color = ColorProperty([0.7, 0.5, 1, 1])  # Domyślny fiolet
     selected_icon = StringProperty("emoticon-happy-outline")
     selected_image_path = StringProperty("")

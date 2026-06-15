@@ -13,12 +13,7 @@
 # Potem na tym tle układane są pozostałe elementy.
 
 <ProjectSettingsScreen>:
-    canvas.before:
-        Color:
-            rgba: utils.get_color_from_hex("#8A4BF4")
-        Rectangle:
-            pos: self.pos
-            size: self.size
+    md_bg_color: utils.get_color_from_hex(app.theme_bg)
 
     # "MDBoxLayout" – główny pionowy układ. Wszystkie sekcje są ułożone
     # jedna pod drugą. "padding" daje odstęp od krawędzi ekranu: lewy 24,

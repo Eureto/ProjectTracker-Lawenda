@@ -2507,7 +2507,7 @@ class AddNoteBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             text=add_label,
             size_hint_x=None,
             width=dp(104),
-            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+            bg_color=list(get_color_from_hex(app.theme_bg)),
         )
         btn_add.bind(on_release=lambda *a: self._commit_and_close())
         bar.add_widget(btn_cancel)
@@ -2780,7 +2780,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             text="Dodaj cel",
             size_hint_x=None,
             width=dp(112),
-            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+            bg_color=list(get_color_from_hex(app.theme_bg)),
         )
         btn_add.bind(on_release=lambda *a: self._commit())
         bar.add_widget(btn_cancel)
@@ -2828,7 +2828,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             text="Mapa",
             size_hint_x=None,
             width=dp(112),
-            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+            bg_color=list(get_color_from_hex(app.theme_bg)),
         )
         btn_map.bind(on_release=lambda *_a: self._open_geofence_picker())
         button_row.add_widget(btn_map)
@@ -3115,7 +3115,7 @@ class AddChecklistGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             text="Zapisz" if goal_row else "Dodaj",
             size_hint_x=None,
             width=dp(104),
-            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+            bg_color=list(get_color_from_hex(app.theme_bg)),
         )
         btn_add.bind(on_release=lambda *a: self._commit_and_close())
         bar.add_widget(btn_cancel)
@@ -3283,7 +3283,7 @@ class AddEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             text="Dodaj",
             size_hint_x=None,
             width=dp(104),
-            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+            bg_color=list(get_color_from_hex(app.theme_bg)),
         )
         btn_add.bind(on_release=lambda *a: self._commit_and_close())
         bar.add_widget(btn_cancel)
@@ -3452,7 +3452,7 @@ class EditEtapyGroupBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             text="Zapisz",
             size_hint_x=None,
             width=dp(104),
-            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+            bg_color=list(get_color_from_hex(app.theme_bg)),
         )
         btn_save.bind(on_release=lambda *a: self._commit_and_close())
         bar.add_widget(btn_cancel)
@@ -3757,7 +3757,7 @@ class EditEtapyKrokBottomSheet(ModalView, _BottomSheetKeyboardMixin):
             text=save_label,
             size_hint_x=None,
             width=dp(104),
-            bg_color=list(get_color_from_hex(app.theme_card_bg)),
+            bg_color=list(get_color_from_hex(app.theme_bg)),
         )
         btn_save.bind(on_release=lambda *a: self._commit_and_close())
         bar.add_widget(btn_cancel)

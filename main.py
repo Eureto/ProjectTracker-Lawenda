@@ -94,7 +94,6 @@ _LAZY_SCREENS = [
 class TimeTrackerApp(MDApp):
     THEME_DEFAULTS = {
         "theme_bg": "#3A175C",
-        "theme_card_bg": "#5A2FA4",
         "theme_session_bg": "#463372",
         "theme_session_header": "#E8D5FC",
         "theme_text_dark": "#212121",
@@ -105,7 +104,6 @@ class TimeTrackerApp(MDApp):
 
     # Właściwości (kolory motywu) – zmieniają wygląd całej aplikacji
     theme_bg = StringProperty("#3A175C")
-    theme_card_bg = StringProperty("#5A2FA4")
     theme_session_bg = StringProperty("#463372")
     theme_session_header = StringProperty('#E8D5FC')
     theme_text_dark = StringProperty('#212121')
