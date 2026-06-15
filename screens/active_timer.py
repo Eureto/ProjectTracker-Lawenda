@@ -254,6 +254,7 @@ def start_goal(
     started_at=None,
     base_dir=None,
     project_uid="",
+    geofence=None,
 ):
     # Uruchamia nowy cel czasowy. Zapisuje w pliku wszystkie ustawienia celu,
     # takie jak nazwa, limit czasu i moment rozpoczęcia.
@@ -269,6 +270,8 @@ def start_goal(
         "period_key": period_key or "",
         "started_at": (started_at or _now()).isoformat(),
     }
+    if isinstance(geofence, dict) and geofence:
+        state["geofence"] = dict(geofence)
     return upsert_goal(state, base_dir)
 
 
@@ -279,6 +282,95 @@ def remove_goal(uid, base_dir=None):
         _write_json(ACTIVE_GOALS_FILE, goals, base_dir)
     else:
         _remove(ACTIVE_GOALS_FILE, base_dir)
+
+
+def _current_period_key(reset_mode, today=None):
+    # Lekka kopia logiki z ekranu projektu, potrzebna też w usłudze Androida.
+    mode = (reset_mode or "weekly").lower()
+    today = today or datetime.date.today()
+    if mode == "never":
+        return "all"
+    if mode == "daily":
+        return today.isoformat()
+    iso = today.isocalendar()
+    return f"{iso.year}-W{iso.week:02d}"
+
+
+def _coerce_geofence(value):
+    if not isinstance(value, dict):
+        return {}
+    try:
+        lat = float(value.get("lat"))
+        lon = float(value.get("lon"))
+        radius_m = float(value.get("radius_m"))
+    except (TypeError, ValueError):
+        return {}
+    if radius_m <= 0:
+        return {}
+    out = dict(value)
+    out["lat"] = lat
+    out["lon"] = lon
+    out["radius_m"] = radius_m
+    return out
+
+
+def saved_geofenced_goals(base_dir=None):
+    # Zwraca cele z zapisanym geofence, nawet jeśli nie są aktualnie uruchomione.
+    details = _read_project_details(base_dir)
+    if not isinstance(details, dict):
+        return []
+    active_uids = {g.get("uid") for g in read_goals(base_dir) if isinstance(g, dict)}
+    projects_by_uid = {
+        p.get("uid"): p
+        for p in _read_projects(base_dir)
+        if isinstance(p, dict) and p.get("uid")
+    }
+    projects_by_title = {
+        p.get("title"): p
+        for p in _read_projects(base_dir)
+        if isinstance(p, dict) and p.get("title")
+    }
+    out = []
+    for key, blob in details.items():
+        if not isinstance(blob, dict):
+            continue
+        meta = projects_by_uid.get(key) or projects_by_title.get(key) or {}
+        project_uid = meta.get("uid") or (key if key in projects_by_uid else "")
+        project_title = meta.get("title") or (key if key not in projects_by_uid else "")
+        for goal in blob.get("goals") or []:
+            if not isinstance(goal, dict):
+                continue
+            uid = goal.get("uid") or ""
+            if not uid or uid in active_uids:
+                continue
+            geofence = _coerce_geofence(goal.get("geofence"))
+            if not geofence:
+                continue
+            reset_mode = (goal.get("reset_mode") or "weekly").lower()
+            saved_period = goal.get("period_key") or ""
+            current_period = _current_period_key(reset_mode)
+            logged = float(goal.get("logged_seconds", 0.0) or 0.0)
+            if reset_mode != "never" and saved_period and saved_period != current_period:
+                logged = 0.0
+            out.append(
+                {
+                    "uid": uid,
+                    "project_uid": project_uid,
+                    "project_title": project_title,
+                    "title": goal.get("title", ""),
+                    "goal_text": goal.get("goal", ""),
+                    "target_seconds": goal.get("goal_target_seconds", 1.0),
+                    "base_logged_seconds": logged,
+                    "reset_mode": reset_mode,
+                    "period_key": current_period,
+                    "geofence": geofence,
+                }
+            )
+    return out
+
+
+def has_geofenced_goals(base_dir=None):
+    return bool(saved_geofenced_goals(base_dir))
 
 
 # ---------------------------------------------------------------------------

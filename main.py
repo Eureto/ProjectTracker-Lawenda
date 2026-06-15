@@ -221,7 +221,7 @@ class TimeTrackerApp(MDApp):
             pass
         try:
             from screens import active_timer
-            if active_timer.has_active_items():
+            if active_timer.has_active_items() or active_timer.has_geofenced_goals():
                 from screens.project_info import ensure_android_timer_service
                 ensure_android_timer_service()
         except Exception:

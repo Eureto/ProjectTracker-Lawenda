@@ -18,6 +18,7 @@ import sys
 import time
 import traceback
 import zlib
+import math
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
@@ -31,14 +32,13 @@ CHANNEL_ID = "running_timers"
 ACTION_STOP_TIMER = f"{PACKAGE}.STOP_TIMER"  # Akcja: zatrzymaj stoper
 ACTION_STOP_GOAL = f"{PACKAGE}.STOP_GOAL"    # Akcja: zatrzymaj cel czasowy
 TIMER_NOTIFICATION_ID = 1001                  # ID powiadomienia stopera
+GEOFENCE_NOTIFICATION_ID = 1002               # ID powiadomienia monitorowania lokalizacji
 GOAL_NOTIFICATION_BASE_ID = 1100              # Numer początkowy dla celów (każdy dostaje swój numer)
 PLACEHOLDER_NOTIFICATION_ID = 999             # Tymczasowe powiadomienie podczas uruchamiania
 TAG = "ProjectTrackerSvc"
 IDLE_GRACE_SECONDS = 6  # Po 6 sekundach bez aktywności zatrzymaj usługę
-
-# Kolor akcentu (fioletowy) dla powiadomień
-ACCENT_COLOR = _argb(0xFF, 0x8A, 0x2B, 0xE2)
-
+LOCATION_MAX_AGE_SECONDS = 10 * 60
+GEOFENCE_EXIT_GRACE_METERS = 25.0
 
 def _argb(a, r, g, b):
     # Konwertuje cztery składniki koloru (Alpha, Czerwony, Zielony, Niebieski) 
@@ -112,6 +112,17 @@ def _goal_text(goal):
     return f"{label} - {pct}% ({_format_seconds(logged)})"
 
 
+def _distance_meters(lat1, lon1, lat2, lon2):
+    # Odległość po powierzchni Ziemi (haversine), wystarczająco dokładna dla geofence.
+    r = 6371000.0
+    p1 = math.radians(float(lat1))
+    p2 = math.radians(float(lat2))
+    dp = math.radians(float(lat2) - float(lat1))
+    dl = math.radians(float(lon2) - float(lon1))
+    a = math.sin(dp / 2.0) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2.0) ** 2
+    return 2.0 * r * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1.0 - a)))
+
+
 class TimerNotificationService:
     # Usługa która zarządza powiadomieniami o aktywnym stoperze projektu oraz celach czasowych.
     # Jej głównym zadaniem jest wyświetlanie stałego powiadomienia w pasku statusu Androida,
@@ -146,6 +157,10 @@ class TimerNotificationService:
             self.ServiceInfo = autoclass("android.content.pm.ServiceInfo")
         except Exception:
             self.ServiceInfo = None
+        try:
+            self.LocationManager = autoclass("android.location.LocationManager")
+        except Exception:
+            self.LocationManager = None
         self.PythonActivity = autoclass("org.kivy.android.PythonActivity")
         self.PythonService = autoclass("org.kivy.android.PythonService")
         self.service = self.PythonService.mService
@@ -159,6 +174,8 @@ class TimerNotificationService:
         self._idle_since = None
         self._seen_active = False
         self._large_icon = self._load_large_icon()
+        self._gps = None
+        self._last_location = None
 
         # Ustaw folder do zapisu danych (taki sam jak aplikacja)
         try:
@@ -171,6 +188,7 @@ class TimerNotificationService:
         self._create_channel()
         self._start_foreground(PLACEHOLDER_NOTIFICATION_ID, self._placeholder_notification())
         self._register_stop_receiver()
+        self._start_location_monitoring()
 
     # Pomocnicza funkcja do zamiany wartości Pythona na tekst (String) dla Javy.
     def _jstr(self, value):
@@ -348,6 +366,113 @@ class TimerNotificationService:
         builder.setShowWhen(False)
         return builder.build()
 
+    def _geofence_monitor_notification(self):
+        builder = self._builder()
+        builder.setSmallIcon(self.icon)
+        if self._large_icon is not None:
+            try:
+                builder.setLargeIcon(self._large_icon)
+            except Exception:
+                pass
+        try:
+            builder.setColor(ACCENT_COLOR)
+        except Exception:
+            pass
+        builder.setContentTitle(self._jstr("Lawenda"))
+        builder.setContentText(self._jstr("Monitorowanie lokalizacji dla celów"))
+        builder.setOngoing(True)
+        builder.setOnlyAlertOnce(True)
+        builder.setShowWhen(False)
+        return builder.build()
+
+    def _start_location_monitoring(self):
+        # Foreground service może odbierać lokalizację, kiedy aplikacja nie jest na ekranie.
+        try:
+            from plyer import gps
+            gps.configure(on_location=self._on_location, on_status=self._on_location_status)
+            gps.start(minTime=5000, minDistance=10)
+            self._gps = gps
+            _logcat("gps monitoring started")
+        except Exception as exc:
+            _logcat(f"gps monitoring unavailable: {exc!r}")
+
+    def _stop_location_monitoring(self):
+        if self._gps is None:
+            return
+        try:
+            self._gps.stop()
+        except Exception:
+            pass
+        self._gps = None
+
+    def _on_location_status(self, status_type, status_message):
+        _logcat(f"gps status: {status_type} {status_message}")
+
+    def _on_location(self, **kwargs):
+        lat = kwargs.get("lat")
+        lon = kwargs.get("lon")
+        if lat is None or lon is None:
+            return
+        try:
+            self._last_location = {
+                "lat": float(lat),
+                "lon": float(lon),
+                "accuracy": float(kwargs.get("accuracy") or 0.0),
+                "time": time.time(),
+            }
+            _logcat(
+                "gps fix "
+                f"lat={self._last_location['lat']} lon={self._last_location['lon']} "
+                f"acc={self._last_location['accuracy']}"
+            )
+        except (TypeError, ValueError):
+            pass
+
+    def _android_last_known_location(self):
+        if self.LocationManager is None:
+            return None
+        try:
+            manager = self.context.getSystemService(self.Context.LOCATION_SERVICE)
+        except Exception:
+            return None
+        best = None
+        for provider_name in ("GPS_PROVIDER", "NETWORK_PROVIDER", "PASSIVE_PROVIDER"):
+            try:
+                provider = getattr(self.LocationManager, provider_name)
+                loc = manager.getLastKnownLocation(provider)
+            except Exception:
+                continue
+            if loc is None:
+                continue
+            try:
+                item = {
+                    "lat": float(loc.getLatitude()),
+                    "lon": float(loc.getLongitude()),
+                    "accuracy": float(loc.getAccuracy()) if loc.hasAccuracy() else 0.0,
+                    "time": float(loc.getTime()) / 1000.0,
+                }
+            except Exception:
+                continue
+            if best is None or item["time"] > best["time"]:
+                best = item
+        return best
+
+    def _current_location(self):
+        candidates = []
+        if self._last_location is not None:
+            candidates.append(self._last_location)
+        android_loc = self._android_last_known_location()
+        if android_loc is not None:
+            candidates.append(android_loc)
+        if not candidates:
+            return None
+        loc = max(candidates, key=lambda item: item.get("time", 0.0))
+        age = time.time() - float(loc.get("time", 0.0) or 0.0)
+        if age > LOCATION_MAX_AGE_SECONDS:
+            _logcat(f"ignoring stale location age={int(age)}s")
+            return None
+        return loc
+
     # Tworzy powiadomienie dla uruchomionego stopera projektu (usługa na pierwszym planie).
     def _timer_notification(self, state):
         project = state.get("project_title", "") or "Projekt"
@@ -497,6 +622,73 @@ class TimerNotificationService:
             pass
         self._receiver = None
 
+    def _sync_geofenced_goals(self):
+        saved_goals = active_timer.saved_geofenced_goals()
+        active_goals = active_timer.read_goals()
+        geofenced_active = [
+            goal
+            for goal in active_goals
+            if isinstance(goal, dict) and isinstance(goal.get("geofence"), dict) and goal.get("geofence")
+        ]
+        if not saved_goals and not geofenced_active:
+            return False
+
+        loc = self._current_location()
+        if loc is None:
+            return True
+
+        lat = loc["lat"]
+        lon = loc["lon"]
+
+        for goal in geofenced_active:
+            uid = goal.get("uid", "")
+            gf = goal.get("geofence") or {}
+            try:
+                distance = _distance_meters(lat, lon, gf.get("lat"), gf.get("lon"))
+                radius = float(gf.get("radius_m"))
+            except (TypeError, ValueError):
+                continue
+            exit_radius = radius + max(GEOFENCE_EXIT_GRACE_METERS, radius * 0.10)
+            if distance > exit_radius and uid:
+                result = active_timer.finalize_goal(uid)
+                self.manager.cancel(_goal_notification_id(uid))
+                _logcat(
+                    f"geofence exit uid={uid!r} distance={int(distance)}m "
+                    f"radius={int(radius)}m -> {result!r}"
+                )
+
+        active_uids = {g.get("uid") for g in active_timer.read_goals() if isinstance(g, dict)}
+        for goal in saved_goals:
+            uid = goal.get("uid", "")
+            if not uid or uid in active_uids:
+                continue
+            gf = goal.get("geofence") or {}
+            try:
+                distance = _distance_meters(lat, lon, gf.get("lat"), gf.get("lon"))
+                radius = float(gf.get("radius_m"))
+            except (TypeError, ValueError):
+                continue
+            if distance <= radius:
+                active_timer.start_goal(
+                    uid,
+                    goal.get("project_title", ""),
+                    goal.get("title", ""),
+                    goal.get("goal_text", ""),
+                    goal.get("target_seconds", 1.0),
+                    base_logged_seconds=goal.get("base_logged_seconds", 0.0),
+                    reset_mode=goal.get("reset_mode", "weekly"),
+                    period_key=goal.get("period_key", ""),
+                    project_uid=goal.get("project_uid", ""),
+                    geofence=gf,
+                )
+                active_uids.add(uid)
+                _logcat(
+                    f"geofence enter uid={uid!r} distance={int(distance)}m "
+                    f"radius={int(radius)}m"
+                )
+
+        return True
+
     # Wykonuje pojedynczy cykl aktualizacji: odświeża powiadomienia dla stopera i celów.
     def _tick_once(self):
         # Odświeża wszystkie powiadomienia na pasku statusu.
@@ -507,6 +699,7 @@ class TimerNotificationService:
         #    osobne powiadomienie.
         # 3. Czy jakiś cel został zakończony? Usuwa jego powiadomienie.
         # Wywoływane co 1 sekundę przez główną pętlę usługi.
+        monitoring_geofence = self._sync_geofenced_goals()
         timer_state = active_timer.read_project_timer()
         goals = active_timer.read_goals()
         active_ids = []
@@ -533,7 +726,13 @@ class TimerNotificationService:
         for old_id in self._last_goal_ids - set(active_ids):
             self.manager.cancel(old_id)
         self._last_goal_ids = {nid for nid in active_ids if nid != TIMER_NOTIFICATION_ID}
-        return bool(active_ids)
+        if monitoring_geofence and not active_ids:
+            notification = self._geofence_monitor_notification()
+            self._start_foreground(GEOFENCE_NOTIFICATION_ID, notification)
+            self.manager.notify(GEOFENCE_NOTIFICATION_ID, notification)
+        else:
+            self.manager.cancel(GEOFENCE_NOTIFICATION_ID)
+        return bool(active_ids) or monitoring_geofence
 
     def run(self):
         # Główna pętla usługi – działa w tle na Androidzie.
@@ -576,6 +775,7 @@ class TimerNotificationService:
                         return
                 time.sleep(1)
         finally:
+            self._stop_location_monitoring()
             self._unregister_stop_receiver()
 
 
