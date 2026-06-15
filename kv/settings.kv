@@ -1,0 +1,153 @@
+#:import utils kivy.utils
+
+<SettingsScreen>:
+    md_bg_color: utils.get_color_from_hex(app.theme_bg)
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        spacing: dp(10)
+
+        Widget:
+            size_hint_y: None
+            height: dp(35)
+
+        MDFloatLayout:
+            size_hint_y: None
+            height: dp(70)
+            canvas.after:
+                Color:
+                    rgba: 1, 1, 1, 1
+                Line:
+                    points: [self.x, self.y, self.right, self.y]
+                    width: dp(1.5)
+
+            MDIconButton:
+                icon: "arrow-left"
+                pos_hint: {'x': 0.02, 'center_y': 0.5}
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                on_release: app.root.current = "home"
+
+            MDLabel:
+                text: "Ustawienia"
+                font_style: "H4"
+                bold: True
+                halign: "center"
+                pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+
+        # ── Theme colors section ──
+        ScrollView:
+            do_scroll_x: False
+            bar_width: 0
+
+            MDBoxLayout:
+                orientation: "vertical"
+                size_hint_y: None
+                height: self.minimum_height
+                padding: [dp(16), dp(8), dp(16), dp(8)]
+                spacing: dp(8)
+
+                MDLabel:
+                    text: "Motyw"
+                    font_size: dp(20)
+                    bold: True
+                    size_hint_y: None
+                    height: dp(36)
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+
+                MDCard:
+                    size_hint_y: None
+                    height: self.minimum_height
+                    radius: [dp(16)]
+                    md_bg_color: 0.65, 0.45, 0.9, 0.3
+                    padding: dp(12)
+                    spacing: dp(4)
+                    elevation: 0
+                    orientation: "vertical"
+
+                    MDBoxLayout:
+                        id: theme_colors_container
+                        orientation: "vertical"
+                        size_hint_y: None
+                        height: self.minimum_height
+                        spacing: dp(2)
+
+                    MDLabel:
+                        text: ""
+                        size_hint_y: None
+                        height: dp(4)
+
+                MDLabel:
+                    text: ""
+                    size_hint_y: None
+                    height: dp(8)
+
+                MDRaisedButton:
+                    text: "Resetuj motyw do domyślnego"
+                    size_hint_x: 1
+                    size_hint_y: None
+                    height: dp(48)
+                    md_bg_color: 0.8, 0.3, 0.3, 0.8
+                    on_release: root.reset_theme()
+
+                MDLabel:
+                    text: ""
+                    size_hint_y: None
+                    height: dp(16)
+
+        # ── Bottom navigation bar ──
+        MDFloatLayout:
+            size_hint: 1, None
+            height: dp(60)
+
+            MDCard:
+                size_hint: 1, 1
+                pos_hint: {'x': 0, 'y': 0}
+                radius: [0, 0, 0, 0]
+                elevation: 4
+                md_bg_color: 1, 1, 1, 1
+
+                MDBoxLayout:
+                    AnchorLayout:
+                        anchor_x: 'center'
+                        anchor_y: 'center'
+                        MDIconButton:
+                            icon: "home-outline"
+                            icon_size: dp(30)
+                            on_release: app.root.current = "home"
+
+                    Widget:
+
+                    AnchorLayout:
+                        anchor_x: 'center'
+                        anchor_y: 'center'
+                        MDIconButton:
+                            icon: "chart-arc"
+                            icon_size: dp(30)
+                            on_release: app.root.current = "statistics"
+
+            ClickableAnchorLayout:
+                size_hint: None, None
+                size: dp(120), dp(56)
+                pos_hint: {'center_x': 0.5, 'center_y': 0.67}
+                on_release: app.root.current = "add_project"
+                canvas.before:
+                    Color:
+                        rgba: utils.get_color_from_hex(app.theme_card_bg)
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(18)]
+
+                Label:
+                    text: "+"
+                    bold: True
+                    font_size: dp(48)
+                    color: 1, 1, 1, 1
+                    halign: "center"
+                    valign: "middle"
+                    size_hint: None, None
+                    pos_hint: {"center_x": 0.5, "center_y": 0.5}

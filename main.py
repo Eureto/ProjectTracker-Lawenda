@@ -75,6 +75,7 @@ _LAZY_SCREENS = [
     ("add_project",      os.path.join("kv", "addProject.kv"),      "screens.add_project",      "AddProjectScreen"),
     ("statistics",       os.path.join("kv", "statistics.kv"),      "screens.statistics",       "StatisticsScreen"),
     ("calendar",         os.path.join("kv", "calendar.kv"),        "screens.calendar",         "CalendarScreen"),
+    ("settings",         os.path.join("kv", "settings.kv"),        "screens.settings",         "SettingsScreen"),
     ("project_info",     os.path.join("kv", "project_info.kv"),    "screens.project_info",     "ProjectInfoScreen"),
     ("project_settings", os.path.join("kv", "projectSettings.kv"), "screens.project_settings", "ProjectSettingsScreen"),
     ("geofence_picker",  None,                    "screens.geofence_picker",  "GeofencePickerScreen"),
@@ -91,6 +92,14 @@ _LAZY_SCREENS = [
 # ---------------------------------------------------------------------------
 
 class TimeTrackerApp(MDApp):
+    THEME_DEFAULTS = {
+        "theme_bg": "#3A175C",
+        "theme_card_bg": "#5A2FA4",
+        "theme_session_bg": "#463372",
+        "theme_session_header": "#E8D5FC",
+        "theme_text_dark": "#212121",
+    }
+
     # Właściwości (kolory motywu) – zmieniają wygląd całej aplikacji
     theme_bg = StringProperty("#3A175C")
     theme_card_bg = StringProperty("#5A2FA4")
@@ -131,6 +140,7 @@ class TimeTrackerApp(MDApp):
         # Ładujemy zapisane projekty i odświeżamy ekran główny
         home_screen = self.screen_manager.get_screen('home')
         self.load_layout_pref()
+        self.load_theme_prefs()
         home_screen.load_projects()
         home_screen.schedule_initial_layout()
         home_screen.refresh_last_session()
@@ -323,6 +333,47 @@ class TimeTrackerApp(MDApp):
             home.apply_grid_layout()
         else:
             home.restore_card_positions()
+
+    # --- Theme persistence ---
+
+    def _theme_prefs_path(self):
+        return os.path.join(self.user_data_dir, "theme_prefs.json")
+
+    def load_theme_prefs(self):
+        path = self._theme_prefs_path()
+        if not os.path.exists(path):
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            for key in self.THEME_DEFAULTS:
+                val = data.get(key)
+                if val and isinstance(val, str) and val.startswith("#"):
+                    setattr(self, key, val)
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    def save_theme_prefs(self):
+        path = self._theme_prefs_path()
+        data = {}
+        for key in self.THEME_DEFAULTS:
+            data[key] = getattr(self, key)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except OSError:
+            pass
+
+    def set_theme_color(self, key, hex_color):
+        if key not in self.THEME_DEFAULTS:
+            return
+        setattr(self, key, hex_color)
+        self.save_theme_prefs()
+
+    def reset_theme_to_defaults(self):
+        for key, val in self.THEME_DEFAULTS.items():
+            setattr(self, key, val)
+        self.save_theme_prefs()
 
 
 # ---------------------------------------------------------------------------
