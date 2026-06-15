@@ -8,7 +8,17 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.metrics import dp, sp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, ObjectProperty, StringProperty
-from kivy.graphics import Color, Ellipse, Line, Rectangle, RoundedRectangle
+from kivy.graphics import (
+    Color,
+    Ellipse,
+    Line,
+    Rectangle,
+    RoundedRectangle,
+    StencilPop,
+    StencilPush,
+    StencilUnUse,
+    StencilUse,
+)
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.button import Button
 from kivy.uix.image import Image
@@ -1126,6 +1136,51 @@ class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
 # zwija/rozwija zawartość. Tło pudełka jest nieco jaśniejsze od tła ekranu.
 
 
+# Pionowy pojemnik, który przycina (obcina) swoją zawartość do własnych granic.
+# Dzięki temu podczas animacji zwijania/rozwijania sekcji treść nie "wylewa się"
+# poza pudełko na sąsiednie sekcje, gdy jego wysokość jest mniejsza od zawartości.
+class _ClipBox(MDBoxLayout):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            StencilPush()
+            self._clip_push = Rectangle(pos=self.pos, size=self.size)
+            StencilUse()
+        with self.canvas.after:
+            StencilUnUse()
+            self._clip_pop = Rectangle(pos=self.pos, size=self.size)
+            StencilPop()
+        self.bind(pos=self._update_clip, size=self._update_clip)
+
+    # Utrzymuje obszar przycinania zgodny z aktualnym położeniem i rozmiarem pojemnika.
+    def _update_clip(self, *_args):
+        self._clip_push.pos = self.pos
+        self._clip_push.size = self.size
+        self._clip_pop.pos = self.pos
+        self._clip_pop.size = self.size
+
+    # Gdy body jest zwinięte, jego niewidoczne dzieci nie mogą przechwytywać
+    # kliknięć nagłówka ani przewijania.
+    def _accept_touch(self, touch):
+        return self.height > 1 and self.opacity > 0 and self.collide_point(*touch.pos)
+
+    def on_touch_down(self, touch):
+        if not self._accept_touch(touch):
+            return False
+        return super().on_touch_down(touch)
+
+    def on_touch_move(self, touch):
+        if not self._accept_touch(touch):
+            return False
+        return super().on_touch_move(touch)
+
+    def on_touch_up(self, touch):
+        if not self._accept_touch(touch):
+            return False
+        return super().on_touch_up(touch)
+
+
 # Klikalny nagłówek zwijanej sekcji: tytuł + opcjonalny przycisk "+" + strzałka.
 class CollapsibleSectionHeader(ButtonBehavior, MDBoxLayout):
 
@@ -1146,21 +1201,28 @@ class CollapsibleSection(MDBoxLayout):
     # Buduje strukturę pudełka: nagłówek + pojemnik na zawartość ("body").
     def __init__(self, **kwargs):
         self._body = None
-        self._detached = []
         self._content_ready = False
+        self._anim = None
+        self._animating = False
+        self._animate_next = False
         kwargs.setdefault("orientation", "vertical")
         kwargs.setdefault("size_hint_y", None)
         super().__init__(**kwargs)
         self.header = CollapsibleSectionHeader(section=self)
-        self._body = MDBoxLayout(orientation="vertical", size_hint_y=None)
-        self._body.bind(minimum_height=self._on_body_min_height)
+        self._body = _ClipBox(orientation="vertical", size_hint_y=None)
+        self._body.bind(
+            minimum_height=self._on_body_min_height,
+            height=self._sync_section_height,
+        )
+        self.header.bind(height=self._sync_section_height)
         self.bind(body_spacing=lambda *_: setattr(self._body, "spacing", self.body_spacing))
         self._body.spacing = self.body_spacing
         super().add_widget(self.header)
         super().add_widget(self._body)
         self._content_ready = True
         self.bind(
-            minimum_height=self.setter("height"),
+            padding=self._sync_section_height,
+            spacing=self._sync_section_height,
             expanded=lambda *_: self._apply_expanded(),
         )
         Clock.schedule_once(lambda *_: self._apply_expanded(), 0)
@@ -1181,37 +1243,120 @@ class CollapsibleSection(MDBoxLayout):
             return self._body.remove_widget(widget)
         return super().remove_widget(widget)
 
+    # Zwraca pionową sumę paddingu niezależnie od formatu właściwości Kivy.
+    def _vertical_padding(self):
+        padding = self.padding
+        try:
+            if isinstance(padding, (list, tuple)):
+                if len(padding) == 4:
+                    return float(padding[1]) + float(padding[3])
+                if len(padding) == 2:
+                    return float(padding[1]) * 2.0
+                if len(padding) == 1:
+                    return float(padding[0]) * 2.0
+            return float(padding) * 2.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    # Utrzymuje wysokość pudełka na podstawie nagłówka i aktualnej animowanej
+    # wysokości body. Nie polegamy tu na minimum_height, bo przy height=0 potrafi
+    # zostawić zbyt mały obszar dotyku po zwinięciu.
+    def _sync_section_height(self, *_args):
+        if self._body is None or getattr(self, "header", None) is None:
+            return
+        self.height = (
+            self._vertical_padding()
+            + float(self.header.height)
+            + float(self.spacing)
+            + max(0.0, float(self._body.height))
+        )
+
     # Dopasowuje wysokość zawartości i całego pudełka do liczby elementów.
+    # W trakcie animacji nie ruszamy wysokości "body" - steruje nią animacja.
     def _on_body_min_height(self, *_args):
+        if self._animating:
+            return
         if self.expanded and self._body is not None:
             self._body.height = self._body.minimum_height
-        self.height = self.minimum_height
+        self._sync_section_height()
 
     # Przełącza zwinięcie/rozwinięcie sekcji (wołane z nagłówka).
+    # Ustawia flagę, dzięki której zmiana stanu jest pokazywana z animacją
+    # (kliknięcie użytkownika), a nie natychmiast (ładowanie ekranu).
     def _toggle(self, *_args):
+        self._animate_next = True
         self.expanded = not self.expanded
 
-    # Pokazuje lub chowa zawartość; przy zwinięciu odczepia dzieci, by nie rysowały się poza pudełkiem.
+    # Czas trwania animacji rozwijania/zwijania sekcji.
+    _EXPAND_DURATION = 0.22
+    _COLLAPSE_DURATION = 0.18
+
+    # Pokazuje lub chowa zawartość. Kliknięcie nagłówka animuje wysokość i
+    # przezroczystość; zmiany programowe (np. przy ładowaniu) są natychmiastowe.
     def _apply_expanded(self, *_args):
         if self._body is None:
             return
+        animate = self._animate_next
+        self._animate_next = False
+        body = self._body
+        if self._anim is not None:
+            self._anim.cancel(body)
+            self._anim = None
         if self.expanded:
-            if self._detached:
-                for w in self._detached:
-                    self._body.add_widget(w)
-                self._detached = []
-            self._body.disabled = False
+            target_h = max(0.0, float(body.minimum_height))
+            if not animate:
+                self._animating = False
+                body.opacity = 1
+                body.height = target_h
+                self._sync_section_height()
+                return
+            self._animating = True
+            anim = Animation(
+                height=target_h,
+                opacity=1,
+                d=self._EXPAND_DURATION,
+                t="out_cubic",
+            )
+            anim.bind(on_complete=self._finish_expand)
+            self._anim = anim
+            anim.start(body)
+        else:
+            if not animate:
+                self._animating = False
+                body.opacity = 0
+                body.height = 0
+                self._sync_section_height()
+                return
+            if body.height <= 0:
+                body.height = float(body.minimum_height)
+            self._animating = True
+            anim = Animation(
+                height=0,
+                opacity=0,
+                d=self._COLLAPSE_DURATION,
+                t="in_cubic",
+            )
+            anim.bind(on_complete=self._finish_collapse)
+            self._anim = anim
+            anim.start(body)
+
+    # Sprząta po animacji rozwijania: wyrównuje wysokość do rzeczywistej zawartości.
+    def _finish_expand(self, *_args):
+        self._anim = None
+        self._animating = False
+        if self._body is not None:
             self._body.opacity = 1
             self._body.height = self._body.minimum_height
-        else:
-            if not self._detached:
-                self._detached = list(reversed(self._body.children))
-                for w in list(self._body.children):
-                    self._body.remove_widget(w)
-            self._body.disabled = True
+        self._sync_section_height()
+
+    # Sprząta po animacji zwijania: ukrywa zawartość i zostawia nagłówek klikalny.
+    def _finish_collapse(self, *_args):
+        self._anim = None
+        self._animating = False
+        if self._body is not None:
             self._body.opacity = 0
             self._body.height = 0
-        self.height = self.minimum_height
+        self._sync_section_height()
 
 
 # Panel szczegółów projektu: notatki i cele, stoper, dolne menu nawigacyjne jak na głównym.
