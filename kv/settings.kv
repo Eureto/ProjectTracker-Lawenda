@@ -1,4 +1,5 @@
 #:import utils kivy.utils
+#:import ctc screens.color_picker.contrast_text_color
 
 <SettingsScreen>:
     md_bg_color: utils.get_color_from_hex(app.theme_bg)
@@ -108,7 +109,7 @@
                 pos_hint: {'x': 0, 'y': 0}
                 radius: [0, 0, 0, 0]
                 elevation: 4
-                md_bg_color: 1, 1, 1, 1
+                md_bg_color: utils.get_color_from_hex(app.nav_bg)
 
                 MDBoxLayout:
                     AnchorLayout:
@@ -117,6 +118,8 @@
                         MDIconButton:
                             icon: "home-outline"
                             icon_size: dp(30)
+                            theme_text_color: "Custom"
+                            text_color: utils.get_color_from_hex(app.nav_icon)
                             on_release: app.root.current = "home"
 
                     Widget:
@@ -127,6 +130,8 @@
                         MDIconButton:
                             icon: "chart-arc"
                             icon_size: dp(30)
+                            theme_text_color: "Custom"
+                            text_color: utils.get_color_from_hex(app.nav_icon)
                             on_release: app.root.current = "statistics"
 
             ClickableAnchorLayout:
@@ -136,7 +141,7 @@
                 on_release: app.root.current = "add_project"
                 canvas.before:
                     Color:
-                        rgba: utils.get_color_from_hex(app.theme_card_bg)
+                        rgba: utils.get_color_from_hex(app.nav_mid_btn_bg)
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
@@ -146,7 +151,7 @@
                     text: "+"
                     bold: True
                     font_size: dp(48)
-                    color: 1, 1, 1, 1
+                    color: ctc(app.nav_mid_btn_bg)
                     halign: "center"
                     valign: "middle"
                     size_hint: None, None

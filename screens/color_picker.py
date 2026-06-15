@@ -39,6 +39,12 @@ def hsv_to_hex(h, s, v):
     return rgb_to_hex(r, g, b)
 
 
+def contrast_text_color(bg_hex):
+    r, g, b, _ = hex_to_rgba(bg_hex)
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return (0.1, 0.1, 0.1, 1) if lum > 0.5 else (1, 1, 1, 1)
+
+
 _WHEEL_SIZE = dp(240)
 
 

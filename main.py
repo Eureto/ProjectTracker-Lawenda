@@ -98,6 +98,9 @@ class TimeTrackerApp(MDApp):
         "theme_session_bg": "#463372",
         "theme_session_header": "#E8D5FC",
         "theme_text_dark": "#212121",
+        "nav_bg": "#FFFFFF",
+        "nav_icon": "#3A175C",
+        "nav_mid_btn_bg": "#5A2FA4",
     }
 
     # Właściwości (kolory motywu) – zmieniają wygląd całej aplikacji
@@ -106,6 +109,9 @@ class TimeTrackerApp(MDApp):
     theme_session_bg = StringProperty("#463372")
     theme_session_header = StringProperty('#E8D5FC')
     theme_text_dark = StringProperty('#212121')
+    nav_bg = StringProperty("#FFFFFF")
+    nav_icon = StringProperty("#3A175C")
+    nav_mid_btn_bg = StringProperty("#5A2FA4")
     grid_layout = BooleanProperty(False)
 
     def build(self):

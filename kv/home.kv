@@ -2,6 +2,7 @@
 #:import DotProgressBar screens.home.DotProgressBar
 #:import ProjectCard screens.home.ProjectCard
 #:import SessionCard screens.home.SessionCard
+#:import ctc screens.color_picker.contrast_text_color
 # Powyższe linie importują funkcje pomocnicze oraz własne elementy wizualne z kodu Pythona.
 
 # ---------------------------------------------------------------------------
@@ -341,25 +342,22 @@
         height: dp(60)
         pos_hint: {'center_x': 0.5, 'y': 0}
         
-        # Główny pasek – biały, z zaokrąglonymi górnymi rogami
-        # "radius: [dp(25), dp(25), 0, 0]" – tylko górne rogi zaokrąglone.
-        # Dzięki temu pasek wygląda jak "wyspa" przyklejona do dołu.
         MDCard:
             size_hint: 1, 1
             pos_hint: {'x': 0, 'y': 0}
             radius: [0, 0, 0, 0]
             elevation: 4
-            md_bg_color: 1, 1, 1, 1
-            
+            md_bg_color: utils.get_color_from_hex(app.nav_bg)
+
             MDBoxLayout:
-                # Trzy kolumny: lewa (dom), środkowa (pusta), prawa (wykres)
-                # "AnchorLayout" – umieszcza ikonę na środku każdej kolumny.
                 AnchorLayout:
                     anchor_x: 'center'
                     anchor_y: 'center'
                     MDIconButton:
                         icon: "home-outline"
                         icon_size: dp(30)
+                        theme_text_color: "Custom"
+                        text_color: utils.get_color_from_hex(app.nav_icon)
 
                 Widget:
 
@@ -369,13 +367,10 @@
                     MDIconButton:
                         icon: "chart-arc"
                         icon_size: dp(30)
+                        theme_text_color: "Custom"
+                        text_color: utils.get_color_from_hex(app.nav_icon)
                         on_release: app.root.current = "statistics"
 
-        # Unoszący się przycisk "+" (dodawanie projektu)
-        # "size: dp(120), dp(56)" – szeroki, niski prostokąt.
-        # "pos_hint: {'center_x': 0.5, 'center_y': 0.67}" – na środku,
-        # 67% wysokości od dołu (unosi się nad paskiem).
-        # Tło przycisku: fioletowy prostokąt z zaokrąglonymi rogami.
         ClickableAnchorLayout:
             size_hint: None, None
             size: dp(120), dp(56)
@@ -383,17 +378,17 @@
             on_release: app.root.current = "add_project"
             canvas.before:
                 Color:
-                    rgba: utils.get_color_from_hex(app.theme_card_bg)
+                    rgba: utils.get_color_from_hex(app.nav_mid_btn_bg)
                 RoundedRectangle:
                     pos: self.pos
                     size: self.size
                     radius: [dp(18)]
-            
+
             Label:
                 text: "+"
                 bold: True
                 font_size: dp(48)
-                color: 1, 1, 1, 1
+                color: ctc(app.nav_mid_btn_bg)
                 halign: "center"
                 valign: "middle"
                 size_hint: None, None

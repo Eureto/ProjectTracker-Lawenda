@@ -2,6 +2,7 @@
 #:import PieChart screens.statistics.PieChart
 #:import PeriodSegmentButton screens.statistics.PeriodSegmentButton
 #:import StatisticsDetailRow screens.statistics.StatisticsDetailRow
+#:import ctc screens.color_picker.contrast_text_color
 
 # ---------------------------------------------------------------------------
 # WIERSZ SZCZEGÓŁOWY W STATYSTYKACH – jeden projekt w tabeli
@@ -270,15 +271,13 @@
             size_hint: 1, None
             height: dp(60)
 
-            # Główna karta paska – biała, zaokrąglona tylko u góry
             MDCard:
                 size_hint: 1, 1
                 pos_hint: {'x': 0, 'y': 0}
                 radius: [0, 0, 0, 0]
                 elevation: 4
-                md_bg_color: 1, 1, 1, 1
+                md_bg_color: utils.get_color_from_hex(app.nav_bg)
 
-                # Trzy kolumny: dom, pusto, statystyki (aktywna)
                 MDBoxLayout:
                     AnchorLayout:
                         anchor_x: 'center'
@@ -286,6 +285,8 @@
                         MDIconButton:
                             icon: "home-outline"
                             icon_size: dp(30)
+                            theme_text_color: "Custom"
+                            text_color: utils.get_color_from_hex(app.nav_icon)
                             on_release: app.root.current = "home"
 
                     Widget:
@@ -296,11 +297,10 @@
                         MDIconButton:
                             icon: "calendar-month"
                             icon_size: dp(30)
+                            theme_text_color: "Custom"
+                            text_color: utils.get_color_from_hex(app.nav_icon)
                             on_release: app.root.current = "calendar"
 
-            # Unoszący się przycisk "+" do dodawania projektu
-            # "size: dp(120), dp(56)" – szeroki przycisk.
-            # "pos_hint: {'center_x': 0.5, 'center_y': 0.67}" – 67% od dołu.
             ClickableAnchorLayout:
                 size_hint: None, None
                 size: dp(120), dp(56)
@@ -308,7 +308,7 @@
                 on_release: app.root.current = "add_project"
                 canvas.before:
                     Color:
-                        rgba: utils.get_color_from_hex(app.theme_card_bg)
+                        rgba: utils.get_color_from_hex(app.nav_mid_btn_bg)
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
@@ -318,7 +318,7 @@
                     text: "+"
                     bold: True
                     font_size: dp(48)
-                    color: 1, 1, 1, 1
+                    color: ctc(app.nav_mid_btn_bg)
                     halign: "center"
                     valign: "middle"
                     size_hint: None, None

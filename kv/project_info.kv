@@ -3,6 +3,7 @@
 #:import BoxLayout kivy.uix.boxlayout.BoxLayout
 #:import ProjectNoteRow screens.project_info.ProjectNoteRow
 #:import TimeGoalTrackRow screens.project_info.TimeGoalTrackRow
+#:import ctc screens.color_picker.contrast_text_color
 #:import CarProgressButton screens.project_info.CarProgressButton
 #:import ChecklistGoalRow screens.project_info.ChecklistGoalRow
 #:import StageItemRow screens.project_info.StageItemRow
@@ -803,7 +804,7 @@
                 pos_hint: {"x": 0, "y": 0}
                 radius: [0, 0, 0, 0]
                 elevation: 4
-                md_bg_color: 1, 1, 1, 1
+                md_bg_color: utils.get_color_from_hex(app.nav_bg)
 
                 MDBoxLayout:
                     AnchorLayout:
@@ -812,6 +813,8 @@
                         MDIconButton:
                             icon: "home-outline"
                             icon_size: dp(30)
+                            theme_text_color: "Custom"
+                            text_color: utils.get_color_from_hex(app.nav_icon)
                             on_release: root.go_home()
 
                     Widget:
@@ -822,11 +825,10 @@
                         MDIconButton:
                             icon: "chart-arc"
                             icon_size: dp(30)
+                            theme_text_color: "Custom"
+                            text_color: utils.get_color_from_hex(app.nav_icon)
                             on_release: root.go_statistics()
 
-            # Przycisk ustawień (trybik) – unosi się nad paskiem nawigacyjnym
-            # "size: dp(120), dp(56)" – szeroki, niski prostokąt.
-            # "pos_hint: {"center_y": 0.67}" – 67% od dołu, unosi się nad paskiem.
             ClickableAnchorLayout:
                 size_hint: None, None
                 size: dp(120), dp(56)
@@ -834,7 +836,7 @@
                 on_release: root.open_project_settings()
                 canvas.before:
                     Color:
-                        rgba: utils.get_color_from_hex(app.theme_card_bg)
+                        rgba: utils.get_color_from_hex(app.nav_mid_btn_bg)
                     RoundedRectangle:
                         pos: self.pos
                         size: self.size
@@ -843,6 +845,6 @@
                 MDIcon:
                     icon: "cog-outline"
                     theme_text_color: "Custom"
-                    text_color: 1, 1, 1, 1
+                    text_color: ctc(app.nav_mid_btn_bg)
                     icon_size: dp(48)
                     adaptive_size: True

@@ -158,12 +158,7 @@
 # oznacza: pozycja i rozmiar takie jak element nadrzędny.
 
 <AddProjectScreen>:
-    canvas.before:
-        Color:
-            rgba: utils.get_color_from_hex("#8A4BF4")
-        Rectangle:
-            pos: self.pos
-            size: self.size
+    md_bg_color: utils.get_color_from_hex(app.theme_bg)
 
     # "MDBoxLayout" – pudełko z biblioteki KivyMD (Material Design). Układa
     # elementy w pionie ("orientation: vertical").

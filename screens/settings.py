@@ -8,22 +8,27 @@ from kivymd.uix.screen import MDScreen
 from kivymd.uix.button import MDRaisedButton
 from kivymd.app import MDApp
 
-from screens.color_picker import ColorPickerPopup, hex_to_rgba
+from screens.color_picker import ColorPickerPopup, hex_to_rgba, contrast_text_color
 
 
-def _contrast_text_color(bg_hex):
-    r, g, b, _ = hex_to_rgba(bg_hex)
-    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
-    return (0.1, 0.1, 0.1, 1) if lum > 0.5 else (1, 1, 1, 1)
-
-
-_THEME_LABELS = {
-    "theme_bg": "Tło aplikacji",
-    "theme_card_bg": "Tło kart",
-    "theme_session_bg": "Tło sesji",
-    "theme_session_header": "Nagłówek sesji",
-    "theme_text_dark": "Ciemny tekst",
-}
+_THEME_SECTIONS = [
+    ("Ogólne", [
+        ("theme_bg", "Tło aplikacji"),
+    ]),
+    ("Karty", [
+        ("theme_card_bg", "Tło kart"),
+        ("theme_text_dark", "Ciemny tekst"),
+    ]),
+    ("Navigation Bar", [
+        ("nav_bg", "Tło"),
+        ("nav_icon", "Ikony i tekst"),
+        ("nav_mid_btn_bg", "Przycisk środkowy"),
+    ]),
+    ("Sesje", [
+        ("theme_session_bg", "Tło sesji"),
+        ("theme_session_header", "Nagłówek sesji"),
+    ]),
+]
 
 
 class ThemeColorRow(BoxLayout):
@@ -31,9 +36,9 @@ class ThemeColorRow(BoxLayout):
     display_label = StringProperty("")
     hex_color = StringProperty("#000000")
 
-    def __init__(self, theme_key, hex_color, **kwargs):
+    def __init__(self, theme_key, display_label, hex_color, **kwargs):
         self.theme_key = theme_key
-        self.display_label = _THEME_LABELS.get(theme_key, theme_key)
+        self.display_label = display_label
         kwargs.setdefault("orientation", "horizontal")
         kwargs.setdefault("size_hint_y", None)
         kwargs.setdefault("height", dp(52))
@@ -90,18 +95,33 @@ class SettingsScreen(MDScreen):
             return
         container.clear_widgets()
         app = MDApp.get_running_app()
-        txt_color = _contrast_text_color(app.theme_bg)
-        for key in _THEME_LABELS:
-            hex_val = getattr(app, key, "#000000")
-            row = ThemeColorRow(theme_key=key, hex_color=hex_val)
-            label = Label(
-                text=_THEME_LABELS[key],
-                font_size=dp(15),
+        txt_color = contrast_text_color(app.theme_bg)
+        for section_name, items in _THEME_SECTIONS:
+            header = Label(
+                text=section_name,
+                font_size=dp(16),
+                bold=True,
                 color=txt_color,
-                size_hint_x=1,
+                size_hint_y=None,
+                height=dp(32),
+                padding=(dp(4), 0),
             )
-            row.add_widget(label)
-            container.add_widget(row)
+            container.add_widget(header)
+            for key, label_text in items:
+                hex_val = getattr(app, key, "#000000")
+                row = ThemeColorRow(
+                    theme_key=key,
+                    display_label=label_text,
+                    hex_color=hex_val,
+                )
+                label = Label(
+                    text=label_text,
+                    font_size=dp(15),
+                    color=txt_color,
+                    size_hint_x=1,
+                )
+                row.add_widget(label)
+                container.add_widget(row)
 
     def reset_theme(self):
         app = MDApp.get_running_app()
