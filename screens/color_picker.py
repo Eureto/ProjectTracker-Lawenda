@@ -45,6 +45,19 @@ def contrast_text_color(bg_hex):
     return (0.1, 0.1, 0.1, 1) if lum > 0.5 else (1, 1, 1, 1)
 
 
+# Zwraca kolor nieco jaśniejszy od podanego tła (mieszanie w stronę bieli).
+# Używane do "pudełek" sekcji, żeby odcinały się delikatnie od tła ekranu.
+def lighten_color(bg_hex, amount=0.12):
+    try:
+        r, g, b, _ = hex_to_rgba(bg_hex)
+    except Exception:
+        return (1, 1, 1, 0.08)
+    r = r + (1.0 - r) * amount
+    g = g + (1.0 - g) * amount
+    b = b + (1.0 - b) * amount
+    return (r, g, b, 1)
+
+
 _WHEEL_SIZE = dp(240)
 
 

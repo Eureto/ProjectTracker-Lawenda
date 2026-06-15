@@ -57,6 +57,18 @@ _SHEET_FIELD_RADIUS = dp(12)
 _SHEET_BTN_RADIUS = dp(12)
 
 _PURPLE = get_color_from_hex("#7e57c2")
+
+
+# Zwraca aktualny kolor akcentu zapisany w ustawieniach (theme_bg), z fallbackiem na fiolet.
+def _theme_accent_color():
+    try:
+        app = MDApp.get_running_app()
+        if app is not None and getattr(app, "theme_bg", None):
+            return list(get_color_from_hex(app.theme_bg))
+    except Exception:
+        pass
+    return list(_PURPLE)
+
 _GREY_NODE = get_color_from_hex("#9e9e9e")
 _CHIP_INACTIVE = get_color_from_hex("#5e35b1")
 _CHIP_ACTIVE = get_color_from_hex("#b388ff")
@@ -310,12 +322,13 @@ class ResetPeriodChip(Button):
     # Odswieza wyglad przycisku: zmienia kolor tla w zaleznosci od tego, czy jest wybrany.
     def _apply_visual(self, *_args):
         r = float(_SHEET_BTN_RADIUS)
+        accent = _theme_accent_color()
         if self.selected:
-            fill = list(_PURPLE)
+            fill = list(accent)
             self.color = 1, 1, 1, 1
         else:
-            fill = [0.93, 0.90, 0.98, 1]
-            self.color = list(_PURPLE[:3]) + [1]
+            fill = [accent[0] * 0.12 + 0.88, accent[1] * 0.12 + 0.88, accent[2] * 0.12 + 0.88, 1]
+            self.color = list(accent[:3]) + [1]
         if self.state == "down":
             fill = [c * 0.92 for c in fill[:3]] + [fill[3]]
         self.canvas.before.clear()
@@ -1105,6 +1118,102 @@ class EtapyPlusRow(ButtonBehavior, MDBoxLayout):
             screen.open_new_etapy_krok_sheet()
 
 
+# ---------------------------------------------------------------------------
+# ZWIJANA SEKCJA – wspólne "pudełko" dla sekcji ekranu szczegółów projektu
+# ---------------------------------------------------------------------------
+# Każda sekcja (Notatki, Czas, Cele czasowe, Lista celów, Etapy) jest opakowana
+# w jasne pudełko z zaokrąglonymi rogami (bez cienia). Kliknięcie nagłówka
+# zwija/rozwija zawartość. Tło pudełka jest nieco jaśniejsze od tła ekranu.
+
+
+# Klikalny nagłówek zwijanej sekcji: tytuł + opcjonalny przycisk "+" + strzałka.
+class CollapsibleSectionHeader(ButtonBehavior, MDBoxLayout):
+
+    section = ObjectProperty(None, allownone=True)
+
+
+# Pudełko sekcji ze zwijaną zawartością. Dzieci dodane w KV trafiają do "body".
+class CollapsibleSection(MDBoxLayout):
+
+    title = StringProperty("")
+    expanded = BooleanProperty(True)
+    show_action = BooleanProperty(False)
+    action_icon = StringProperty("plus")
+    body_spacing = NumericProperty(dp(12))
+
+    __events__ = ("on_action",)
+
+    # Buduje strukturę pudełka: nagłówek + pojemnik na zawartość ("body").
+    def __init__(self, **kwargs):
+        self._body = None
+        self._detached = []
+        self._content_ready = False
+        kwargs.setdefault("orientation", "vertical")
+        kwargs.setdefault("size_hint_y", None)
+        super().__init__(**kwargs)
+        self.header = CollapsibleSectionHeader(section=self)
+        self._body = MDBoxLayout(orientation="vertical", size_hint_y=None)
+        self._body.bind(minimum_height=self._on_body_min_height)
+        self.bind(body_spacing=lambda *_: setattr(self._body, "spacing", self.body_spacing))
+        self._body.spacing = self.body_spacing
+        super().add_widget(self.header)
+        super().add_widget(self._body)
+        self._content_ready = True
+        self.bind(
+            minimum_height=self.setter("height"),
+            expanded=lambda *_: self._apply_expanded(),
+        )
+        Clock.schedule_once(lambda *_: self._apply_expanded(), 0)
+
+    # Domyślny handler zdarzenia "+" (nadpisywany przez on_action w KV).
+    def on_action(self, *args):
+        pass
+
+    # Przekierowuje dzieci deklarowane w KV do wewnętrznego pojemnika "body".
+    def add_widget(self, widget, *args, **kwargs):
+        if self._content_ready and self._body is not None:
+            return self._body.add_widget(widget, *args, **kwargs)
+        return super().add_widget(widget, *args, **kwargs)
+
+    # Usuwa dziecko z pojemnika "body" (albo z samego pudełka, jeśli to nagłówek).
+    def remove_widget(self, widget):
+        if self._content_ready and self._body is not None and widget in self._body.children:
+            return self._body.remove_widget(widget)
+        return super().remove_widget(widget)
+
+    # Dopasowuje wysokość zawartości i całego pudełka do liczby elementów.
+    def _on_body_min_height(self, *_args):
+        if self.expanded and self._body is not None:
+            self._body.height = self._body.minimum_height
+        self.height = self.minimum_height
+
+    # Przełącza zwinięcie/rozwinięcie sekcji (wołane z nagłówka).
+    def _toggle(self, *_args):
+        self.expanded = not self.expanded
+
+    # Pokazuje lub chowa zawartość; przy zwinięciu odczepia dzieci, by nie rysowały się poza pudełkiem.
+    def _apply_expanded(self, *_args):
+        if self._body is None:
+            return
+        if self.expanded:
+            if self._detached:
+                for w in self._detached:
+                    self._body.add_widget(w)
+                self._detached = []
+            self._body.disabled = False
+            self._body.opacity = 1
+            self._body.height = self._body.minimum_height
+        else:
+            if not self._detached:
+                self._detached = list(reversed(self._body.children))
+                for w in list(self._body.children):
+                    self._body.remove_widget(w)
+            self._body.disabled = True
+            self._body.opacity = 0
+            self._body.height = 0
+        self.height = self.minimum_height
+
+
 # Panel szczegółów projektu: notatki i cele, stoper, dolne menu nawigacyjne jak na głównym.
 class ProjectInfoScreen(MDScreen):
 
@@ -1251,6 +1360,11 @@ class ProjectInfoScreen(MDScreen):
             "etapy": self._serialize_etapy(),
         }
         self._write_all_states(data)
+        try:
+            if active_timer.has_geofenced_goals():
+                ensure_android_timer_service()
+        except Exception:
+            pass
 
     # Wczytuje wszystkie dane projektu z pliku i odtwarza interfejs.
     def load_project_content(self):
@@ -2695,6 +2809,7 @@ class AddTimeGoalBottomSheet(ModalView, _BottomSheetKeyboardMixin):
                 hint_text="0",
                 multiline=False,
                 input_filter="int",
+                input_type="number",
                 size_hint_y=None,
                 height=dp(44),
                 font_size=sp(16),
@@ -4114,6 +4229,7 @@ class TimeGoalTrackRow(MDBoxLayout):
                     reset_mode=self.reset_mode,
                     period_key=self.period_key,
                     project_uid=project_uid,
+                    geofence=dict(self.geofence or {}),
                 )
 
     # Aktualizuje wyglad paska na podstawie zapisanego czasu - przelicza procent i pozycje samochodzika.
@@ -4217,6 +4333,7 @@ class TimeGoalTrackRow(MDBoxLayout):
             reset_mode=self.reset_mode,
             period_key=self.period_key,
             project_uid=project_uid,
+            geofence=dict(self.geofence or {}),
         )
         if self.parent_screen:
             self.parent_screen.save_project_content()

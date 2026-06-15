@@ -4,6 +4,9 @@
 #:import ProjectNoteRow screens.project_info.ProjectNoteRow
 #:import TimeGoalTrackRow screens.project_info.TimeGoalTrackRow
 #:import ctc screens.color_picker.contrast_text_color
+#:import lighten screens.color_picker.lighten_color
+#:import CollapsibleSection screens.project_info.CollapsibleSection
+#:import CollapsibleSectionHeader screens.project_info.CollapsibleSectionHeader
 #:import CarProgressButton screens.project_info.CarProgressButton
 #:import ChecklistGoalRow screens.project_info.ChecklistGoalRow
 #:import StageItemRow screens.project_info.StageItemRow
@@ -330,6 +333,62 @@
     md_bg_color: 0, 0, 0, 0
 
 # ---------------------------------------------------------------------------
+# ZWIJANA SEKCJA – jasne pudełko z nagłówkiem (tytuł + "+" + strzałka)
+# ---------------------------------------------------------------------------
+# Nagłówek jest klikalny: kliknięcie zwija/rozwija sekcję. Przycisk "+"
+# (jeśli włączony przez show_action) wywołuje zdarzenie on_action sekcji.
+
+<CollapsibleSectionHeader>:
+    orientation: "horizontal"
+    size_hint_y: None
+    height: dp(44)
+    spacing: dp(4)
+    on_release: root.section._toggle() if root.section else None
+
+    MDLabel:
+        text: root.section.title if root.section else ""
+        font_size: sp(24)
+        bold: True
+        theme_text_color: "Custom"
+        text_color: 1, 1, 1, 1
+        halign: "left"
+        valign: "middle"
+        text_size: self.size
+        size_hint_x: 1
+
+    SectionHeaderAction:
+        icon: root.section.action_icon if root.section else "plus"
+        opacity: 1 if (root.section and root.section.show_action) else 0
+        disabled: not (root.section and root.section.show_action)
+        pos_hint: {"center_y": 0.5}
+        on_release: root.section.dispatch("on_action") if root.section else None
+
+    AnchorLayout:
+        size_hint_x: None
+        width: dp(36)
+        anchor_x: "center"
+        anchor_y: "center"
+        MDIcon:
+            icon: ("chevron-down" if (root.section and root.section.expanded) else "chevron-right")
+            theme_text_color: "Custom"
+            text_color: 1, 1, 1, 1
+            icon_size: dp(28)
+            size_hint: None, None
+            size: self.texture_size
+
+# Pudełko sekcji: jaśniejsze tło, zaokrąglone rogi, BEZ cienia.
+<CollapsibleSection>:
+    padding: [dp(16), dp(10), dp(16), dp(16)]
+    spacing: dp(8)
+    canvas.before:
+        Color:
+            rgba: lighten(app.theme_bg)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(18), dp(18), dp(18), dp(18)]
+
+# ---------------------------------------------------------------------------
 # NAGŁÓWEK SEKCJI "ZROBIONE" (można go zwinąć/rozwinąć)
 # ---------------------------------------------------------------------------
 # Pasek z napisem "Zrobione" i strzałką (chevron). Kliknięcie rozwija
@@ -554,39 +613,19 @@
 
                 # "height: self.minimum_height" – wysokość dopasowuje się
                 # automatycznie do zawartości (sumy wszystkich elementów w środku).
+                # Każda sekcja to teraz osobne, zwijane "pudełko" (CollapsibleSection).
                 MDBoxLayout:
                     orientation: "vertical"
-                    spacing: dp(8)
+                    spacing: dp(14)
                     size_hint_y: None
                     height: self.minimum_height
                     padding: [0, dp(20), 0, dp(8)]
 
                     # ── SEKCJA: Notatki ──
-                    # "MDBoxLayout" – pionowe pudełko. "height: self.minimum_height"
-                    # – wysokość dopasowuje się do zawartości.
-                    MDBoxLayout:
-                        orientation: "vertical"
-                        spacing: dp(12)
-                        size_hint_y: None
-                        height: self.minimum_height
-
-                        MDBoxLayout:
-                            size_hint_y: None
-                            height: dp(48)
-                            MDLabel:
-                                text: "Notatki"
-                                font_size: sp(34)
-                                bold: True
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                halign: "left"
-                                valign: "middle"
-                                text_size: self.size
-                            Widget:
-                                size_hint_x: 1
-                            SectionHeaderAction:
-                                icon: "plus"
-                                on_release: root.open_add_note_sheet()
+                    CollapsibleSection:
+                        title: "Notatki"
+                        show_action: True
+                        on_action: root.open_add_note_sheet()
 
                         MDBoxLayout:
                             id: notes_list
@@ -595,26 +634,9 @@
                             size_hint_y: None
                             height: self.minimum_height
 
-                    Widget:
-                        size_hint_y: None
-                        height: dp(28)
-
                     # ── SEKCJA: Czas (stoper) ──
-                    MDBoxLayout:
-                        orientation: "vertical"
-                        spacing: dp(14)
-                        size_hint_y: None
-                        height: self.minimum_height
-
-                        MDLabel:
-                            text: "Czas"
-                            font_size: sp(34)
-                            bold: True
-                            theme_text_color: "Custom"
-                            text_color: 1, 1, 1, 1
-                            halign: "left"
-                            size_hint_y: None
-                            height: dp(48)
+                    CollapsibleSection:
+                        title: "Czas"
 
                         # Wyświetlacz stopera (HH:MM:SS)
                         # "font_size: sp(44)" – duża, czytelna czcionka.
@@ -657,32 +679,11 @@
                                         size: self.size
                                         radius: [dp(19), dp(19), dp(19), dp(19)]
 
-                    Widget:
-                        size_hint_y: None
-                        height: dp(28)
-
                     # ── SEKCJA: Cele czasowe (z samochodzikiem) ──
-                    MDBoxLayout:
-                        orientation: "vertical"
-                        spacing: dp(16)
-                        size_hint_y: None
-                        height: self.minimum_height
-
-                        MDBoxLayout:
-                            size_hint_y: None
-                            height: dp(48)
-                            MDLabel:
-                                text: "Cele czasowe"
-                                font_size: sp(34)
-                                bold: True
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                halign: "left"
-                                valign: "middle"
-                                size_hint_x: 1
-                            SectionHeaderAction:
-                                icon: "plus"
-                                on_release: root.on_goals_add_clicked()
+                    CollapsibleSection:
+                        title: "Cele czasowe"
+                        show_action: True
+                        on_action: root.on_goals_add_clicked()
 
                         MDBoxLayout:
                             id: goals_list
@@ -691,33 +692,12 @@
                             size_hint_y: None
                             height: self.minimum_height
 
-                    Widget:
-                        size_hint_y: None
-                        height: dp(28)
-
                     # ── SEKCJA: Lista celów (checklista) ──
-                    MDBoxLayout:
+                    CollapsibleSection:
                         id: lista_celow_box
-                        orientation: "vertical"
-                        spacing: dp(14)
-                        size_hint_y: None
-                        height: self.minimum_height
-
-                        MDBoxLayout:
-                            size_hint_y: None
-                            height: dp(48)
-                            MDLabel:
-                                text: "Lista celów"
-                                font_size: sp(34)
-                                bold: True
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                halign: "left"
-                                valign: "middle"
-                                size_hint_x: 1
-                            SectionHeaderAction:
-                                icon: "plus"
-                                on_release: root.open_add_checklist_goal_sheet()
+                        title: "Lista celów"
+                        show_action: True
+                        on_action: root.open_add_checklist_goal_sheet()
 
                         MDBoxLayout:
                             id: checklist_goals_list
@@ -732,34 +712,11 @@
                             id: zrobione_section
                             done_count: 0
 
-                    Widget:
-                        size_hint_y: None
-                        height: dp(28)
-
                     # ── SEKCJA: Etapy (oś czasu) ──
-                    MDBoxLayout:
-                        orientation: "vertical"
-                        spacing: dp(12)
-                        size_hint_y: None
-                        height: self.minimum_height
-
-                        MDBoxLayout:
-                            size_hint_y: None
-                            height: dp(48)
-                            MDLabel:
-                                text: "Etapy"
-                                font_size: sp(34)
-                                bold: True
-                                theme_text_color: "Custom"
-                                text_color: 1, 1, 1, 1
-                                halign: "left"
-                                valign: "middle"
-                                text_size: self.size
-                            Widget:
-                                size_hint_x: 1
-                            SectionHeaderAction:
-                                icon: "plus"
-                                on_release: root.open_add_etapy_group_sheet()
+                    CollapsibleSection:
+                        title: "Etapy"
+                        show_action: True
+                        on_action: root.open_add_etapy_group_sheet()
 
                         # Przewijane poziomo "żetony" (chipsy) z nazwami grup etapów
                         # "ScrollView" z "do_scroll_x: True" – przewijanie w poziomie.
