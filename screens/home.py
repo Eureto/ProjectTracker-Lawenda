@@ -40,8 +40,7 @@ _TEXT_ON_DARK = (1, 1, 1, 1)
 GRID_COLUMNS = 2       # Liczba kolumn w widoku siatki
 CARD_SIZE_HINT_X = 0.4 # Szerokość karty jako ułamek szerokości ekranu
 
-# Pomocnicze stałe do pozycjonowania emoji na karcie
-GRID_EMOJI_TOP_EXTRA = 0.25
+# Skala odznaki emoji względem emoji_size
 GRID_EMOJI_BADGE_SCALE = 1.6
 
 
@@ -173,6 +172,14 @@ class ProjectCard(MDCard):
     emoji_right_hint = NumericProperty(1.05)
     emoji_right_hint_png = NumericProperty(1.05)
 
+    FIXED_EMOJI_PEEK_DP = 25
+
+    emoji_top_hint = NumericProperty(1.25)
+
+    def _recalc_emoji_top_hint(self, *args):
+        h = self.width * self.height_multiplier
+        self.emoji_top_hint = 1.0 + dp(self.FIXED_EMOJI_PEEK_DP) / h if h > 0 else 1.25
+
     # Sprawdza, czy emoji pochodzi z pliku PNG – jeśli tak, zwraca inne ustawienie pozycji niż dla zwykłej ikony.
     def _get_effective_emoji_right_hint(self):
         src = (self.emoji_source or "").lower()
@@ -194,6 +201,8 @@ class ProjectCard(MDCard):
         self._long_press_ev = None
         self._shake_anim = None
         self._update_title_text_color()
+        self.bind(width=self._recalc_emoji_top_hint, height_multiplier=self._recalc_emoji_top_hint)
+        Clock.schedule_once(lambda _dt: self._recalc_emoji_top_hint(), 0)
 
     # Wywołuje się automatycznie po zmianie koloru tła karty – wtedy trzeba też dobrać kolor napisu.
     def on_card_color(self, *_args):
@@ -477,8 +486,8 @@ class HomeScreen(MDScreen):
         mult = max(c.height_multiplier for c in cards)
         card_h = card_w * mult
         emoji_sz = max(c.emoji_size for c in cards)
-        badge_h = emoji_sz * GRID_EMOJI_BADGE_SCALE
-        badge_above = (card_h * GRID_EMOJI_TOP_EXTRA + badge_h * 0.35) * 0.5
+        peek = ProjectCard.FIXED_EMOJI_PEEK_DP
+        badge_above = dp(peek) + emoji_sz * GRID_EMOJI_BADGE_SCALE * 0.35
         top_pad = base_top + badge_above
         return card_w, card_h, top_pad, margin_x, gutter, row_gap
 
