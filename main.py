@@ -74,6 +74,7 @@ if platform in ('win', 'linux', 'macosx'):
 _LAZY_SCREENS = [
     ("add_project",      os.path.join("kv", "addProject.kv"),      "screens.add_project",      "AddProjectScreen"),
     ("statistics",       os.path.join("kv", "statistics.kv"),      "screens.statistics",       "StatisticsScreen"),
+    ("calendar",         os.path.join("kv", "calendar.kv"),        "screens.calendar",         "CalendarScreen"),
     ("project_info",     os.path.join("kv", "project_info.kv"),    "screens.project_info",     "ProjectInfoScreen"),
     ("project_settings", os.path.join("kv", "projectSettings.kv"), "screens.project_settings", "ProjectSettingsScreen"),
     ("geofence_picker",  None,                    "screens.geofence_picker",  "GeofencePickerScreen"),

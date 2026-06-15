@@ -315,6 +315,32 @@ def schedule_home_last_session_refresh():
 
 # Zwraca ostatnią (najnowszą) sesję z pliku, lub None jeśli nie ma żadnej.
 # Uzupełnia dane o emoji i kolorze z metadanych projektu.
+def _parse_started(session):
+    raw = session.get("started_at")
+    if not raw:
+        return None
+    try:
+        return datetime.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def get_sessions_in_date_range(start_date, end_date):
+    sessions = load_sessions()
+    result = []
+    for s in sessions:
+        ended = _parse_ended(s)
+        started = _parse_started(s)
+        s_date = ended.date() if ended else None
+        if s_date is None:
+            continue
+        if start_date <= s_date <= end_date:
+            result.append(s)
+        elif started and started.date() <= end_date and (ended and ended.date() >= start_date):
+            result.append(s)
+    return result
+
+
 def get_last_session():
     sessions = load_sessions()
     if not sessions:

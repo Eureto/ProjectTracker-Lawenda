@@ -2062,9 +2062,8 @@ class ProjectInfoScreen(MDScreen):
             self._timer_elapsed_seconds = active_timer.elapsed_from_state(state)
             self._refresh_timer_label()
 
-    # Odswieza wyswietlany napis timera w formacie gg:mm:ss.
     def _refresh_timer_label(self):
-        s = self._timer_elapsed_seconds
+        s = int(self._timer_elapsed_seconds)
         h, r = divmod(s, 3600)
         m, sec = divmod(r, 60)
         self.timer_display = f"{h:02d}:{m:02d}:{sec:02d}"

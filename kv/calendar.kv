@@ -1,0 +1,163 @@
+#:import utils kivy.utils
+#:import ViewSegmentButton screens.calendar.ViewSegmentButton
+
+<CalendarScreen>:
+    md_bg_color: utils.get_color_from_hex(app.theme_bg)
+
+    MDBoxLayout:
+        orientation: 'vertical'
+        spacing: dp(8)
+
+        Widget:
+            size_hint_y: None
+            height: dp(35)
+
+        # ── Top bar: period navigation ──
+        MDBoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: None
+            height: dp(48)
+            padding: [dp(4), 0, dp(4), 0]
+            spacing: dp(4)
+
+            MDIconButton:
+                icon: "chevron-left"
+                icon_size: dp(28)
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                on_release: root.go_prev()
+
+            MDBoxLayout:
+                orientation: 'vertical'
+                size_hint_x: 1
+                MDLabel:
+                    text: root.period_label
+                    halign: "center"
+                    valign: "bottom"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 1
+                    font_size: dp(18)
+                    bold: True
+                    size_hint_y: 0.6
+                MDLabel:
+                    text: root.current_day_label
+                    halign: "center"
+                    valign: "top"
+                    theme_text_color: "Custom"
+                    text_color: 1, 1, 1, 0.6
+                    font_size: dp(12)
+                    size_hint_y: 0.4
+
+            MDIconButton:
+                icon: "chevron-right"
+                icon_size: dp(28)
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 1
+                on_release: root.go_next()
+
+            MDIconButton:
+                icon: "calendar-today"
+                icon_size: dp(22)
+                theme_text_color: "Custom"
+                text_color: 1, 1, 1, 0.8
+                on_release: root.go_today()
+
+        # ── View mode selector ──
+        MDCard:
+            size_hint_x: 0.92
+            size_hint_y: None
+            height: dp(44)
+            radius: [dp(22)]
+            md_bg_color: 0.8, 0.8, 0.8, 0.5
+            padding: dp(4)
+            elevation: 0
+            pos_hint: {"center_x": 0.5}
+
+            MDBoxLayout:
+                orientation: 'horizontal'
+                spacing: dp(4)
+
+                ViewSegmentButton:
+                    text: "Miesiąc"
+                    selected: root.view_mode == "month"
+                    on_release: root.set_view_mode("month")
+                    font_size: dp(14)
+
+                ViewSegmentButton:
+                    text: "Tydzień"
+                    selected: root.view_mode == "week"
+                    on_release: root.set_view_mode("week")
+                    font_size: dp(14)
+
+                ViewSegmentButton:
+                    text: "3 Dni"
+                    selected: root.view_mode == "3day"
+                    on_release: root.set_view_mode("3day")
+                    font_size: dp(14)
+
+        # ── Calendar content ──
+        ScrollView:
+            do_scroll_x: False
+            bar_width: 0
+
+            MDBoxLayout:
+                id: calendar_content
+                orientation: 'vertical'
+                size_hint_y: None
+                height: self.minimum_height
+                padding: [dp(8), dp(4), dp(8), dp(4)]
+                spacing: dp(4)
+
+        # ── Bottom navigation bar ──
+        MDFloatLayout:
+            size_hint: 1, None
+            height: dp(60)
+
+            MDCard:
+                size_hint: 1, 1
+                pos_hint: {'x': 0, 'y': 0}
+                radius: [0, 0, 0, 0]
+                elevation: 4
+                md_bg_color: 1, 1, 1, 1
+
+                MDBoxLayout:
+                    AnchorLayout:
+                        anchor_x: 'center'
+                        anchor_y: 'center'
+                        MDIconButton:
+                            icon: "home-outline"
+                            icon_size: dp(30)
+                            on_release: app.root.current = "home"
+
+                    Widget:
+
+                    AnchorLayout:
+                        anchor_x: 'center'
+                        anchor_y: 'center'
+                        MDIconButton:
+                            icon: "chart-arc"
+                            icon_size: dp(30)
+                            on_release: app.root.current = "statistics"
+
+            ClickableAnchorLayout:
+                size_hint: None, None
+                size: dp(120), dp(56)
+                pos_hint: {'center_x': 0.5, 'center_y': 0.67}
+                on_release: app.root.current = "add_project"
+                canvas.before:
+                    Color:
+                        rgba: utils.get_color_from_hex(app.theme_card_bg)
+                    RoundedRectangle:
+                        pos: self.pos
+                        size: self.size
+                        radius: [dp(18)]
+
+                Label:
+                    text: "+"
+                    bold: True
+                    font_size: dp(48)
+                    color: 1, 1, 1, 1
+                    halign: "center"
+                    valign: "middle"
+                    size_hint: None, None
+                    pos_hint: {"center_x": 0.5, "center_y": 0.5}
