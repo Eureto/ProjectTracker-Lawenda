@@ -7,6 +7,10 @@
             size: self.size
             radius: [dp(16)]
 
+    Widget:
+        id: _top_spacer
+        size_hint_y: 1
+
     MDLabel:
         text: "Wybierz kolor"
         font_style: "H5"
@@ -16,11 +20,10 @@
         halign: "center"
         theme_text_color: "Custom"
         text_color: 1, 1, 1, 1
-        padding: [0, dp(8), 0, 0]
 
     MDFloatLayout:
         size_hint_y: None
-        height: dp(260)
+        height: dp(244)
         HsvWheel:
             id: hsv_wheel
             color_hex: root.color_hex
@@ -85,3 +88,7 @@
             size_hint_x: 0.35
             size_hint_y: None
             height: dp(44)
+
+    Widget:
+        id: _bottom_spacer
+        size_hint_y: 1

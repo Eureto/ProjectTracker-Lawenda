@@ -280,7 +280,7 @@ class ColorPickerPopup(Popup):
         )
         btn_box.add_widget(cancel_btn)
         btn_box.add_widget(ok_btn)
-        self.content.add_widget(btn_box)
+        self.content.add_widget(btn_box, index=1)
 
     def _on_ok(self, *args):
         self._did_pick = True
