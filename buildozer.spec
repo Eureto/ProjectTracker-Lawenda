@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,json,zip
 
 # (list) List of inclusions using pattern matching
-source.include_patterns = assets/Emoji_PNG.zip,assets/Progress_Car/*
+source.include_patterns = assets/Emoji_PNG.zip,assets/emoji_meta.json,assets/Progress_Car/*
 
 # (list) Source files to exclude (let empty to not exclude anything)
 #source.exclude_exts = spec

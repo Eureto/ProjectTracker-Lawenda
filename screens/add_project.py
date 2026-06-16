@@ -9,20 +9,18 @@
 
 import os
 import json
-import unicodedata
+import math
 import uuid
-from kivy.properties import StringProperty, ColorProperty, NumericProperty, ObjectProperty, ListProperty
+from kivy.properties import StringProperty, ColorProperty, ObjectProperty, NumericProperty
 from kivymd.uix.screen import MDScreen
 from kivymd.uix.dialog import MDDialog
 from screens.color_palette import open_palette_picker
-from kivymd.uix.gridlayout import MDGridLayout
 from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.textfield import MDTextField
 from kivymd.uix.button import MDRaisedButton
-from kivy.uix.anchorlayout import AnchorLayout
 from kivy.uix.recycleview import RecycleView
 from kivy.uix.recyclegridlayout import RecycleGridLayout
-from kivymd.uix.label import MDIcon
+from kivy.uix.recycleview.views import RecycleDataViewBehavior
 from kivymd.uix.fitimage import FitImage
 from kivy.metrics import dp
 from kivy.core.window import Window
@@ -31,206 +29,47 @@ from kivy.clock import Clock
 from plyer import filechooser
 
 from screens.image_utils import prepare_project_image
-from screens.emoji_assets import ensure_emoji_assets, resolve_emoji_source
+from screens.emoji_assets import resolve_emoji_source
+from screens import emoji_index
 from kivymd.app import MDApp
 from kivymd.uix.behaviors import RectangularRippleBehavior
 from kivy.uix.behaviors import ButtonBehavior
-from kivy.uix.image import AsyncImage, Image
+from kivy.uix.image import Image
 from kivy.cache import Cache
 from kivy.factory import Factory
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.widget import Widget
 
 
 # ---------------------------------------------------------------------------
-# PRZYCISK EMOJI – mały kwadracik z obrazkiem emoji
+# KOMÓRKA EMOJI – pojedynczy obrazek emoji w siatce pickera
 # ---------------------------------------------------------------------------
-class EmojiButton(RectangularRippleBehavior, ButtonBehavior, Image):
-    # Klikalny kwadracik z obrazkiem emoji – pojawia się w oknie wyboru emoji,
-    # gdy użytkownik chce ustawić ikonę projektu. Każdy przycisk zawiera
-    # jeden znak emoji i po kliknięciu informuje ekran, które emoji wybrano.
-    
-    screen = ObjectProperty(None)  # Przechowuje odniesienie do ekranu głównego – potrzebne do odświeżania po dodaniu projektu
-    
-    # Przygotowuje przycisk emoji: ustawia jego rozmiar (60x60 punktów),
-    # wyłącza zapamiętywanie w pamięci podręcznej i pozwala na rozciąganie
-    # obrazka tak, żeby emoji dobrze wyglądało w środku przycisku.
+# To widżet używany przez RecycleView. RecycleView tworzy tylko tyle komórek,
+# ile mieści się na ekranie, i podmienia w nich obrazek podczas przewijania.
+# Dzięki temu picker otwiera się natychmiast nawet przy tysiącach emoji –
+# nie tworzymy już tysięcy widżetów naraz (to powodowało wielosekundowe
+# zawieszenie).
+class EmojiCell(RecycleDataViewBehavior, RectangularRippleBehavior, ButtonBehavior, Image):
+    screen = ObjectProperty(None, allownone=True)
+    index = NumericProperty(0, allownone=True)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.nocache = True  # Nie przechowuj w pamięci podręcznej (oszczędność RAM)
-        self.size_hint = (None, None)
-        self.size = (dp(60), dp(60))
         self.allow_stretch = True
         self.keep_ratio = True
         self.mipmap = False
 
-    # Po kliknięciu przycisku emoji – przekazuje wybrane emoji do ekranu.
-    # "screen" to referencja do AddProjectScreen, która obsługuje wybór.
+    # RecycleView woła tę metodę przy podmianie danych w komórce (przewijanie).
+    def refresh_view_attrs(self, rv, index, data):
+        self.index = index
+        self.source = data.get("source", "")
+        self.screen = data.get("screen")
+
+    # Po kliknięciu komórki – przekazuje wybrane emoji do ekranu.
     def on_release(self):
-        if self.screen:
+        if self.screen and self.source:
             self.screen._on_emoji_selected(self.source)
 
-Factory.register('EmojiButton', cls=EmojiButton)
-
-
-# ---------------------------------------------------------------------------
-# METADANE EMOJI – wyszukiwanie emoji po nazwie lub kodzie
-# ---------------------------------------------------------------------------
-class EmojiMetadata:
-    # Pomaga wyszukiwać emoji po nazwie (np. "uśmiech") lub kodzie szesnastkowym.
-    # Obsługuje kategoryzację emoji: People & body, Animals, Food, Travel, 
-    # Activities, Objects, Symbols, Flags.
-    
-    # Kategorie w kolejności wyświetlania
-    CATEGORY_ORDER = [
-        "People & body",
-        "Animals",
-        "Food & drink",
-        "Travel & places",
-        "Activities & sports",
-        "Objects",
-        "Symbols",
-        "Flags",
-    ]
-    
-    @staticmethod
-    def get_emoji_category(char, name):
-        """
-        Mapuje emoji do jednej z głównych kategorii na podstawie Unicode info.
-        Zwraca kategorię taką jak 'People & body', 'Animals' itd.
-        """
-        if not char:
-            return "Symbols"
-        
-        codepoint = ord(char)
-        
-        # Flagi: Regional Indicator Symbols (U+1F1E6 to U+1F1FF)
-        if 0x1F1E6 <= codepoint <= 0x1F1FF:
-            return "Flags"
-        
-        # Smileys & People (U+1F600-U+1F64F, U+1F300-U+1F5FF część)
-        if (0x1F600 <= codepoint <= 0x1F64F or  # Emoticons
-            0x1F300 <= codepoint <= 0x1F5FF or  # Misc Symbols and Pictographs (część)
-            0x1F900 <= codepoint <= 0x1F9FF):   # Supplemental Symbols and Pictographs
-            
-            # Lepsze rozróżnienie na podstawie nazwy
-            if name:
-                name_lower = name.lower()
-                if any(x in name_lower for x in ['person', 'people', 'man', 'woman', 'boy', 'girl', 'face', 'head', 'hair', 'body', 'hand', 'heart', 'kiss', 'couple']):
-                    return "People & body"
-                elif any(x in name_lower for x in ['animal', 'beast', 'bird', 'insect', 'bug', 'cat', 'dog', 'mouse', 'cow', 'lion', 'tiger', 'fish', 'snake', 'spider', 'butterfly', 'bee']):
-                    return "Animals"
-                elif any(x in name_lower for x in ['food', 'fruit', 'vegetable', 'apple', 'banana', 'orange', 'grape', 'strawberry', 'watermelon', 'meat', 'chicken', 'pizza', 'cake', 'bread', 'coffee', 'beer', 'wine', 'cup', 'bottle', 'egg']):
-                    return "Food & drink"
-                elif any(x in name_lower for x in ['car', 'bus', 'train', 'airplane', 'rocket', 'ship', 'boat', 'taxi', 'vehicle', 'transport', 'bike', 'motorcycle', 'bicycle']):
-                    return "Travel & places"
-                elif any(x in name_lower for x in ['ball', 'sport', 'game', 'soccer', 'football', 'basketball', 'tennis', 'medal', 'trophy', 'running', 'swimming', 'skiing', 'snowboarding', 'dance', 'music', 'guitar', 'drum', 'art']):
-                    return "Activities & sports"
-                elif any(x in name_lower for x in ['flower', 'tree', 'plant', 'cactus', 'clover', 'mushroom', 'leaf', 'herb', 'shamrock', 'umbrella', 'rain', 'snow', 'cloud', 'sun', 'moon', 'star', 'fire', 'zap', 'water', 'wave', 'droplet', 'ocean', 'mountain']):
-                    return "Travel & places" if 'mountain' in name_lower else "Animals"
-                elif any(x in name_lower for x in ['watch', 'clock', 'lamp', 'book', 'pencil', 'memo', 'page', 'computer', 'phone', 'camera', 'tv', 'radio', 'speaker', 'headphone', 'loudspeaker', 'microphone', 'trumpet', 'violin', 'saxophone', 'banjo', 'guitar', 'printer', 'keyboard', 'mouse', 'trackball', 'joystick', 'clamp', 'wrench', 'hammer', 'axe', 'pickaxe', 'toolbox', 'magnet', 'bomb', 'knife', 'pistol', 'sword', 'shield', 'bed', 'couch', 'chair', 'toilet', 'shower', 'bathtub', 'door', 'lock', 'key', 'hole', 'bulb', 'flashlight', 'candle', 'wastebasket', 'mirror', 'window', 'rocket', 'telescope', 'microscope', 'ladder', 'scale']):
-                    return "Objects"
-        
-        # Symbole: Heart, Dingbats, Miscellaneous Symbols, Emoticons
-        if (0x2600 <= codepoint <= 0x26FF or  # Miscellaneous Symbols
-            0x2700 <= codepoint <= 0x27BF or  # Dingbats
-            0x1F300 <= codepoint <= 0x1F5FF or  # Misc Symbols and Pictographs
-            0x2139 <= codepoint <= 0x27BF or  # Dingbats i Mathematical Alphanumeric Symbols
-            0x2300 <= codepoint <= 0x23FF):   # Miscellaneous Technical
-            
-            if name:
-                name_lower = name.lower()
-                if any(x in name_lower for x in ['heavy_large_circle', 'white_circle', 'black_circle', 'square', 'cross', 'x', 'heavy_check', 'ballot', 'heavy_multiplication']):
-                    return "Symbols"
-        
-        # Domyślnie: symbole
-        return "Symbols"
-    
-    # Odczytuje z nazwy pliku kod znaku Unicode.
-    # Np. z pliku "u1F600.png" odczytuje kod "1F600" (znak 😀).
-    #
-    # CO TO JEST UNICODE?
-    # To standard który przypisuje każdemu znakowi (literze, emoji) 
-    # niepowtarzalny numer. Np. "A" to U+0041, a 😀 to U+1F600.
-    # "kod szesnastkowy" (hex) – system liczbowy używający cyfr 0-9 i liter A-F.
-    # Np. 1F600 w systemie szesnastkowym = 128512 w dziesiętnym.
-    @staticmethod
-    def extract_unicode_codepoint(filename):
-        base = os.path.splitext(filename)[0]
-        
-        hex_value = None
-        if base.startswith('uni') and len(base) > 3:
-            hex_value = base[3:]
-        elif base.startswith('u') and len(base) > 1:
-            hex_value = base[1:]
-        
-        if not hex_value:
-            return None, None, None, None
-        
-        try:
-            codepoint = int(hex_value, 16)
-            char = chr(codepoint)
-            try:
-                name = unicodedata.name(char).lower()
-            except ValueError:
-                category = unicodedata.category(char)
-                name = f"category_{category}".lower()
-            
-            # Get emoji category
-            category = EmojiMetadata.get_emoji_category(char, name)
-            return hex_value.lower(), char, name, category
-        except (ValueError, OverflowError):
-            return None, None, None, None
-    
-    # Buduje listę wszystkich dostępnych emoji z podanego folderu.
-    # Każdy wpis zawiera: ścieżkę do pliku, kod szesnastkowy, znak, nazwę, kategorię i słowa kluczowe.
-    # Słowa kluczowe umożliwiają wyszukiwanie (np. "uśmiech" znajdzie 😀).
-    # Lista jest wstępnie posortowana po kategoriach dla szybkiego przewijania.
-    @staticmethod
-    def build_emoji_index(emoji_dir):
-        if not os.path.exists(emoji_dir):
-            return []
-        emoji_index = []
-        for filename in sorted([f for f in os.listdir(emoji_dir) if f.lower().endswith(".png")]):
-            hex_val, char, name, category = EmojiMetadata.extract_unicode_codepoint(filename)
-            if hex_val:
-                keywords = [hex_val] + (name.split('_') if name else [])
-                emoji_index.append({
-                    'source': os.path.join(emoji_dir, filename),
-                    'hex': hex_val,
-                    'char': char,
-                    'name': name or '',
-                    'category': category or 'Symbols',
-                    'keywords': keywords,
-                    'screen': None
-                })
-        
-        # Sortuj emoji po kategoriach w określonej kolejności
-        def category_sort_key(emoji):
-            cat = emoji.get('category', 'Symbols')
-            try:
-                return EmojiMetadata.CATEGORY_ORDER.index(cat)
-            except ValueError:
-                return len(EmojiMetadata.CATEGORY_ORDER)
-        
-        emoji_index.sort(key=category_sort_key)
-        return emoji_index
-    
-    # Filtruje emoji po wyszukiwanej frazie (np. po nazwie lub kodzie szesnastkowym).
-    # Jeśli nie ma frazy – zwraca wszystkie emoji (posortowane po kategoriach).
-    # Gwarantuje że wszystkie emoji są przeszukiwalne, w tym flagi.
-    @staticmethod
-    def filter_emojis(emoji_index, search_term):
-        if not search_term or not search_term.strip():
-            return emoji_index  # Zwraca wszystkie emoji (posortowane po kategoriach)
-        search_term = search_term.lower().strip()
-        filtered = []
-        for emoji in emoji_index:
-            if search_term in emoji['hex']:
-                filtered.append(emoji)
-            elif any(search_term in keyword for keyword in emoji['keywords']):
-                filtered.append(emoji)
-        return filtered
+Factory.register('EmojiCell', cls=EmojiCell)
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +83,14 @@ class AddProjectScreen(MDScreen):
     _filtered_emojis = []
     _search_input = None
     _recycle_view = None
+    _emoji_layout = None
+    _category_tabs = None
+    _category_order = []
+    _current_active_category = ""
+    _cell_size = 0
+    _cell_spacing = 0
+    _grid_padding = 0
+    _grid_cols = 1
 
     def on_enter(self):
         # Gdy użytkownik wchodzi na ekran dodawania projektu – prosimy
@@ -262,234 +109,203 @@ class AddProjectScreen(MDScreen):
     # Najpierw czyści pamięć podręczną obrazków (Cache), żeby zwolnić miejsce w pamięci RAM.
     # Cache to tymczasowe przechowywanie obrazków – czyścimy go przed otwarciem okna emoji.
     def select_emoji(self):
+        # Buduje indeks emoji (raz – wynik jest zapamiętany) i otwiera okno
+        # wyboru. Indeks zawiera tylko metadane (ścieżki, kategorie, nazwy),
+        # a nie widżety, więc okno otwiera się natychmiast. Same obrazki
+        # tworzy leniwie RecycleView, w miarę przewijania.
         Cache.remove('kv.image')
         Cache.remove('kv.texture')
 
         if not self._emoji_index:
-            emoji_dir = ensure_emoji_assets()
-            self._emoji_index = EmojiMetadata.build_emoji_index(emoji_dir)
+            self._emoji_index = emoji_index.build_index()
             print(f"[EmojiPicker] Built index with {len(self._emoji_index)} emojis")
 
         self._filtered_emojis = self._emoji_index
         self._category_tabs = {}
-        self._current_active_category = EmojiMetadata.CATEGORY_ORDER[0] if EmojiMetadata.CATEGORY_ORDER else "Symbols"
+        self._category_order = emoji_index.category_order(self._emoji_index)
+        self._current_active_category = self._category_order[0] if self._category_order else ""
 
-        # Create main container
+        # Wymiary komórek siatki (potrzebne też do obliczeń przewijania).
+        self._cell_size = dp(56)
+        self._cell_spacing = dp(6)
+        self._grid_padding = dp(6)
+        available_width = Window.width * 0.95 - dp(20)
+        self._grid_cols = max(4, int(available_width / (self._cell_size + self._cell_spacing)))
+
         container = MDBoxLayout(
-            orientation="vertical", 
-            spacing=dp(5), 
-            padding=dp(5),
+            orientation="vertical",
+            spacing=dp(6),
+            padding=dp(6),
             size_hint_y=None,
-            height=dp(650)
+            height=dp(620),
         )
-        
-        # Search box
+
+        # Pole wyszukiwania
         self._search_input = MDTextField(
-            hint_text="Search emoji (hex or name)...",
+            hint_text="Szukaj emoji (nazwa, np. 'heart', albo kod hex)...",
             mode="rectangle",
             size_hint_y=None,
-            height=dp(50)
+            height=dp(50),
         )
         self._search_input.bind(text=self._on_search_text)
         container.add_widget(self._search_input)
-        
-        # Category tabs container (horizontal scrolling button row)
+
+        # Pasek zakładek z kategoriami (poziomo przewijany)
         categories_container = MDBoxLayout(
             orientation="horizontal",
+            size_hint_x=None,
             size_hint_y=None,
-            height=dp(45),
-            spacing=dp(5),
-            padding=dp(5)
+            height=dp(40),
+            spacing=dp(6),
+            padding=(dp(2), 0),
         )
-        
-        # Create category tab buttons
-        for category in EmojiMetadata.CATEGORY_ORDER:
+        categories_container.bind(minimum_width=categories_container.setter('width'))
+
+        for category in self._category_order:
             btn = MDRaisedButton(
                 text=category,
-                size_hint_x=None,
-                width=dp(110),
-                height=dp(35),
-                md_bg_color=[0.2, 0.2, 0.2, 1] if category != self._current_active_category else [0.7, 0.5, 1, 1]
+                size_hint=(None, None),
+                height=dp(36),
+                md_bg_color=(
+                    [0.7, 0.5, 1, 1] if category == self._current_active_category
+                    else [0.2, 0.2, 0.2, 1]
+                ),
             )
-            btn.bind(on_press=lambda x, cat=category: self._on_category_selected(cat))
+            btn.bind(on_release=lambda _btn, cat=category: self._on_category_selected(cat))
             self._category_tabs[category] = btn
             categories_container.add_widget(btn)
-        
-        # ScrollView for categories (allow horizontal scrolling)
-        cat_scroll = ScrollView(size_hint_y=None, height=dp(45), do_scroll_y=False)
+
+        cat_scroll = ScrollView(size_hint_y=None, height=dp(44), do_scroll_y=False, bar_width=0)
         cat_scroll.add_widget(categories_container)
         container.add_widget(cat_scroll)
-        
-        # Main emoji scroll view
-        scroll = ScrollView(size_hint_y=1, do_scroll_x=False)
-        scroll.bind(scroll_y=self._on_emoji_scroll)
-        self._emoji_scroll = scroll
-        
-        # Wrapper to center the grid
-        grid_wrapper = MDBoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            size_hint_x=1,
-            padding=0,
-            spacing=0
-        )
-        grid_wrapper.bind(minimum_height=grid_wrapper.setter('height'))
 
-        emoji_size = dp(60)
-        emoji_spacing = dp(5)
-        available_width = Window.width * 0.9 - dp(20)
-        cols = max(3, int(available_width / (emoji_size + emoji_spacing)))
-        
-        # GridLayout with dynamic columns
-        self._emoji_grid = MDGridLayout(
-            cols=cols,
-            spacing=dp(5),
-            padding=dp(5),
-            size_hint_y=None,
-            size_hint_x=None,
-            width=cols * (emoji_size + emoji_spacing) + dp(10)
+        # Wirtualizowana siatka emoji (RecycleView) – tworzy widżety tylko
+        # dla widocznych komórek.
+        rv = RecycleView(size_hint=(1, 1), bar_width=dp(4))
+        rv.bind(scroll_y=self._on_emoji_scroll)
+        layout = RecycleGridLayout(
+            cols=self._grid_cols,
+            default_size=(self._cell_size, self._cell_size),
+            default_size_hint=(None, None),
+            size_hint=(1, None),
+            spacing=self._cell_spacing,
+            padding=self._grid_padding,
         )
-        self._emoji_grid.bind(minimum_height=self._emoji_grid.setter('height'))
-        
-        self._populate_emoji_grid(self._filtered_emojis)
-        
-        grid_wrapper.add_widget(Widget(size_hint_x=1))
-        grid_wrapper.add_widget(self._emoji_grid)
-        grid_wrapper.add_widget(Widget(size_hint_x=1))
-        scroll.add_widget(grid_wrapper)
-        container.add_widget(scroll)
-        
-        # Dialog with proper size
+        layout.bind(minimum_height=layout.setter('height'))
+        rv.add_widget(layout)
+        rv.viewclass = 'EmojiCell'
+        self._recycle_view = rv
+        self._emoji_layout = layout
+        self._set_emoji_data(self._filtered_emojis)
+        container.add_widget(rv)
+
         self.emoji_dialog = MDDialog(
             title="Wybierz ikonę projektu",
             type="custom",
             content_cls=container,
             size_hint_x=0.95,
             size_hint_y=None,
-            height=dp(700)
+            height=dp(700),
         )
         self.emoji_dialog.open()
-        
-        # Po otwarciu okna wyboru emoji – ustawia kursor w polu wyszukiwania,
-        # żeby użytkownik mógł od razu zacząć pisać bez klikania w pole.
-        def focus_search(dt):
+
+        # Ustaw kursor w polu wyszukiwania zaraz po otwarciu.
+        def focus_search(_dt):
             self._search_input.focus = True
         Clock.schedule_once(focus_search, 0.1)
 
-    def _on_search_text(self, instance, value):
-        # Gdy użytkownik wpisuje coś w polu wyszukiwania emoji – nie filtrujemy
-        # od razu (bo to spowalniałoby przy każdym znaku). Zamiast tego
-        # czekamy 0.5 sekundy po ostatnim wpisanym znaku, żeby dopiero
-        # wtedy przefiltrować listę. To daje płynniejsze działanie.
-        if not hasattr(self, '_search_scheduled'):
-            self._search_scheduled = False
-        if not self._search_scheduled:
-            self._search_scheduled = True
-            Clock.schedule_once(self._delayed_filter, 0.5)
+    # Przekazuje listę emoji do RecycleView. To tanie – budujemy tylko listę
+    # słowników; widżety powstają leniwie.
+    def _set_emoji_data(self, emoji_list):
+        if not self._recycle_view:
+            return
+        self._filtered_emojis = emoji_list
+        self._recycle_view.data = [
+            {"source": e["source"], "screen": self} for e in emoji_list
+        ]
+        self._recycle_view.scroll_y = 1
 
-    def _delayed_filter(self, dt=None):
-        # Wykonuje właściwe filtrowanie emoji po upływie opóźnienia.
-        # Pobiera tekst z paska wyszukiwania, przekazuje do EmojiMetadata
-        # i odświeża siatkę emoji tak, żeby pokazywała tylko pasujące wyniki.
-        self._search_scheduled = False
+    def _on_search_text(self, instance, value):
+        # Filtrujemy z opóźnieniem 0.3 s po ostatnim znaku, żeby nie filtrować
+        # przy każdym wciśnięciu klawisza.
+        Clock.unschedule(self._delayed_filter)
+        Clock.schedule_once(self._delayed_filter, 0.3)
+
+    def _delayed_filter(self, _dt=None):
+        if not self._search_input:
+            return
         search_term = self._search_input.text
-        filtered = EmojiMetadata.filter_emojis(self._emoji_index, search_term)
-        self._populate_emoji_grid(filtered)
-        
-        # Jeśli szukamy - ukryj kategorie (są nieistotne)
-        # Jeśli nie szukamy - pokaż kategorie
-        if search_term and search_term.strip():
-            print(f"[EmojiPicker] Filtered to {len(filtered)} emojis")
-            # W trybie wyszukiwania kategorie są mniej ważne, ale nie ukrywamy ich
-        else:
-            # Przywróć wszystkie emoji posortowane po kategoriach
-            print(f"[EmojiPicker] Showing all {len(filtered)} emojis by category")
-    
+        filtered = emoji_index.filter_index(self._emoji_index, search_term)
+        self._set_emoji_data(filtered)
+
     def _on_category_selected(self, category):
-        # Gdy użytkownik kliknie na kartę kategorii – scroll do pierwszego emoji tej kategorii
-        # i zaznacz kartę jako aktywną.
+        # Klik w zakładkę kategorii – przewiń do pierwszego emoji tej kategorii.
         self._current_active_category = category
         self._scroll_to_category(category)
         self._update_category_button_styles()
-    
+
+    def _row_height(self):
+        return self._cell_size + self._cell_spacing
+
+    def _content_height(self):
+        # Pełna wysokość siatki (również tej poza ekranem).
+        count = len(self._filtered_emojis)
+        rows = math.ceil(count / self._grid_cols) if count else 0
+        return rows * self._row_height() + 2 * self._grid_padding
+
     def _scroll_to_category(self, category):
-        # Scroll do pierwszego emoji w podanej kategorii
-        # Znajduje indeks pierwszego emoji w kategorii i scroll do niego
-        if not self._filtered_emojis:
+        if not self._filtered_emojis or not self._recycle_view:
             return
-        
-        # Znajdź pierwszy emoji w kategorii (w aktualnie wyfiltrowanej liście)
-        target_index = None
-        for i, emoji in enumerate(self._filtered_emojis):
-            if emoji.get('category') == category:
-                target_index = i
-                break
-        
+
+        target_index = next(
+            (i for i, e in enumerate(self._filtered_emojis) if e.get("category") == category),
+            None,
+        )
         if target_index is None:
             return
-        
-        # Oblicz pozycję na ekranie i scroll
-        emoji_size = dp(60)
-        emoji_spacing = dp(5)
-        cols = self._emoji_grid.cols
-        row = target_index // cols
-        y_offset = row * (emoji_size + emoji_spacing)
-        
-        # Scroll do tej pozycji
-        if self._emoji_scroll:
-            # Normalize scroll_y: 1.0 = top, 0.0 = bottom
-            total_height = self._emoji_grid.height
-            view_height = self._emoji_scroll.height
-            if total_height > view_height:
-                scroll_y = 1.0 - (y_offset / (total_height - view_height))
-                scroll_y = max(0, min(1, scroll_y))
-                self._emoji_scroll.scroll_y = scroll_y
-    
+
+        row = target_index // self._grid_cols
+        y_offset = row * self._row_height()
+        viewport = self._recycle_view.height
+        scrollable = self._content_height() - viewport
+        if scrollable <= 0:
+            self._recycle_view.scroll_y = 1
+            return
+        scroll_y = 1.0 - (y_offset / scrollable)
+        self._recycle_view.scroll_y = max(0, min(1, scroll_y))
+
     def _on_emoji_scroll(self, instance, value):
-        # Gdy użytkownik scroll'uje emoji - update active category tab
-        # Aby znaleźć którą kategorię pokazujemy, wyznaczamy które emoji są widoczne
-        if not self._filtered_emojis or not self._emoji_grid or not self._emoji_scroll:
+        # Podczas przewijania podświetlamy zakładkę kategorii, która jest
+        # aktualnie u góry widoku.
+        if not self._filtered_emojis or not self._recycle_view:
             return
-        
-        # Jeśli szukamy - nie sync'uj kategorie (mniej ważne)
-        if self._search_input and self._search_input.text and self._search_input.text.strip():
+        if self._search_input and self._search_input.text.strip():
             return
-        
-        # Oblicz które emoji są widoczne
-        scroll_y = value  # 1.0 = top, 0.0 = bottom
-        emoji_size = dp(60)
-        emoji_spacing = dp(5)
-        cols = self._emoji_grid.cols
-        
-        # Które emoji są w górze widocznego obszaru
-        # Wysokość grid'u poniżej widoku
-        grid_below_top = (1.0 - scroll_y) * (self._emoji_grid.height - self._emoji_scroll.height)
-        visible_index = int(grid_below_top / (emoji_size + emoji_spacing)) * cols
-        visible_index = min(visible_index, len(self._filtered_emojis) - 1)
-        
-        if visible_index >= 0 and visible_index < len(self._filtered_emojis):
-            visible_emoji = self._filtered_emojis[visible_index]
-            new_category = visible_emoji.get('category', 'Symbols')
-            
-            if new_category != self._current_active_category:
-                self._current_active_category = new_category
-                self._update_category_button_styles()
-    
+
+        viewport = self._recycle_view.height
+        scrollable = self._content_height() - viewport
+        if scrollable <= 0:
+            return
+        y_px = (1.0 - value) * scrollable
+        top_index = int(y_px / self._row_height()) * self._grid_cols
+        top_index = max(0, min(top_index, len(self._filtered_emojis) - 1))
+
+        new_category = self._filtered_emojis[top_index].get("category", "")
+        if new_category and new_category != self._current_active_category:
+            self._current_active_category = new_category
+            self._update_category_button_styles()
+
     def _update_category_button_styles(self):
-        # Update kolory przycisków kategorii: aktywna = fiolet, reszta = szary
-        if not hasattr(self, '_category_tabs'):
+        if not self._category_tabs:
             return
-        
         for category, btn in self._category_tabs.items():
-            if category == self._current_active_category:
-                btn.md_bg_color = [0.7, 0.5, 1, 1]  # Fiolet
-            else:
-                btn.md_bg_color = [0.2, 0.2, 0.2, 1]  # Szary
-    
+            btn.md_bg_color = (
+                [0.7, 0.5, 1, 1] if category == self._current_active_category
+                else [0.2, 0.2, 0.2, 1]
+            )
+
     def _on_emoji_selected(self, emoji_val):
-        # Gdy użytkownik kliknie na jakieś emoji: zapisujemy wybór,
-        # zamykamy okno dialogowe z emoji i czyścimy pole wyszukiwania
-        # (żeby przy następnym otwarciu było puste).
+        # Po kliknięciu emoji: zapisz wybór, zamknij okno i wyczyść wyszukiwarkę.
         self.selected_icon = resolve_emoji_source(emoji_val)
         if hasattr(self, 'emoji_dialog'):
             self.emoji_dialog.dismiss()
@@ -647,20 +463,3 @@ class AddProjectScreen(MDScreen):
     # Zapamiętuje kolor wybrany przez użytkownika w palecie kolorów.
     def _apply_picked_color(self, color):
         self.selected_color = color
-
-    def _populate_emoji_grid(self, emoji_list):
-        # Wypełnia siatkę widoczną w oknie wyboru emoji – dla każdego emoji
-        # z listy tworzy przycisk (EmojiButton). Jeśli lista się nie zmieniła
-        # (ma tyle samo elementów co wcześniej) – pomija odświeżanie,
-        # żeby nie migotać ekranem przy każdym wpisaniu litery.
-        if len(self._emoji_grid.children) == len(emoji_list):
-            return
-        self._emoji_grid.clear_widgets()
-        for emoji in emoji_list:
-            btn = EmojiButton(
-                source=emoji['source'],
-                screen=self,
-                size_hint=(None, None),
-                size=(dp(60), dp(60))
-            )
-            self._emoji_grid.add_widget(btn)

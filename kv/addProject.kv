@@ -128,18 +128,16 @@
             icon_size: sp(26)
 
 # ---------------------------------------------------------------------------
-# PRZYCISK EMOJI (używany w oknie wyboru emoji)
+# KOMÓRKA EMOJI (używana w oknie wyboru emoji)
 # ---------------------------------------------------------------------------
-# Mały kwadratowy przycisk, który po naciśnięciu wybiera emoji dla projektu.
-# "state == 'down'" – sprawdza czy przycisk jest aktualnie wciśnięty.
+# Pojedyncza klikalna komórka z obrazkiem emoji w siatce pickera.
+# "state == 'down'" – sprawdza czy komórka jest aktualnie wciśnięta.
 # Jeśli tak, tło staje się lekko przezroczyste (efekt kliknięcia).
 
-<EmojiButton>:
-    size_hint: None, None
-    size: dp(60), dp(60)
+<EmojiCell>:
     canvas.before:
         Color:
-            rgba: (0, 0, 0, 0.1) if self.state == 'down' else (0, 0, 0, 0)
+            rgba: (0, 0, 0, 0.12) if self.state == 'down' else (0, 0, 0, 0)
         RoundedRectangle:
             pos: self.pos
             size: self.size
