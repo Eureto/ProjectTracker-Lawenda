@@ -29,6 +29,7 @@ from screens import active_timer
 # Identyfikatory dla powiadomień
 PACKAGE = "org.stokrotka.stokrotka"
 CHANNEL_ID = "running_timers"
+GEOFENCE_CHANNEL_ID = "geofence_monitor"  # Osobny kanał: monitorowanie lokalizacji
 ACTION_STOP_TIMER = f"{PACKAGE}.STOP_TIMER"  # Akcja: zatrzymaj stoper
 ACTION_STOP_GOAL = f"{PACKAGE}.STOP_GOAL"    # Akcja: zatrzymaj cel czasowy
 TIMER_NOTIFICATION_ID = 1001                  # ID powiadomienia stopera
@@ -226,6 +227,23 @@ class TimerNotificationService:
             pass
         self.manager.createNotificationChannel(channel)
 
+        # Osobny kanał dla monitorowania lokalizacji (geofence). Dzięki temu
+        # użytkownik może wyłączyć tylko to powiadomienie, zostawiając widoczne
+        # powiadomienia stopera i celów.
+        geofence_channel = self.NotificationChannel(
+            GEOFENCE_CHANNEL_ID,
+            self._jstr("Monitorowanie lokalizacji"),
+            self.NotificationManagerClass.IMPORTANCE_LOW,
+        )
+        geofence_channel.setDescription(
+            self._jstr("Czuwa, aby automatycznie uruchomić cel po wejściu w miejsce.")
+        )
+        try:
+            geofence_channel.setShowBadge(False)
+        except Exception:
+            pass
+        self.manager.createNotificationChannel(geofence_channel)
+
     # Konwertuje tekst (string) Pythona na tekst zrozumiały dla Javy.
     # Jest to potrzebne, ponieważ Android API działa na stringach Javy,
     # a nie na stringach Pythona.
@@ -268,9 +286,9 @@ class TimerNotificationService:
     # Tworzy obiekt do budowania powiadomień (Notification.Builder)
     # w zależności od wersji Androida. W Android 8.0+ trzeba podać
     # kanał powiadomień, inaczej powiadomienie nie będzie działać.
-    def _builder(self):
+    def _builder(self, channel_id=CHANNEL_ID):
         if self.sdk_int >= 26:
-            return self.NotificationBuilder(self.context, CHANNEL_ID)
+            return self.NotificationBuilder(self.context, channel_id)
         return self.NotificationBuilder(self.context)
 
     # Stosuje styl BigTextStyle do powiadomienia, żeby można było rozwinąć i zobaczyć więcej treści.
@@ -367,7 +385,7 @@ class TimerNotificationService:
         return builder.build()
 
     def _geofence_monitor_notification(self):
-        builder = self._builder()
+        builder = self._builder(GEOFENCE_CHANNEL_ID)
         builder.setSmallIcon(self.icon)
         if self._large_icon is not None:
             try:
