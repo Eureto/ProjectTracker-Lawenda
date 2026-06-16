@@ -102,6 +102,47 @@ class AddProjectScreen(MDScreen):
         self._search_timer = None
         self._reset_preview_card()
 
+    def _compute_grid_cols(self, viewport_width):
+        # Ile kolumn faktycznie mieści się w szerokości widoku, uwzględniając
+        # padding siatki i pasek przewijania – żeby ostatnia kolumna nie była obcięta.
+        cell = self._cell_size
+        spacing = self._cell_spacing
+        pad = self._grid_padding
+        scrollbar = dp(8)
+        inner = viewport_width - 2 * pad - scrollbar
+        if inner <= 0:
+            return 4
+        cols = max(4, int((inner + spacing) // (cell + spacing)))
+        while cols > 4 and cols * cell + (cols - 1) * spacing > inner:
+            cols -= 1
+        return cols
+
+    def _grid_content_width(self, cols):
+        return cols * self._cell_size + (cols - 1) * self._cell_spacing
+
+    def _fit_emoji_grid_columns(self, _dt=None):
+        if not self._recycle_view or not self._emoji_layout:
+            return
+        width = self._recycle_view.width
+        if width <= 0:
+            Clock.schedule_once(self._fit_emoji_grid_columns, 0.05)
+            return
+
+        cols = self._compute_grid_cols(width)
+        self._grid_cols = cols
+        self._emoji_layout.cols = cols
+
+        # Wyśrodkuj siatkę w pozostałej szerokości okna.
+        content_w = self._grid_content_width(cols)
+        scrollbar = dp(8)
+        side_pad = max(self._grid_padding, (width - scrollbar - content_w) / 2.0)
+        self._emoji_layout.padding = [
+            side_pad,
+            self._grid_padding,
+            side_pad,
+            self._grid_padding,
+        ]
+
     # -----------------------------------------------------------------------
     # WYBÓR EMOJI – otwiera okno z siatką emoji i wyszukiwarką
     # -----------------------------------------------------------------------
@@ -129,8 +170,9 @@ class AddProjectScreen(MDScreen):
         self._cell_size = dp(56)
         self._cell_spacing = dp(6)
         self._grid_padding = dp(6)
-        available_width = Window.width * 0.95 - dp(20)
-        self._grid_cols = max(4, int(available_width / (self._cell_size + self._cell_spacing)))
+        # Wstępna liczba kolumn (doprecyzowana po ułożeniu okna dialogowego).
+        estimate_width = Window.width * 0.95 - dp(56)
+        self._grid_cols = self._compute_grid_cols(estimate_width)
 
         container = MDBoxLayout(
             orientation="vertical",
@@ -208,6 +250,10 @@ class AddProjectScreen(MDScreen):
             height=dp(700),
         )
         self.emoji_dialog.open()
+
+        # Po ułożeniu okna przelicz kolumny według rzeczywistej szerokości.
+        Clock.schedule_once(self._fit_emoji_grid_columns, 0)
+        Clock.schedule_once(self._fit_emoji_grid_columns, 0.1)
 
         # Ustaw kursor w polu wyszukiwania zaraz po otwarciu.
         def focus_search(_dt):
